@@ -21,15 +21,23 @@ func TestProbe(t *testing.T) {
 		t.Logf("%s %s %s hardware=%v", c.Backend, c.Codec, c.Direction, c.Hardware)
 	}
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		want := map[hwmediacodec.Codec]bool{hwmediacodec.H264: false, hwmediacodec.HEVC: false}
+		type key struct {
+			codec hwmediacodec.Codec
+			dir   hwmediacodec.Direction
+		}
+		want := map[key]bool{}
+		for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+			want[key{c, hwmediacodec.Decode}] = false
+			want[key{c, hwmediacodec.Encode}] = false
+		}
 		for _, c := range caps {
-			if c.Backend == "videotoolbox" && c.Direction == hwmediacodec.Decode && c.Hardware {
-				want[c.Codec] = true
+			if c.Backend == "videotoolbox" && c.Hardware {
+				want[key{c.Codec, c.Direction}] = true
 			}
 		}
-		for codec, found := range want {
+		for k, found := range want {
 			if !found {
-				t.Errorf("expected videotoolbox hardware decode for %s on Apple Silicon", codec)
+				t.Errorf("expected videotoolbox hardware %s for %s on Apple Silicon", k.dir, k.codec)
 			}
 		}
 	} else if runtime.GOOS != "darwin" && len(caps) != 0 {
@@ -54,6 +62,15 @@ func TestUnsupportedCodec(t *testing.T) {
 		t.Fatalf("unexpected UnsupportedError contents: %+v", ue)
 	}
 	t.Log(err)
+
+	_, err = hwmediacodec.NewEncoder(ctx, hwmediacodec.AV1, 640, 480)
+	if !errors.As(err, &ue) {
+		t.Fatalf("AV1 encode: error is not *UnsupportedError: %T %v", err, err)
+	}
+	if !errors.Is(err, hwmediacodec.ErrUnsupported) || ue.Codec != hwmediacodec.AV1 || ue.Direction != hwmediacodec.Encode {
+		t.Fatalf("AV1 encode: unexpected error %v", err)
+	}
+	t.Log(err)
 }
 
 func TestUnsupportedOutputFormat(t *testing.T) {
@@ -61,4 +78,51 @@ func TestUnsupportedOutputFormat(t *testing.T) {
 	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 		t.Fatalf("expected ErrUnsupported for an unknown output format, got %v", err)
 	}
+}
+
+func TestUnsupportedInputFormat(t *testing.T) {
+	_, err := hwmediacodec.NewEncoder(context.Background(), hwmediacodec.H264, 640, 480, hwmediacodec.WithInputFormat(hwmediacodec.PixelFormat(200)))
+	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Fatalf("expected ErrUnsupported for an unknown input format, got %v", err)
+	}
+}
+
+// TestEncoderOptionValidation checks the option checks that run before any
+// backend is consulted, so they behave the same on every platform.
+func TestEncoderOptionValidation(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name          string
+		width, height int
+		opts          []hwmediacodec.EncoderOption
+	}{
+		{"zero size", 0, 480, nil},
+		{"negative bitrate", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithBitrate(-1)}},
+		{"quality out of range", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithQuality(1.5)}},
+		{"quality and bitrate", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithQuality(0.5), hwmediacodec.WithBitrate(1000)}},
+		{"negative keyframe interval", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithKeyframeInterval(-1)}},
+		{"bad time scale", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithTimeScale(0)}},
+		{"bad rate control", 640, 480, []hwmediacodec.EncoderOption{hwmediacodec.WithRateControl(hwmediacodec.RateControl(9))}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := hwmediacodec.NewEncoder(ctx, hwmediacodec.H264, tc.width, tc.height, tc.opts...)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if errors.Is(err, hwmediacodec.ErrUnsupported) {
+				t.Fatalf("option validation should not report ErrUnsupported: %v", err)
+			}
+			t.Log(err)
+		})
+	}
+}
+
+// TestSharedOptions checks that the options accepted by both constructors
+// satisfy both option interfaces.
+func TestSharedOptions(t *testing.T) {
+	var _ hwmediacodec.DecoderOption = hwmediacodec.WithSoftwareFallback()
+	var _ hwmediacodec.EncoderOption = hwmediacodec.WithSoftwareFallback()
+	var _ hwmediacodec.DecoderOption = hwmediacodec.WithTimeScale(1000)
+	var _ hwmediacodec.EncoderOption = hwmediacodec.WithTimeScale(1000)
 }
