@@ -1,0 +1,60 @@
+id: policy:support-tiers
+type: policy
+title: Platform and GPU support tiers
+summary: >-
+  Which OS x GPU combinations hwmediacodec supports, at what level, and which
+  are explicitly out of scope. Decided by the author on 2026-10-09.
+lifecycle: accepted
+authority: authored
+aliases: [サポート階層, Tier 1, Tier 2, 対応範囲]
+scope:
+  platform: [darwin, linux, windows]
+facts:
+  tier1:
+    definition: Must pass the acceptance checks on real hardware before a release; H.264 and HEVC decode/encode are expected; a Tier 1 bug blocks a release.
+    targets:
+      - {os: darwin, gpu: Apple Silicon (M-series), backend: backend:videotoolbox}
+      - {os: windows, gpu: Intel, backend: backend:media-foundation, alternative: backend:intel-vpl}
+      - {os: windows, gpu: AMD, backend: backend:media-foundation}
+      - {os: windows, gpu: NVIDIA, backend: backend:nvenc-nvdec, alternative: backend:media-foundation}
+      - {os: linux, gpu: Intel, backend: backend:intel-vpl (Gen12+), alternative: backend:vaapi (older generations)}
+      - {os: linux, gpu: AMD, backend: backend:vaapi}
+      - {os: linux, gpu: NVIDIA, backend: backend:nvenc-nvdec}
+  tier2:
+    definition: Best effort; builds and unit tests run in CI with stub backends, hardware verification happens when the author or a contributor has the device; gaps are documented and do not block a release.
+    targets:
+      - {os: linux, gpu: Raspberry Pi 4 / 5 and similar ARM SoCs, backend: backend:v4l2-m2m}
+      - {os: windows, gpu: Qualcomm Snapdragon X (Windows on ARM), backend: backend:media-foundation}
+  out_of_scope:
+    definition: No code, no Probe() entry beyond "absent", no issue tracking.
+    targets:
+      - {os: darwin, gpu: Intel Mac, reason: Author decision; Apple is ending Intel Mac OS support.}
+      - {os: windows, gpu: none (VM / hosted CI without GPU), reason: Author decision; software MFTs are not a target.}
+      - {os: linux, gpu: none (VM / hosted CI without GPU), reason: Author decision.}
+      - {api: Vulkan Video, reason: Author decision; slice-level API without macOS coverage.}
+  implications:
+    - Tier 1 includes Linux AMD, whose only path is slice-level VA-API, so the Go-side H.264/HEVC parser and DPB component is in scope for Tier 1 completeness (see requirement open question linux-backend-split for ordering).
+    - Hardware integration tests cannot run on hosted CI; Tier 1 verification needs the author's machines or self-hosted runners (requirement open question ci-hardware).
+    - Probe() still reports absent cleanly on out-of-scope machines; the library must not crash there.
+history:
+  decided-2026-10-09:
+    summary: Author set Tier 1 = Apple Silicon Macs and Intel/AMD/NVIDIA on Windows and Linux; Tier 2 = Raspberry Pi and Snapdragon X; out of scope = Intel Mac, GPU-less CI, Vulkan Video. First milestone stays on macOS.
+relations:
+  - relation: governs
+    to: requirement:hwmediacodec
+  - relation: ranks
+    to: backend:videotoolbox
+  - relation: ranks
+    to: backend:media-foundation
+  - relation: ranks
+    to: backend:intel-vpl
+  - relation: ranks
+    to: backend:vaapi
+  - relation: ranks
+    to: backend:nvenc-nvdec
+  - relation: ranks
+    to: backend:v4l2-m2m
+  - relation: excludes
+    to: backend:vulkan-video
+  - relation: informed_by
+    to: analysis:os-gpu-matrix

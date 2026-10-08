@@ -1,0 +1,14 @@
+# Go
+/bin/
+/dist/
+*.test
+*.out
+
+# Generated test media
+/testdata/generated/
+
+# knowledge-memory cache
+/.knowledge/.cache/
+
+# OS
+.DS_Store

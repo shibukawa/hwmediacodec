@@ -1,0 +1,96 @@
+id: backend:vaapi
+type: backend
+title: VA-API / libva (Linux, Intel and AMD)
+summary: 'The Linux hardware video acceleration API for Intel (iHD) and AMD (Mesa radeonsi) drivers. Slice-level:
+  the application parses the bitstream and manages reference frames; the driver accelerates decoding/encoding
+  of slices.'
+lifecycle: proposed
+authority: inferred
+aliases:
+- VA-API
+- libva
+- vaapi
+scope:
+  platform: linux
+  gpu:
+  - intel
+  - amd
+capabilities:
+  decode/h264:
+    state: planned
+    about: capability:hwmediacodec/decode-h264
+  decode/hevc:
+    state: planned
+    about: capability:hwmediacodec/decode-hevc
+  decode/av1:
+    state: unknown
+    about: capability:hwmediacodec/decode-av1
+  encode/h264:
+    state: planned
+    about: capability:hwmediacodec/encode-h264
+  encode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/encode-hevc
+  encode/av1:
+    state: unknown
+    about: capability:hwmediacodec/encode-av1
+facts:
+  libraries:
+  - libva.so.2
+  - libva-drm.so.2
+  - libdrm.so.2
+  device: DRM render node (/dev/dri/renderD128) via vaGetDisplayDRM; no X11/Wayland needed.
+  api_model: slice-level accelerator; application supplies VAPictureParameterBuffer, VASliceParameterBuffer,
+    VAIQMatrixBuffer and manages the DPB and reference lists.
+  key_calls:
+  - vaInitialize
+  - vaQueryConfigProfiles
+  - vaQueryConfigEntrypoints
+  - vaCreateConfig
+  - vaCreateSurfaces
+  - vaCreateContext
+  - vaCreateBuffer
+  - vaBeginPicture
+  - vaRenderPicture
+  - vaEndPicture
+  - vaSyncSurface
+  - vaDeriveImage / vaGetImage
+  - vaMapBuffer
+  required_go_components:
+  - H.264 bitstream parser (SPS, PPS, slice header), POC computation, reference list construction, DPB
+    management.
+  - HEVC equivalents (VPS/SPS/PPS, RPS) for HEVC decode.
+  - Encoder-side packed header writers (SPS/PPS) and rate-control parameter buffers.
+  vendor_coverage:
+    intel: iHD (media-driver, Gen8+) and legacy i965; on Gen12+ the Intel VPL runtime sits on top of VA-API
+      and offers a full-codec API instead (backend:intel-vpl).
+    amd: Mesa radeonsi; the official AMD path on Linux since 2025 (AMD dropped AMF from its Linux driver
+      package and recommends VA-API/Mesa Multimedia).
+    nvidia: not covered by the proprietary driver; third-party nvidia-vaapi-driver provides decode only
+  ffi_notes:
+  - Plain C API; purego.Dlopen works; structs are passed by pointer through vaCreateBuffer, so Go struct
+    layouts must match the libva headers exactly.
+  - Surfaces are mapped via vaDeriveImage or exported as DMA-BUF (vaExportSurfaceHandle) for zero-copy.
+  quirks:
+  - The amount of codec-standard logic that must live in Go is the main cost; it is the same work FFmpeg's
+    h264dec does before calling the hwaccel.
+  - Hosted CI has no GPU; libva has no software fallback driver suitable for conformance tests.
+  alternatives_on_linux:
+  - NVDEC/NVENC for NVIDIA (full decoder with parser).
+  - V4L2 memory-to-memory codecs on ARM SoCs (Raspberry Pi, Rockchip); also a full decoder style API.
+  - Vulkan Video (slice-level, cross-vendor).
+  - FFmpeg/GStreamer as a Linux-only dependency if the parser/DPB work is not wanted.
+  full_api_alternatives_on_linux:
+  - backend:intel-vpl (Intel Gen12+)
+  - backend:nvenc-nvdec (NVIDIA)
+  - backend:v4l2-m2m stateful devices (some ARM SoCs)
+  evidence:
+  - url: https://www.amd.com/en/resources/support-articles/release-notes/RN-AMDGPU-UNIFIED-LINUX-25-10-2.html
+    claim: AMF will no longer be included in the Radeon Software for Linux release; AMF users are advised
+      to transition to VA-API / Mesa Multimedia.
+  support_tier: tier1 (Linux AMD, and Intel generations below Gen12)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers

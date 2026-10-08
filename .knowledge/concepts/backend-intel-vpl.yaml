@@ -1,0 +1,81 @@
+id: backend:intel-vpl
+type: backend
+title: Intel VPL (oneVPL / Quick Sync) - full codec API for Intel GPUs
+summary: Intel's MIT-licensed video processing library. Unlike VA-API it accepts a compressed bitstream
+  and parses it internally, so it is a full-decoder/encoder API. Linux runtime requires Tiger Lake (Gen12)
+  or newer and runs on top of VA-API/iHD; the Windows runtime ships with the Intel graphics driver.
+lifecycle: proposed
+authority: inferred
+aliases:
+- oneVPL
+- libvpl
+- Quick Sync
+- QSV
+- Media SDK
+scope:
+  platform:
+  - linux
+  - windows
+  gpu: intel
+capabilities:
+  decode/h264:
+    state: unknown
+    about: capability:hwmediacodec/decode-h264
+  decode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/decode-hevc
+  decode/av1:
+    state: unknown
+    about: capability:hwmediacodec/decode-av1
+  encode/h264:
+    state: unknown
+    about: capability:hwmediacodec/encode-h264
+  encode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/encode-hevc
+  encode/av1:
+    state: unknown
+    about: capability:hwmediacodec/encode-av1
+facts:
+  libraries:
+    linux:
+    - libvpl.so.2 (dispatcher)
+    - libmfx-gen.so.1.2 (Gen12+ runtime)
+    - libmfxhw64.so.1 (legacy Media SDK runtime for Gen9/Gen11)
+    windows:
+    - libvpl.dll or direct runtime libmfx64-gen.dll shipped with the Intel graphics driver
+  licence: MIT for both the dispatcher (intel/libvpl) and the GPU runtime (intel/vpl-gpu-rt).
+  api_model: full decoder/encoder (MFXVideoDECODE_DecodeFrameAsync takes a bitstream; MFXVideoENCODE_EncodeFrameAsync
+    emits a bitstream); mfxSession / mfxVideoParam / mfxFrameSurface1.
+  dispatcher_behaviour: The dispatcher itself scans library folders and resolves MFXQueryImplsDescription
+    at run time; a Go backend can skip the dispatcher and dlopen the runtime directly, or dlopen the dispatcher.
+  hardware_floor:
+    linux: Tiger Lake (Gen12) and newer for the VPL runtime; Gen9/Gen11 only through the deprecated Media
+      SDK runtime.
+    windows: Broad; the driver bundles the runtime.
+  ffi_notes:
+  - Plain C ABI with large versioned structs (mfxVideoParam unions); Go struct layouts must match the
+    headers exactly.
+  - Surfaces can be system memory (simplest, copies) or VA/D3D11 surfaces (zero-copy, later).
+  - Depends on libva/libva-drm at run time on Linux; errors from the VA layer surface as mfxStatus codes.
+  why_it_matters: Gives Intel GPUs on Linux a full-API path without the Go bitstream parser that raw VA-API
+    needs; the same API works on Windows as an alternative to Media Foundation with richer controls (look-ahead,
+    low-power encode).
+  evidence:
+  - url: https://github.com/nanazhan/vpl-gpu-rt
+    claim: Intel VPL GPU Runtime is MIT licensed, depends on LibVA and supports platforms starting with
+      Tiger Lake.
+  - url: https://packages.debian.org/ja/sid/libmfx-gen1.2
+    claim: Debian packages the runtime as libmfx-gen1.2 depending on libva2 and libva-drm2.
+  - url: https://oneapi-spec.uxlfoundation.org/specifications/oneapi/v1.2-rev-1/elements/onevpl/source/programming_guide/vpl_prg_session
+    claim: The dispatcher loads candidate runtime libraries at run time and resolves MFXQueryImplsDescription.
+  support_tier: tier1 (Linux Intel Gen12+; optional on Windows)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: layered_on
+  to: backend:vaapi
+  scope:
+    platform: linux
+- relation: ranked_by
+  to: policy:support-tiers

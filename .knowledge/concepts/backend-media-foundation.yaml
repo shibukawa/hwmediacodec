@@ -1,0 +1,119 @@
+id: backend:media-foundation
+type: backend
+title: Media Foundation MFTs (Windows)
+summary: Windows' COM-based media pipeline. Hardware encoders/decoders are exposed as asynchronous Media
+  Foundation Transforms (MFTs) bound to a D3D11 device through IMFDXGIDeviceManager.
+lifecycle: proposed
+authority: inferred
+aliases:
+- Media Foundation
+- MFT
+- IMFTransform
+- mfplat
+- DXVA
+scope:
+  platform: windows
+  gpu:
+  - intel
+  - amd
+  - nvidia
+  - qualcomm
+capabilities:
+  decode/h264:
+    state: planned
+    about: capability:hwmediacodec/decode-h264
+  decode/hevc:
+    state: planned
+    about: capability:hwmediacodec/decode-hevc
+  decode/av1:
+    state: unknown
+    about: capability:hwmediacodec/decode-av1
+  encode/h264:
+    state: planned
+    about: capability:hwmediacodec/encode-h264
+  encode/hevc:
+    state: planned
+    about: capability:hwmediacodec/encode-hevc
+  encode/av1:
+    state: unknown
+    about: capability:hwmediacodec/encode-av1
+facts:
+  libraries:
+  - mfplat.dll
+  - mf.dll
+  - mfreadwrite.dll
+  - d3d11.dll
+  - ole32.dll
+  api_model: full decoder/encoder MFTs; hardware MFTs are asynchronous (METransformNeedInput / METransformHaveOutput
+    events)
+  key_calls:
+    setup:
+    - MFStartup
+    - CoInitializeEx
+    - D3D11CreateDevice
+    - MFCreateDXGIDeviceManager
+    enumerate:
+    - MFTEnumEx with MFT_ENUM_FLAG_HARDWARE
+    - MFT_CATEGORY_VIDEO_DECODER / MFT_CATEGORY_VIDEO_ENCODER
+    transform:
+    - IMFTransform::SetInputType
+    - SetOutputType
+    - ProcessMessage
+    - ProcessInput
+    - ProcessOutput
+    - IMFMediaEventGenerator
+    buffers:
+    - MFCreateSample
+    - MFCreateMemoryBuffer
+    - MFCreateDXGISurfaceBuffer
+  input_format: NV12 for encoders; H.264 Annex-B (MFVideoFormat_H264) or AVC1 for decoders.
+  output_format: Encoders emit Annex-B H.264 with in-band SPS/PPS; decoders emit NV12 samples, in D3D11
+    textures when a device manager is set.
+  ffi_notes:
+  - No cgo needed; golang.org/x/sys/windows LazyDLL for flat functions, raw vtable calls for COM interfaces
+    (same technique as go-ole).
+  - Async MFTs require the caller to implement IMFAsyncCallback or poll IMFMediaEventGenerator::GetEvent;
+    a Go-side COM object needs a hand-built vtable with syscall.NewCallback.
+  - COM apartment and thread affinity: pin the MFT-driving goroutine with runtime.LockOSThread.
+  quirks:
+  - Whether a hardware H.264 encoder MFT exists depends on the vendor driver; some NVIDIA/Intel driver
+    versions register none, so Probe() must not assume.
+  - Microsoft's software H.264/HEVC decoder MFTs can use DXVA acceleration when given a D3D device manager;
+    this is a possible non-vendor path to verify.
+  - Hosted CI runners have no GPU; only software MFTs are available there.
+  evidence:
+  - url: https://learn.microsoft.com/en-ie/Windows/Win32/medfound/hardware-mfts
+    claim: Hardware MFTs must use the asynchronous processing model and handle format changes.
+  - url: https://docs.rs/crate/mediaway-encoder/0.1.3/source/docs/windows/benchmarks.md
+    claim: On a test host neither the NVIDIA driver nor Intel UHD 770 registered a working hardware H.264
+      encoder MFT.
+  - url: https://learn.microsoft.com/en-us/windows/win32/medfound/h-265---hevc-video-decoder
+    claim: The H.265/HEVC decoder MFT accepts Annex-B input and outputs NV12/P010.
+  - url: https://learn.microsoft.com/en-us/answers/a/7631145
+    claim: The free HEVC Video Extensions variant targets devices with HEVC hardware.
+  - url: https://www.neowin.net/news/microsofts-wddm-32-makes-windows-11-24h2-video-encoding-even-better-with-av1-support/
+    claim: Windows 11 24H2 / WDDM 3.2 adds AV1 to D3D12 video encoding.
+  decoder_availability:
+    h264: Microsoft H.264 decoder MFT ships with Windows; uses DXVA/D3D11 when an IMFDXGIDeviceManager
+      is set.
+    hevc: Microsoft H.265/HEVC decoder MFT (Annex-B input, NV12/P010 output) is delivered through the
+      "HEVC Video Extensions" Store package (free OEM variant on hardware-capable devices, otherwise paid);
+      absence must be detected by Probe().
+    av1: Microsoft AV1 decoder comes from the "AV1 Video Extension" Store package (dav1d-based software
+      with hardware tiers); absence must be detected by Probe().
+    vendor_decoder_mfts: Some drivers also register vendor hardware decoder MFTs; enumerate rather than
+      assume.
+  encoder_availability:
+    h264: Vendor hardware encoder MFTs (Intel, AMD, NVIDIA, Qualcomm) when the driver registers one; Microsoft
+      software H.264 encoder MFT as a non-hardware fallback.
+    hevc: Vendor hardware encoder MFTs; no Microsoft software HEVC encoder.
+    av1: Windows 11 24H2 (WDDM 3.2) adds AV1 to the Direct3D 12 video encode path; MFT exposure depends
+      on the driver.
+  arm64: Windows on ARM (Qualcomm Snapdragon X) exposes hardware codecs through the same MFT model; purego/x/sys
+    windows/arm64 is tier 1. Codec coverage unverified.
+  support_tier: tier1 for Intel/AMD/NVIDIA; tier2 for Qualcomm Snapdragon X
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers

@@ -1,0 +1,41 @@
+id: backend:vulkan-video
+type: backend
+title: Vulkan Video (cross-vendor, Linux and Windows)
+summary: Khronos' vendor-neutral video extensions (VK_KHR_video_queue, decode/encode H.264/HEVC/AV1).
+  Slice-level like VA-API. Not available on macOS because MoltenVK does not implement the video extensions.
+lifecycle: retired
+authority: inferred
+aliases:
+- Vulkan Video
+- VK_KHR_video_queue
+- VK_KHR_video_decode_h264
+scope:
+  platform:
+  - linux
+  - windows
+capabilities:
+  decode/h264:
+    state: unknown
+    about: capability:hwmediacodec/decode-h264
+  encode/h264:
+    state: unknown
+    about: capability:hwmediacodec/encode-h264
+facts:
+  api_model: slice-level accelerator; application parses the bitstream and manages the DPB in VkImage
+    arrays.
+  driver_support: NVIDIA proprietary (Linux/Windows), AMD and Intel on Windows, Mesa RADV/ANV/NVK on Linux.
+  macos: MoltenVK translates to Metal, which has no video codec API; the extensions ship in the SDK headers
+    but no macOS driver implements them.
+  ffi_notes: Vulkan loader is designed for runtime loading; purego-based Vulkan bindings exist but video
+    extension coverage in Go is unverified.
+  status: Out of scope by author decision (2026-10-09). Kept as reference only; see policy:support-tiers.
+  evidence:
+  - url: https://www.lunarg.com/new-vulkan-1-3-239-0-sdks-add-three-video-decode-extensions
+    claim: Video decode extensions were added to all SDKs including macOS, with the caveat that drivers
+      may not implement optional extensions.
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+history:
+  retired-2026-10-09:
+    summary: Author excluded Vulkan Video from the project scope.

@@ -1,0 +1,45 @@
+id: backend:ffmpeg-libavcodec
+type: backend
+title: FFmpeg libavcodec hwaccel (alternative or optional module)
+summary: >-
+  FFmpeg already wraps every hardware engine on all three OSes. Using it from Go
+  trades build simplicity and licensing for immediate coverage. Kept as an
+  alternative and as the test oracle, not as the core design.
+lifecycle: proposed
+authority: inferred
+aliases: [FFmpeg, libavcodec, hwaccel, go-astiav]
+scope:
+  platform: [darwin, linux, windows]
+facts:
+  hwaccel_names:
+    darwin: [videotoolbox, h264_videotoolbox, hevc_videotoolbox]
+    linux: [vaapi, h264_vaapi, qsv (libvpl), cuda/nvdec, h264_nvenc, vulkan]
+    windows: [d3d11va, dxva2, h264_mf, hevc_mf, h264_nvenc, h264_amf, h264_qsv, vulkan]
+  go_bindings:
+    - name: asticode/go-astiav
+      ffi: cgo
+      note: Tracks one FFmpeg major version per tag (n7.0/n8.0 depending on tag); breaking changes between tags; ships hardware decode/encode examples.
+    - name: linuxmatters/ffmpeg-statigo (fork of csnewman/ffmpeg-go)
+      ffi: cgo, static FFmpeg 8.x bundled
+      note: Linux and macOS (amd64/arm64) with NVENC/NVDEC, VideoToolbox, Vulkan, QuickSync; too large for go get, used as a submodule.
+    - name: flexiondotorg/ffmpeg-go
+      ffi: cgo, static bundle
+      note: Documents a per-platform support matrix including VideoToolbox H.264/HEVC encode/decode.
+    - name: purego-based bindings (e.g. ffgo)
+      ffi: purego
+      note: Immature; still need host FFmpeg shared libraries.
+  licensing: LGPL 2.1+ by default, GPL when built with --enable-gpl components (x264 etc.).
+  role_in_this_project:
+    runtime: not a dependency of the core library (provisional).
+    tests: ffmpeg CLI generates test streams and reference NV12 output; tests skip when it is absent.
+    future: optional module behind a build tag for coverage gaps or software fallback (decision:ffi-strategy option E).
+  evidence:
+    - url: https://github.com/linuxmatters/ffmpeg-statigo
+      claim: Static FFmpeg 8.0.1 bundle with NVENC/NVDEC, VideoToolbox, Vulkan and QuickSync support.
+    - url: https://docsearch.algolia.com/mcp/docs/repo/asticode/go-astiav
+      claim: go-astiav is compatible with one specific FFmpeg release per tag and warns about breaking changes.
+relations:
+  - relation: alternative_to
+    to: decision:ffi-strategy
+  - relation: candidate_for
+    to: requirement:hwmediacodec

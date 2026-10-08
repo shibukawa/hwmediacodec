@@ -1,0 +1,56 @@
+id: backend:v4l2-m2m
+type: backend
+title: V4L2 memory-to-memory codecs (Linux ARM SoCs)
+summary: Kernel-level codec devices on ARM boards (Raspberry Pi, Rockchip, NXP i.MX, Amlogic). Driven
+  with ioctl only, so a pure-Go backend needs no dlopen at all. Stateful devices take a bitstream; stateless
+  devices need application-side parsing like VA-API.
+lifecycle: proposed
+authority: inferred
+aliases:
+- V4L2
+- v4l2 m2m
+- bcm2835-codec
+- rpi-hevc-dec
+- rpivid
+scope:
+  platform: linux
+  gpu: arm-soc
+capabilities:
+  decode/h264:
+    state: unknown
+    about: capability:hwmediacodec/decode-h264
+  decode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/decode-hevc
+  encode/h264:
+    state: unknown
+    about: capability:hwmediacodec/encode-h264
+facts:
+  api_model:
+    stateful: full decoder/encoder (V4L2_PIX_FMT_H264 in, NV12 out) - e.g. Raspberry Pi 4 bcm2835-codec,
+      NXP i.MX8 VPU, some Hantro/VeriSilicon wrappers.
+    stateless: slice-level (V4L2 request API with per-frame SPS/PPS/slice controls) - e.g. Raspberry Pi
+      4/5 rpi-hevc-dec, Rockchip rkvdec, Hantro G2.
+  boards:
+    raspberry-pi-4: H.264 decode and encode (stateful), HEVC decode (stateless).
+    raspberry-pi-5: HEVC decode only (stateless rpi-hevc-dec; upstream kernel series at v6 in March 2026);
+      no H.264 hardware decode or encode.
+    others: Rockchip RK3588, Amlogic, NXP i.MX8M - mixed stateful/stateless; verify per board.
+  ffi_notes:
+  - ioctl via golang.org/x/sys/unix; buffers via mmap or DMA-BUF; no shared library involved.
+  - Needs the device node (/dev/videoN) and the kernel driver; capability discovery through VIDIOC_QUERYCAP
+    / VIDIOC_ENUM_FMT.
+  status: Tier 2 (best effort) by author decision 2026-10-09; purest Go path (ioctl only), hardware verified
+    when a device is available.
+  evidence:
+  - url: https://www.phoronix.com/news/Raspberry-Pi-HEVC-Decode-V3
+    claim: The Raspberry Pi HEVC block on BCM2711/BCM2712 is exposed as a stateless V4L2 decoder and is
+      being upstreamed.
+  - url: https://forums.screenly.io/t/powerpoint-video-video-codec-h264-is-not-hardware-decoded-on-this-device-supported-hevc/6695
+    claim: Raspberry Pi 5 hardware-decodes only HEVC; Pi 4 hardware-decodes H.264.
+  support_tier: tier2 (Raspberry Pi and similar ARM SoCs)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers

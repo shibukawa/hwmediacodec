@@ -1,0 +1,77 @@
+id: reference:go-ecosystem
+type: reference
+title: Existing Go libraries and FFI tools relevant to hardware codecs
+summary: Inventory of Go packages and FFI tooling found while scoping the project, with what each covers
+  and how it loads native code. Collected from web search on 2026-10-08; verify before depending on any
+  of them.
+lifecycle: proposed
+authority: observed
+aliases:
+- Goエコシステム
+- 既存ライブラリ
+facts:
+  ffi_tools:
+  - name: github.com/ebitengine/purego
+    url: https://pkg.go.dev/github.com/ebitengine/purego@v0.10.1
+    what: Dlopen/RegisterLibFunc/NewCallback without cgo; tier-1 linux, darwin, windows, android, ios
+      on amd64/arm64; v0.10.1 released 2026-05-24; still labelled beta.
+  - name: golang.org/x/sys/windows
+    what: LazyDLL/NewCallback for Windows; COM interfaces are called through raw vtable syscalls (pattern
+      used by go-ole).
+  direct_bindings:
+  - name: github.com/go-macos/videotoolbox
+    url: https://pkg.go.dev/github.com/go-macos/videotoolbox
+    what: Pure Go (CGO_ENABLED=0, purego) hardware H.264/HEVC decoding on macOS; decode only as far as
+      observed; sessions created from parameter sets.
+  - name: github.com/tmc/apple/videotoolbox
+    url: https://pkg.go.dev/github.com/tmc/apple/videotoolbox
+    what: Go layer over VideoToolbox exposing VTCompressionSession and VTDecompressionSession; FFI mechanism
+      not verified.
+  - name: Media Foundation from Go
+    what: No dedicated Go library found; Chromium's media_foundation_video_encode_accelerator_win.cc is
+      the reference for MFTEnumEx with hardware flags and NV12 input.
+    url: https://cobalt.googlesource.com/cobalt/+/HEAD/media/gpu/windows/media_foundation_video_encode_accelerator_win.cc
+  - name: VA-API from Go
+    what: No maintained Go binding found in this pass; needs a dedicated search before the Linux milestone.
+  framework_wrappers:
+  - name: github.com/asticode/go-astiav
+    what: cgo FFmpeg bindings with hardware decode/encode examples; FFmpeg version pinned per tag.
+  - name: github.com/linuxmatters/ffmpeg-statigo
+    url: https://github.com/linuxmatters/ffmpeg-statigo
+    what: Static FFmpeg 8.x bundle for Linux/macOS with hardware acceleration enabled.
+  - name: github.com/flexiondotorg/ffmpeg-go
+    url: https://github.com/flexiondotorg/ffmpeg-go
+    what: Static FFmpeg bundle with a documented hardware support matrix.
+  - name: github.com/go-gst/go-gst
+    what: GStreamer bindings; CGO_ENABLED=1 and an installed GStreamer runtime required.
+  non_go_references:
+  - name: mediaway (Rust)
+    url: https://docs.rs/crate/mediaway-encoder/0.1.3/source/docs/windows/benchmarks.md
+    what: Reports on VideoToolbox quirks (forced keyframes, lazy session creation, Annex-B to AVCC, global
+      mutex) and on missing hardware MFTs on some Windows drivers.
+  native_sdks:
+  - name: Intel VPL (libvpl dispatcher + vpl-gpu-rt runtime)
+    url: https://github.com/intel/libvpl
+    what: MIT-licensed full codec API; dispatcher loads libvpl*/libmfx-gen.so.1.2 at runtime; Linux runtime
+      needs Tiger Lake (Gen12) or newer and sits on VA-API/iHD; Windows runtime ships with the Intel graphics
+      driver.
+  - name: AMD AMF
+    url: https://gpuopen.com/advanced-media-framework/
+    what: C++ interface SDK (amfrt64); on Linux works with AMD Pro Vulkan and, since 1.4.34, RADV (encode
+      stable, decode experimental); AMD removed it from its Linux driver package in 2025.
+  - name: NVIDIA Video Codec SDK
+    url: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-application-note/index.html
+    what: NVENC/NVDEC application notes, session limits and capability matrices.
+  - name: Linux V4L2 memory-to-memory codecs
+    url: https://www.phoronix.com/news/Raspberry-Pi-HEVC-Decode-V3
+    what: ioctl-based; stateful decoders take bitstream, stateless ones (e.g. Raspberry Pi rpi-hevc-dec)
+      need application-side parsing. Pure Go via syscall, no dlopen.
+relations:
+- relation: informs
+  to: decision:ffi-strategy
+- relation: informs
+  to: backend:videotoolbox
+- relation: informs
+  to: backend:media-foundation
+- relation: informs
+  to: backend:ffmpeg-libavcodec

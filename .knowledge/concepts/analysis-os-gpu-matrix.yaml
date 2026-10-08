@@ -1,0 +1,406 @@
+id: analysis:os-gpu-matrix
+type: analysis
+title: OS x GPU feasibility matrix for purego/syscall backends
+summary: For each operating system and GPU vendor, which native API a cgo-free Go backend can use, whether
+  that API accepts a compressed bitstream (full API) or needs a Go-side parser (slice-level), and the
+  expected hardware codec coverage. Codec-by-generation details are inferred from public sources and must
+  be confirmed by Probe() on real hardware.
+lifecycle: accepted
+authority: inferred
+aliases:
+- OS×GPU表
+- 対応表
+- feasibility matrix
+scope:
+  platform:
+  - darwin
+  - linux
+  - windows
+facts:
+  legend:
+    full-api: Possible with purego/syscall; the API accepts compressed NAL units / OBUs (no Go bitstream
+      parser or DPB needed).
+    parser-needed: Possible with purego/syscall, but the API is slice-level; Go must parse SPS/PPS/slice
+      headers and manage the DPB.
+    limited: Possible only through third-party or unofficial components, or only one direction.
+    impossible: No driver or API path.
+  rows:
+  - os: darwin
+    gpu: Apple Silicon M1/M2
+    primary:
+      api: VideoToolbox
+      status: full-api
+    decode_hw:
+    - h264
+    - hevc
+    - vp9 (after supplemental decoder registration)
+    - prores
+    encode_hw:
+    - h264
+    - hevc
+    - prores
+    not_in_hw:
+    - av1 decode (software only)
+    - av1 encode
+    notes: purego precedent exists (go-macos/videotoolbox).
+    tier: tier1
+  - os: darwin
+    gpu: Apple Silicon M3 and later
+    primary:
+      api: VideoToolbox
+      status: full-api
+    decode_hw:
+    - h264
+    - hevc
+    - vp9
+    - av1
+    - prores
+    encode_hw:
+    - h264
+    - hevc
+    - prores
+    not_in_hw:
+    - av1 encode
+    tier: tier1
+  - os: darwin
+    gpu: Intel Mac (Intel iGPU / AMD dGPU)
+    primary:
+      api: VideoToolbox
+      status: full-api
+    decode_hw:
+    - h264
+    - hevc (2017+ models)
+    encode_hw:
+    - h264
+    - hevc (2017+ models)
+    not_in_hw:
+    - vp9
+    - av1
+    notes: Same API as Apple Silicon; VideoToolbox falls back to software unless hardware is required.
+      Intel Mac OS support is ending (macOS 26 reported as last).
+    tier: out-of-scope
+  - os: darwin
+    gpu: NVIDIA
+    primary:
+      api: none
+      status: impossible
+    notes: No NVIDIA driver support on macOS since 10.14.
+    tier: out-of-scope
+  - os: darwin
+    gpu: any (Vulkan Video)
+    primary:
+      api: Vulkan Video via MoltenVK
+      status: impossible
+    notes: MoltenVK does not implement VK_KHR_video_*.
+    tier: out-of-scope
+  - os: windows
+    gpu: Intel (Gen9+ iGPU, Arc)
+    primary:
+      api: Media Foundation MFTs
+      status: full-api
+    alternatives:
+    - api: Intel VPL (driver runtime)
+      status: full-api
+    - api: D3D11VA / D3D12 Video
+      status: parser-needed
+    decode_hw:
+    - h264
+    - hevc (Skylake+; 10-bit Kaby Lake+)
+    - vp9 (Kaby Lake+)
+    - av1 (Tiger Lake / Gen12+)
+    encode_hw:
+    - h264
+    - hevc (Skylake+)
+    - av1 (Arc / Meteor Lake+)
+    notes: Microsoft HEVC/AV1 decoder MFTs come from Store extension packages; Probe() must check. Vendor
+      encoder MFT presence varies by driver.
+    tier: tier1
+  - os: windows
+    gpu: AMD (VCN / RDNA)
+    primary:
+      api: Media Foundation MFTs
+      status: full-api
+    alternatives:
+    - api: AMD AMF (amfrt64.dll
+      C++ vtable interface): null
+      status: full-api
+      verified: false
+    - api: D3D11VA / D3D12 Video
+      status: parser-needed
+    decode_hw:
+    - h264
+    - hevc
+    - vp9 (VCN+)
+    - av1 (RDNA2+)
+    encode_hw:
+    - h264
+    - hevc (VCE 3.4+ / VCN)
+    - av1 (RDNA3+)
+    tier: tier1
+  - os: windows
+    gpu: NVIDIA
+    primary:
+      api: NVENC / NVDEC (nvEncodeAPI64.dll
+      nvcuvid.dll: null
+      nvcuda.dll): null
+      status: full-api
+    alternatives:
+    - api: Media Foundation vendor encoder MFT
+      status: limited
+      notes: presence depends on driver version
+    - api: Microsoft decoder MFTs with DXVA
+      status: full-api
+      notes: h264 built in; hevc/av1 need Store extensions
+    - api: D3D11VA
+      status: parser-needed
+    decode_hw:
+    - h264 (Kepler+)
+    - hevc (Maxwell GM206+)
+    - vp9 (GM206/Pascal+)
+    - av1 (Ampere+)
+    encode_hw:
+    - h264 (Kepler+)
+    - hevc (GM206+)
+    - av1 (Ada+)
+    notes: GeForce cap of 8 concurrent encode sessions per system with current drivers.
+    tier: tier1
+  - os: windows
+    gpu: Qualcomm Snapdragon X (Windows on ARM)
+    primary:
+      api: Media Foundation MFTs
+      status: full-api
+      verified: false
+    decode_hw:
+    - h264
+    - hevc
+    - av1 (expected)
+    encode_hw:
+    - h264
+    - hevc (expected)
+    notes: purego and x/sys are tier 1 on windows/arm64; codec coverage unverified.
+    tier: tier2
+  - os: windows
+    gpu: none (VM, hosted CI)
+    primary:
+      api: Microsoft software MFTs
+      status: limited
+    notes: Software H.264 encoder/decoder MFTs exist; useful for API tests, not for hardware verification.
+    tier: out-of-scope
+  - os: linux
+    gpu: Intel Gen12+ (Tiger Lake, Alder/Raptor/Meteor/Lunar Lake, Arc)
+    primary:
+      api: Intel VPL (libvpl.so.2 + libmfx-gen.so.1.2)
+      status: full-api
+    alternatives:
+    - api: VA-API (libva
+      iHD driver): null
+      status: parser-needed
+    decode_hw:
+    - h264
+    - hevc
+    - vp9
+    - av1
+    encode_hw:
+    - h264
+    - hevc
+    - av1 (Arc / Meteor Lake+)
+    notes: VPL is MIT licensed and sits on VA-API; needs the Intel media driver installed.
+    tier: tier1
+  - os: linux
+    gpu: Intel Gen8-Gen11 (Broadwell to Ice Lake)
+    primary:
+      api: VA-API (iHD or i965)
+      status: parser-needed
+    alternatives:
+    - api: legacy Media SDK runtime (libmfxhw64.so.1
+      Gen9/Gen11): null
+      status: limited
+      notes: deprecated
+    decode_hw:
+    - h264
+    - hevc (Skylake+)
+    - vp9 (Kaby Lake+)
+    encode_hw:
+    - h264
+    - hevc (Skylake+)
+    not_in_hw:
+    - av1
+    tier: tier1
+  - os: linux
+    gpu: AMD (GCN to RDNA4)
+    primary:
+      api: VA-API (Mesa radeonsi)
+      status: parser-needed
+    alternatives:
+    - api: AMD AMF via RADV
+      status: limited
+      notes: encode stable and decode experimental in AMF 1.4.34; separate runtime; AMD removed AMF from
+        its Linux package in 2025
+    decode_hw:
+    - h264
+    - hevc (UVD6+)
+    - vp9 (VCN+)
+    - av1 (RDNA2+)
+    encode_hw:
+    - h264
+    - hevc (VCE 3.4+ / VCN)
+    - av1 (RDNA3+)
+    notes: No full-API path without FFmpeg/GStreamer; this is the row that forces the Go parser/DPB component.
+    tier: tier1
+  - os: linux
+    gpu: NVIDIA (proprietary driver)
+    primary:
+      api: NVDEC / NVENC (libnvcuvid.so.1
+      libnvidia-encode.so.1: null
+      libcuda.so.1): null
+      status: full-api
+    alternatives:
+    - api: VA-API via nvidia-vaapi-driver
+      status: limited
+      notes: third-party
+      decode only: null
+    decode_hw:
+    - h264
+    - hevc (GM206+)
+    - vp9
+    - av1 (Ampere+)
+    encode_hw:
+    - h264
+    - hevc (GM206+)
+    - av1 (Ada+)
+    notes: Same session cap as Windows; needs a CUDA driver context.
+    tier: tier1
+  - os: linux
+    gpu: NVIDIA (nouveau / NVK)
+    primary:
+      api: Vulkan Video (Mesa NVK)
+      status: parser-needed
+      verified: false
+    notes: Experimental; no NVENC/NVDEC without the proprietary driver.
+    tier: out-of-scope
+  - os: linux
+    gpu: Raspberry Pi 4 (BCM2711)
+    primary:
+      api: V4L2 stateful M2M (bcm2835-codec)
+      status: full-api
+    alternatives:
+    - api: V4L2 stateless (rpi-hevc-dec)
+      status: parser-needed
+    decode_hw:
+    - h264 (stateful)
+    - hevc (stateless)
+    encode_hw:
+    - h264
+    notes: ioctl only; pure Go with x/sys/unix.
+    tier: tier2
+  - os: linux
+    gpu: Raspberry Pi 5 (BCM2712)
+    primary:
+      api: V4L2 stateless (rpi-hevc-dec)
+      status: parser-needed
+    decode_hw:
+    - hevc
+    encode_hw: []
+    not_in_hw:
+    - h264 decode
+    - h264 encode
+    notes: Upstream driver series at v6 (March 2026); Raspberry Pi OS kernel already ships it.
+    tier: tier2
+  - os: linux
+    gpu: Other ARM SoCs (Rockchip RK3588, Amlogic, NXP i.MX8, Jetson)
+    primary:
+      api: V4L2 M2M (stateful or stateless per SoC)
+      status: limited
+      verified: false
+    notes: Jetson exposes NVDEC/NVENC through a Tegra-specific multimedia API, not the desktop SDK. Verify
+      per board.
+    tier: tier2
+  - os: linux
+    gpu: none (VM, hosted CI)
+    primary:
+      api: none
+      status: impossible
+    notes: No software VA-API driver suitable for conformance; integration tests need real hardware.
+    tier: out-of-scope
+  cross_cutting:
+    ffmpeg-oracle: The ffmpeg CLI can validate every row's output in tests regardless of backend.
+    vulkan-video: Excluded from scope by the author; left in rows only as context.
+  summary_counts:
+    full-api-rows:
+    - darwin Apple Silicon
+    - darwin Intel Mac
+    - windows Intel
+    - windows AMD
+    - windows NVIDIA
+    - windows Qualcomm (unverified)
+    - linux Intel Gen12+
+    - linux NVIDIA proprietary
+    - linux Raspberry Pi 4
+    parser-needed-rows:
+    - linux Intel Gen8-11
+    - linux AMD
+    - linux NVIDIA nouveau
+    - linux Raspberry Pi 5
+    impossible-rows:
+    - darwin NVIDIA
+    - darwin Vulkan Video
+    - linux without GPU
+  evidence:
+  - url: https://github.com/nanazhan/vpl-gpu-rt
+    claim: Intel VPL GPU runtime is MIT and supports Tiger Lake and newer on Linux.
+  - url: https://www.amd.com/en/resources/support-articles/release-notes/RN-AMDGPU-UNIFIED-LINUX-25-10-2.html
+    claim: AMD dropped AMF from its Linux driver release and recommends VA-API / Mesa.
+  - url: https://www.phoronix.com/news/AMD-AMF-1.4.34
+    claim: AMF 1.4.34 marks RADV stable for encoding and experimental for decoding.
+  - url: https://www.phoronix.com/news/Raspberry-Pi-HEVC-Decode-V3
+    claim: Raspberry Pi HEVC decode is a stateless V4L2 driver being upstreamed.
+  - url: https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/apple
+    claim: AV1 hardware decode on Apple Silicon starts with M3.
+  - url: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-application-note/index.html
+    claim: GeForce GPUs are limited to 8 concurrent NVENC sessions per system.
+  - url: https://learn.microsoft.com/en-us/windows/win32/medfound/h-265---hevc-video-decoder
+    claim: Microsoft's HEVC decoder MFT takes Annex-B input and outputs NV12/P010.
+  tiers:
+    tier1:
+    - darwin Apple Silicon M1/M2
+    - darwin Apple Silicon M3+
+    - windows Intel
+    - windows AMD
+    - windows NVIDIA
+    - linux Intel Gen12+
+    - linux Intel Gen8-11
+    - linux AMD
+    - linux NVIDIA proprietary
+    tier2:
+    - windows Qualcomm Snapdragon X
+    - linux Raspberry Pi 4
+    - linux Raspberry Pi 5
+    - linux other ARM SoCs
+    out-of-scope:
+    - darwin Intel Mac
+    - darwin NVIDIA
+    - Vulkan Video everywhere
+    - windows/linux without GPU
+    - linux NVIDIA nouveau/NVK
+    source: policy:support-tiers (author decision 2026-10-09)
+relations:
+- relation: informs
+  to: requirement:hwmediacodec
+- relation: informs
+  to: decision:ffi-strategy
+- relation: mentions
+  to: backend:videotoolbox
+- relation: mentions
+  to: backend:media-foundation
+- relation: mentions
+  to: backend:vaapi
+- relation: mentions
+  to: backend:intel-vpl
+- relation: mentions
+  to: backend:nvenc-nvdec
+- relation: mentions
+  to: backend:v4l2-m2m
+- relation: mentions
+  to: backend:vulkan-video
+- relation: informs
+  to: policy:support-tiers
