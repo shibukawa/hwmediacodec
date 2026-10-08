@@ -1,0 +1,100 @@
+id: backend:nvenc-nvdec
+type: backend
+title: NVIDIA Video Codec SDK (NVENC / NVDEC)
+summary: NVIDIA's proprietary encoder (NVENC) and decoder (NVDEC/cuvid) APIs, available on Linux and Windows
+  through runtime-loaded driver libraries. NVDEC includes its own bitstream parser, so it behaves like
+  a full decoder.
+lifecycle: proposed
+authority: inferred
+aliases:
+- NVENC
+- NVDEC
+- cuvid
+- nvEncodeAPI
+- Video Codec SDK
+- evenc
+scope:
+  platform:
+  - linux
+  - windows
+  gpu: nvidia
+capabilities:
+  decode/h264:
+    state: unknown
+    about: capability:hwmediacodec/decode-h264
+  decode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/decode-hevc
+  decode/av1:
+    state: unknown
+    about: capability:hwmediacodec/decode-av1
+  encode/h264:
+    state: unknown
+    about: capability:hwmediacodec/encode-h264
+  encode/hevc:
+    state: unknown
+    about: capability:hwmediacodec/encode-hevc
+  encode/av1:
+    state: unknown
+    about: capability:hwmediacodec/encode-av1
+facts:
+  libraries:
+    linux:
+    - libnvidia-encode.so.1
+    - libnvcuvid.so.1
+    - libcuda.so.1
+    windows:
+    - nvEncodeAPI64.dll
+    - nvcuvid.dll
+    - nvcuda.dll
+  headers_licence: The SDK headers are redistributed under a permissive licence as FFmpeg's nv-codec-headers;
+    the runtime is the proprietary driver.
+  api_model: NVDEC is a full decoder (cuvidCreateVideoParser + cuvidCreateDecoder); NVENC is a session
+    API taking CUDA or D3D11 input buffers.
+  key_calls:
+    decode:
+    - cuInit
+    - cuCtxCreate
+    - cuvidCreateVideoParser
+    - cuvidParseVideoData
+    - cuvidCreateDecoder
+    - cuvidDecodePicture
+    - cuvidMapVideoFrame
+    - cuMemcpy2D
+    encode:
+    - NvEncodeAPICreateInstance
+    - nvEncOpenEncodeSessionEx
+    - nvEncInitializeEncoder
+    - nvEncCreateInputBuffer
+    - nvEncEncodePicture
+    - nvEncLockBitstream
+  ffi_notes:
+  - Designed for dlopen/LoadLibrary (FFmpeg loads them that way); purego/syscall fit well.
+  - Requires a CUDA driver context; output frames are in device memory and need cuMemcpy2D to reach Go
+    memory.
+  - Function tables are versioned structs (NV_ENCODE_API_FUNCTION_LIST); layout must match the SDK version.
+  why_it_matters: Only path to NVIDIA hardware on Linux without third-party VA-API shims; also usable
+    on Windows where Media Foundation lacks a vendor MFT.
+  session_limit: GeForce (non-qualified) GPUs are capped at 8 concurrent NVENC sessions per system with
+    recent drivers (Windows 551.76+ / Linux 550.54.14+); older drivers cap at 5 or 3. Professional GPUs
+    are limited by hardware only. Probe() should surface this.
+  codec_support_by_generation:
+    note: Inferred; confirm with cuvidGetDecoderCaps / nvEncGetEncodeCaps.
+    decode:
+      h264: Kepler and newer
+      hevc: Maxwell GM206 and newer
+      vp9: Maxwell GM206 (8-bit) / Pascal and newer
+      av1: Ampere (RTX 30) and newer
+    encode:
+      h264: Kepler and newer
+      hevc: Maxwell GM206 and newer
+      av1: Ada (RTX 40) and newer
+  evidence:
+  - url: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-application-note/index.html
+    claim: Non-qualified GPUs are limited to 8 concurrent encode sessions per system.
+  support_tier: tier1 (Linux and Windows NVIDIA)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers

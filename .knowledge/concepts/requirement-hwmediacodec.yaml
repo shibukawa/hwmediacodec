@@ -1,0 +1,551 @@
+id: requirement:hwmediacodec
+type: requirement
+title: Go hardware video codec library (hwmediacodec)
+summary: A Go library that drives the operating system's or GPU driver's hardware video decode/encode
+  engines (VideoToolbox, Media Foundation, VA-API/VPL, NVENC/NVDEC, V4L2, ...) through one common Go API
+  on macOS, Linux and Windows, without cgo.
+lifecycle: accepted
+authority: authored
+aliases:
+- hwmediacodec
+- ハードウェア動画コーデック
+- HWエンコード
+- HWデコード
+- hardware video codec from Go
+scope:
+  platform:
+  - darwin
+  - linux
+  - windows
+constraints:
+- One Go API whose behaviour does not depend on the backend; backend-specific details stay behind an internal
+  interface.
+- Report "unsupported" explicitly (codec, direction, profile, resolution) instead of silently falling
+  back to software.
+- The codec layer consumes and produces elementary-stream units (H.264/HEVC NAL units, AV1 OBUs) and raw
+  frames; containers are outside the codec layer.
+- Backends are discovered and loaded at runtime (dlopen / LoadLibrary / ioctl); a missing driver or library
+  yields a clear error, never a crash or a link-time failure.
+- CGO_ENABLED=0 builds must work for every target; native access goes through ebitengine/purego (darwin,
+  linux) and golang.org/x/sys/windows (windows). cgo is allowed only after a concrete, documented blocker
+  (see decision:ffi-strategy).
+- Every backend call that blocks (session creation, flush) must respect context cancellation or a documented
+  timeout.
+- 'Encoders must expose the controls that streaming needs: target bitrate with CBR/VBR, GOP length / keyframe
+  interval, forced keyframe, B-frame on/off, low-latency / realtime mode, and in-band SPS/PPS at every
+  keyframe.'
+non_goals:
+- Software codec implementations (no pure-Go H.264/HEVC/AV1 decoder or encoder).
+- Container formats (MP4/MKV/WebM/MPEG-TS/fMP4 demux and mux), HLS playlist generation, and audio codecs;
+  these belong to companion packages or other libraries.
+- Mobile targets (iOS/Android) in the first milestones; the design must not preclude them.
+- Video filtering and scaling beyond what the backend already returns. Pixel-format conversion is limited
+  to what the use cases need (see facts.use_cases).
+- Intel Macs (VideoToolbox backend targets Apple Silicon only).
+- Machines without a GPU (VMs, hosted CI) on Windows and Linux; software MFTs are not a target.
+- Vulkan Video as a backend.
+capabilities:
+  api/common-interface:
+    state: implemented
+    about: capability:hwmediacodec/common-api
+    authority: observed
+    evidence:
+      path: hwmediacodec.go
+    basis:
+    - path: hwmediacodec.go
+      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+    - path: internal/codec/codec.go
+      input_hash: ad5e26bc388362cd3bc08b4fcf463e77fea7b8478762c969818638c188966a2c
+  api/probe:
+    state: implemented
+    about: capability:hwmediacodec/probe
+    authority: observed
+    evidence:
+      path: hwmediacodec.go
+      locator: Probe
+    verified_by:
+    - probe-test
+  api/pixel-format-option:
+    state: planned
+    about: capability:hwmediacodec/pixel-format-option
+  decode/h264:
+    state: partial
+    about: capability:hwmediacodec/decode-h264
+    authority: observed
+    evidence:
+      path: internal/videotoolbox/decoder.go
+    verified_by:
+    - decode-reference-test
+  decode/hevc:
+    state: partial
+    about: capability:hwmediacodec/decode-hevc
+    authority: observed
+    evidence:
+      path: internal/videotoolbox/decoder.go
+  decode/av1:
+    state: unknown
+    about: capability:hwmediacodec/decode-av1
+  encode/h264:
+    state: planned
+    about: capability:hwmediacodec/encode-h264
+  encode/hevc:
+    state: planned
+    about: capability:hwmediacodec/encode-hevc
+  encode/av1:
+    state: unknown
+    about: capability:hwmediacodec/encode-av1
+  backend/videotoolbox:
+    state: partial
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    about: capability:hwmediacodec/backend-videotoolbox
+    authority: observed
+    evidence:
+      path: internal/videotoolbox/backend.go
+  backend/media-foundation:
+    state: planned
+    scope:
+      platform: windows
+      gpu:
+      - intel
+      - amd
+      - nvidia
+      - qualcomm
+    about: capability:hwmediacodec/backend-media-foundation
+  backend/vaapi:
+    state: planned
+    scope:
+      platform: linux
+      gpu:
+      - intel
+      - amd
+    about: capability:hwmediacodec/backend-vaapi
+  backend/intel-vpl:
+    state: planned
+    scope:
+      platform:
+      - linux
+      - windows
+      gpu: intel
+    about: capability:hwmediacodec/backend-intel-vpl
+  backend/nvenc-nvdec:
+    state: planned
+    scope:
+      platform:
+      - linux
+      - windows
+      gpu: nvidia
+    about: capability:hwmediacodec/backend-nvidia
+  backend/v4l2-m2m:
+    state: planned
+    scope:
+      platform: linux
+      gpu: arm-soc
+    about: capability:hwmediacodec/backend-v4l2
+  backend/vulkan-video:
+    state: not_applicable
+    scope:
+      platform:
+      - linux
+      - windows
+    about: capability:hwmediacodec/backend-vulkan-video
+acceptance:
+  probe-reports-hardware:
+    text: Probe() lists every available backend with the codecs and directions it supports on the running
+      machine, and returns an empty list (not an error) when no hardware engine is present.
+    verified_by:
+    - probe-test
+  decode-matches-reference:
+    text: Decoding a known H.264 Annex-B elementary stream yields the same frame count and per-frame NV12
+      checksums as a reference decoder; the ffmpeg CLI is used only as a test oracle, never at runtime.
+    scope:
+      milestone: m1
+    verified_by:
+    - decode-reference-test
+    - bframe-set-test
+  unsupported-is-explicit:
+    text: Requesting an unsupported codec or direction returns a typed ErrUnsupported carrying backend
+      name and reason; no panic and no silent software fallback.
+    verified_by:
+    - unsupported-test
+  no-cgo-cross-build:
+    text: CGO_ENABLED=0 go build ./... succeeds for darwin, linux and windows from a single host.
+    scope:
+      milestone: m1
+    verified_by:
+    - cross-build-check
+verification:
+  probe-test:
+    state: passed
+    method: integration
+    test: TestProbe
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    evidence:
+      path: probe_test.go
+      locator: TestProbe
+      note: go test -count=1 -v . on 2026-10-09; videotoolbox h264/hevc decode hardware=true
+    basis: &id004
+    - &id001
+      path: decode_darwin_test.go
+      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+    - &id002
+      path: probe_test.go
+      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+    - &id003
+      path: internal/testutil/ffmpeg.go
+      input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
+  decode-reference-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeH264MatchesReference
+    authority: observed
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeH264MatchesReference
+      note: 60 frames 320x240, per-frame SHA-256 equal to ffmpeg software decode (nv12)
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: f25c3ef4d34ff6fa7c52b8f73ea8a0e41e2c7350474ddaa1369d207a970b979d
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 583dbca77cb7220b98082ce0de5e4e80a578e9ee5a2cb6496bae5dc2c89a67f5
+    - path: annexb/annexb.go
+      input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
+    - path: hwmediacodec.go
+      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+    - *id001
+    - *id002
+    - *id003
+  unsupported-test:
+    state: passed
+    method: unit
+    test: TestUnsupportedCodec
+    authority: observed
+    scope:
+      platform: darwin
+    evidence:
+      path: probe_test.go
+      locator: TestUnsupportedCodec
+      note: AV1 request returns *UnsupportedError matching ErrUnsupported with backend and reason
+    basis: *id004
+  cross-build-check:
+    state: passed
+    method: static
+    scope:
+      milestone: m1
+    test: CGO_ENABLED=0 GOOS={darwin,linux,windows} go build ./...
+    authority: observed
+    evidence:
+      path: scripts/crossbuild.sh
+      note: CGO_ENABLED=0 builds ok for darwin/arm64, darwin/amd64, linux/amd64, linux/arm64, windows/amd64,
+        windows/arm64 on 2026-10-09
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: backends_other.go
+      input_hash: 3fddc03992092abd5b3bb27c638d0e1e94377f86dc7e72dbb1de7ed9e5deb7b3
+    - path: backends_darwin.go
+      input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
+  bframe-set-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeBFramesMatchesReference
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeBFramesMatchesReference
+      note: H.264 and HEVC with 3 consecutive B-frames; every reference frame appears exactly once
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: f25c3ef4d34ff6fa7c52b8f73ea8a0e41e2c7350474ddaa1369d207a970b979d
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 583dbca77cb7220b98082ce0de5e4e80a578e9ee5a2cb6496bae5dc2c89a67f5
+    - path: annexb/annexb.go
+      input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
+    - path: hwmediacodec.go
+      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+    - path: decode_darwin_test.go
+      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+    - path: probe_test.go
+      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
+open_questions:
+  m1-target:
+    text: Which platform, direction and codec form the first usable slice?
+    state: answered
+    resolution: Answered 2026-10-09 by the author - macOS + decode + H.264 (milestone:m1-darwin-h264-decode).
+  cgo-allowed:
+    text: Is requiring cgo acceptable, or is CGO_ENABLED=0 cross-compilation from one host a hard requirement?
+    state: answered
+    resolution: Answered 2026-10-09 - use purego/syscall wherever possible; cgo only if a concrete blocker
+      is hit and documented. Recorded in decision:ffi-strategy.
+  primary-use-case:
+    text: What is the main consumer of the library?
+    state: answered
+    resolution: Answered 2026-10-09 - several, in this order of priority - batch transcoding first, then
+      playback, then Ebitengine video textures and encoding Ebitengine output, then HLS streaming. See
+      facts.use_cases for the API consequences.
+  frame-memory-model:
+    text: Should decoded frames be copied into Go-owned buffers or exposed as GPU-resident surfaces?
+    state: open
+    resolution: 'Provisional - CPU copy. M1 evidence: 1080p H.264 decoded at ~830 fps including the NV12
+      copy on an M3, so the copy is not the bottleneck for batch transcoding. Native() reserved for later
+      zero-copy work.'
+  pixel-format-conversion:
+    text: The Ebitengine use cases need RGBA frames in and out, while hardware engines speak NV12 (and
+      BGRA on VideoToolbox). Who converts - the backend where it can (VideoToolbox BGRA output, Media
+      Foundation colour converter DSP, VA-API vpp), or a pure-Go NV12<->RGBA converter as a fallback?
+      What throughput is acceptable for the Go fallback?
+    state: open
+  encoder-controls:
+    text: Which encoder control set is mandatory across backends for batch transcoding and HLS - bitrate/CBR/VBR,
+      GOP, forced keyframe, B-frames, low-latency, profile/level - and how are backend-specific extras
+      exposed without leaking into the common API?
+    state: open
+  codec-priority:
+    text: Which codec order?
+    state: open
+    resolution: Provisional - H.264, then HEVC, then AV1 (hardware AV1 availability is uneven; AV1 encode
+      is absent on Apple Silicon).
+  go-version-policy:
+    text: Minimum Go version and architectures?
+    state: open
+    resolution: Provisional - the two most recent Go releases (host currently has go1.27.0) on amd64 and
+      arm64.
+  linux-backend-split:
+    text: Tier 1 Linux covers Intel, AMD and NVIDIA. Intel (Gen12+, VPL) and NVIDIA (NVDEC/NVENC) have
+      full-codec APIs; AMD only has slice-level VA-API, so the Go-side H.264/HEVC parser and DPB component
+      is required for Tier 1. In which order are the Linux backends and the parser built?
+    state: deferred
+    resolution: Deferred until the Windows backend is done. Provisional order - Intel VPL and NVIDIA first
+      (no parser), then the Go parser/DPB plus VA-API for AMD and older Intel.
+  hls-packaging:
+    text: HLS needs MPEG-TS or fMP4 segments and playlists. Companion package in this module, a separate
+      module, or leave to existing Go libraries?
+    state: deferred
+    resolution: Outside the codec layer; revisit when the H.264 encoder works on one platform and a streaming
+      prototype is attempted.
+  ebitengine-zero-copy:
+    text: Can decoded frames reach an Ebitengine texture without a CPU round trip (CVPixelBuffer -> Metal,
+      D3D11 texture, DMA-BUF)?
+    state: deferred
+    resolution: Ebitengine has no public native-texture import today; revisit if Ebitengine gains one
+      or if WritePixels throughput is measured as the bottleneck.
+  software-fallback:
+    text: Should the library offer a software path when no hardware is present?
+    state: deferred
+    resolution: Out of scope while hardware backends are being built; revisit when a consumer needs guaranteed
+      decode on machines without hardware engines. Note that VideoToolbox and the Microsoft MFTs already
+      fall back to software internally unless hardware is explicitly required.
+  container-support:
+    text: Will callers be expected to demux/mux themselves?
+    state: deferred
+    resolution: Non-goal for the codec layer; revisit together with hls-packaging.
+  ci-hardware:
+    text: GPU-less machines are out of scope, and hosted CI runners for Linux and Windows have no GPU.
+      Where do Tier 1 hardware integration tests run - the author's machines, self-hosted runners, or
+      both?
+    state: deferred
+    resolution: Resolve before the second backend (Windows). M1 runs on the author's Apple Silicon Mac
+      or an Apple Silicon hosted runner.
+  vendor-sdks:
+    text: Are vendor SDKs (AMD AMF, Intel VPL/QSV) needed beyond the OS-level APIs?
+    state: deferred
+    resolution: Intel VPL is now a candidate full-API backend for Linux (see backend:intel-vpl). AMD AMF
+      on Linux is de-emphasised by AMD itself (dropped from its Linux driver package in 2025; VA-API recommended).
+      Revisit per backend.
+  frame-reordering:
+    text: 'Frames come back in decode order. Streams with B-frames decode correctly (frame set equals
+      ffmpeg output) but arrive out of display order. Who reorders: a Go-side reorder buffer driven by
+      caller PTS, a POC parser (also needed for VA-API later), or the caller?'
+    state: open
+    resolution: 'Experiment 2026-10-09 on M3: kVTDecodeFrame_EnableTemporalProcessing, with and without
+      asynchronous decompression and with correct display-order PTS, still emitted decode order, so VideoToolbox
+      cannot be delegated the job. Provisional: caller reorders by PTS; a PTS/POC reorder buffer joins
+      the bitstream-parser milestone. Revisit before the playback use case ships.'
+history:
+  proposed-2026-10-08:
+    summary: Requirements, backend landscape and feasibility analysis authored from the author's request
+      (Go, hardware decode/encode, macOS/Linux/Windows).
+  accepted-2026-10-09:
+    summary: Author confirmed purego/syscall where possible, M1 = macOS H.264 decode, and the use-case
+      list (batch transcoding, playback, Ebitengine textures and output encoding, HLS streaming). Requirement
+      moved to accepted with open and deferred questions retained.
+  scoped-2026-10-09:
+    summary: 'Author set support tiers (policy:support-tiers): Tier 1 = Apple Silicon, Windows/Linux Intel/AMD/NVIDIA;
+      Tier 2 = Raspberry Pi, Snapdragon X; out of scope = Intel Mac, GPU-less CI, Vulkan Video. First
+      milestone confirmed on macOS.'
+  m1-delivered-2026-10-09:
+    summary: 'M1 implemented and verified: VideoToolbox H.264/HEVC decode via purego, bit-exact against
+      ffmpeg, cross-builds with CGO_ENABLED=0.'
+facts:
+  motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
+    to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
+  use_cases:
+  - key: batch-transcode
+    priority: 1
+    description: Decode a file's elementary stream and re-encode it (format or bitrate change) as fast
+      as the hardware allows.
+    api_consequences:
+    - Synchronous Send/Receive with ErrAgain backpressure is sufficient.
+    - Throughput matters more than latency; B-frames and look-ahead may be enabled.
+    - Needs encoder controls - bitrate, quality/CRF-like mode where the backend has one, GOP, profile/level.
+  - key: playback
+    priority: 2
+    description: Decode for display with seeking.
+    api_consequences:
+    - Flush/Reset to drop the pipeline on seek; PTS passthrough and output reordering by PTS.
+    - Decoder must tolerate starting at a keyframe mid-stream.
+  - key: ebitengine-texture
+    priority: 3
+    description: Show decoded video as an Ebitengine image.
+    api_consequences:
+    - Output pixel format option (NV12 default; RGBA/BGRA where the backend converts cheaply) so frames
+      can go straight to ebiten.Image.WritePixels.
+    - CPU-side frames for now; see ebitengine-zero-copy.
+  - key: ebitengine-encode
+    priority: 3
+    description: Encode frames rendered by Ebitengine (ReadPixels gives RGBA).
+    api_consequences:
+    - Input pixel format option (RGBA/BGRA in addition to NV12); backend conversion where available, pure-Go
+      fallback otherwise.
+    - Fixed-rate timestamps generated by the caller; the encoder must honour them.
+  - key: hls-streaming
+    priority: 4
+    description: Live or VOD HLS output from encoded H.264/HEVC.
+    api_consequences:
+    - Low-latency encode mode, CBR, fixed GOP aligned to segment length, forced keyframes at segment boundaries,
+      in-band SPS/PPS.
+    - Annex-B or AVCC output selectable; muxing to TS/fMP4 is a companion concern (hls-packaging).
+  consumers:
+  - The author's own tools (batch conversion, Ebitengine games/apps, streaming experiments).
+  - External Go users once the API is stable.
+  delivery:
+    current_milestone: m1
+    outcome: Public API skeleton + Probe() + H.264 Annex-B elementary-stream decode to NV12 frames on
+      macOS via VideoToolbox, built with CGO_ENABLED=0 and verified against an ffmpeg-produced reference.
+    later:
+    - M2 - H.264 encode on macOS (end-to-end batch transcode on one Tier 1 platform; Ebitengine encode
+      path).
+    - 'M3 - Windows backend: Media Foundation for Intel/AMD, NVENC/NVDEC for NVIDIA.'
+    - 'M4 - Linux full-API backends: Intel VPL and NVIDIA NVDEC/NVENC.'
+    - M5 - Go H.264/HEVC parser + DPB and VA-API backend for Linux AMD (and older Intel).
+    - Then HEVC and AV1 where hardware exists, pixel-format options, HLS prototype, Tier 2 backends.
+    decisions:
+      cgo-allowed:
+        decision: Decided 2026-10-09 - no cgo; purego on darwin/linux, x/sys/windows on windows.
+        escape_hatch: cgo for one backend only after a concrete blocker is documented in decision:ffi-strategy.
+        change_boundary: Keep every FFI call inside internal/<backend>/sys packages so a cgo shim could
+          replace a backend without touching the public API.
+      frame-memory-model:
+        provisional_choice: CPU-side planes owned by the library with an explicit Release(); the Frame
+          type reserves a Native() accessor so a backend can later hand out a GPU surface handle without
+          an API break.
+        reason: Portable and testable (checksums); the Ebitengine path needs CPU pixels anyway.
+        revisit_when: When a consumer measures the copy cost as a bottleneck, or when Ebitengine exposes
+          native texture import.
+      codec-priority:
+        provisional_choice: H.264, then HEVC, then AV1.
+        reason: H.264 is decodable by every target engine; AV1 hardware support is uneven across GPUs
+          and OS versions.
+        revisit_when: When a consumer needs AV1 or HEVC before H.264 encode is done.
+      api-shape:
+        provisional_choice: Synchronous pull style - Decoder.Send(packet) / Receive() / Flush(); Encoder.Send(frame)
+          / Receive() / Flush(); ErrAgain for backpressure. Backends that are callback or event driven
+          (VideoToolbox, async MFTs) are bridged with an internal queue.
+        reason: Fits batch transcoding and playback directly; a streaming loop is a thin goroutine on
+          top.
+        revisit_when: When the HLS prototype shows the queue adds unacceptable latency, or when a push/callback
+          API is requested.
+      linux-backend-split:
+        reason: Linux hardware access splits by vendor and by API model; M1 is macOS only.
+        revisit_when: Before implementing the Linux backend.
+        evidence_needed: Which GPUs the first Linux consumers actually run; whether a full-API backend
+          (Intel VPL, NVDEC) covers them before the Go parser/DPB exists.
+    roadmap_note: Milestone order beyond M1 is a stated assumption, not an agreed plan; each milestone
+      is re-planned after the previous one ships.
+    m1_result:
+      delivered: '2026-10-09'
+      outcome: Public API, Probe(), annexb reader, VideoToolbox H.264 and HEVC decode to NV12 via purego;
+        CGO_ENABLED=0 on all six targets; conformance tests pass against ffmpeg.
+      environment:
+        host: Apple M3, macOS 27.0.1 (build 26A434)
+        go: go1.27.0 darwin/arm64
+        purego: github.com/ebitengine/purego v0.11.1
+        oracle: ffmpeg 9.0.1 (libx264, libx265 available)
+        date: '2026-10-09'
+      measurements:
+        h264_1080p_decode_fps: 834
+        note: cmd/hwmediacodec decode, 300 frames, sync decode including NV12 copy, M3
+      limitations:
+      - decode-order output; VideoToolbox temporal processing does not reorder (see frame-reordering)
+      - NV12 only
+      - no encode
+      - darwin Apple Silicon only
+    next_candidates:
+    - M2 - H.264/HEVC encode on macOS (VTCompressionSession) with the streaming-oriented controls from
+      the constraints; unlocks batch transcode end to end.
+    - M3 - Windows backend (Media Foundation) to validate the API against an async MFT model.
+  support_tiers: See policy:support-tiers; Tier 1 hardware must pass acceptance before release, Tier 2
+    is best effort.
+  capability_notes:
+    decode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
+      bit-exact against ffmpeg on 320x240 and 1080p test streams.
+    decode/hevc: implemented on darwin/apple-silicon only; bit-exact against ffmpeg (libx265 source).
+    backend/videotoolbox: decode only; encode is the next milestone candidate.
+relations:
+- relation: governed_by
+  to: policy:support-tiers
+- relation: constrained_by
+  to: decision:ffi-strategy
+- relation: informed_by
+  to: analysis:go-hw-codec-feasibility
+- relation: informed_by
+  to: analysis:os-gpu-matrix
+- relation: candidate_backend
+  to: backend:videotoolbox
+  scope:
+    platform: darwin
+- relation: candidate_backend
+  to: backend:media-foundation
+  scope:
+    platform: windows
+- relation: candidate_backend
+  to: backend:vaapi
+  scope:
+    platform: linux
+- relation: candidate_backend
+  to: backend:intel-vpl
+  scope:
+    platform:
+    - linux
+    - windows
+- relation: candidate_backend
+  to: backend:nvenc-nvdec
+  scope:
+    platform:
+    - linux
+    - windows
+- relation: candidate_backend
+  to: backend:v4l2-m2m
+  scope:
+    platform: linux
+- relation: alternative_backend
+  to: backend:ffmpeg-libavcodec
+- relation: next_milestone
+  to: milestone:m1-darwin-h264-decode
+- relation: mentions
+  to: reference:go-ecosystem
+- relation: excludes
+  to: backend:vulkan-video

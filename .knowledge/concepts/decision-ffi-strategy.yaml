@@ -1,0 +1,115 @@
+id: decision:ffi-strategy
+type: decision
+title: How Go reaches the native codec APIs (FFI strategy)
+summary: Choose between direct OS-API bindings without cgo (purego/syscall), direct bindings through cgo
+  shims, or wrapping a cross-platform media framework (FFmpeg libavcodec, GStreamer). Provisional choice
+  is direct bindings without cgo.
+lifecycle: accepted
+authority: authored
+aliases:
+- cgo vs purego
+- FFI戦略
+- バインディング方式
+scope:
+  platform:
+  - darwin
+  - linux
+  - windows
+facts:
+  options:
+    a-ffmpeg-cgo:
+      name: FFmpeg libavcodec via cgo (go-astiav, ffmpeg-statigo, csnewman/ffmpeg-go)
+      coverage: All three OSes and every hardware engine FFmpeg knows (videotoolbox, vaapi, qsv, nvdec/nvenc,
+        d3d11va/dxva2, mediafoundation encoders, amf, vulkan).
+      pros:
+      - Fastest route to a working multi-platform result; FFmpeg already does bitstream parsing, DPB management
+        and hw frame transfer.
+      - One code path for all backends; mature and battle-tested.
+      cons:
+      - cgo toolchain per target OS; cross-compiling needs the macOS SDK and MinGW, or a static bundle
+        per OS.
+      - Large binaries (tens of MB) and FFmpeg version lock-in; go-astiav documents breaking changes between
+        tags.
+      - LGPL 2.1+ (GPL with --enable-gpl); dynamic linking or source obligations.
+      - The library becomes an FFmpeg wrapper rather than a hardware-codec library.
+    b-direct-purego:
+      name: Direct OS/driver APIs without cgo (ebitengine/purego on darwin/linux, golang.org/x/sys/windows
+        on windows)
+      coverage: VideoToolbox, VA-API, Media Foundation, NVENC/NVDEC are all C or COM APIs designed for
+        runtime loading (dlopen / LoadLibrary / CoCreateInstance).
+      pros:
+      - CGO_ENABLED=0 cross-compilation from one host; tiny binaries; no FFmpeg licence surface.
+      - Backends load lazily, so a missing driver is a runtime error, not a link failure.
+      - Precedent exists; go-macos/videotoolbox decodes H.264/HEVC on macOS with purego.
+      cons:
+      - Three to four bindings must be written and maintained by this project; each API has its own object
+        model (CoreFoundation, COM async MFT, VA surfaces/buffers, CUDA contexts).
+      - VA-API (and Vulkan Video, DXVA) are slice-level accelerators; the caller must parse SPS/PPS/slice
+        headers and manage the DPB in Go, which is a substantial component.
+      - purego callbacks and struct-by-value ABI details need care; COM callbacks on Windows require Go-implemented
+        vtables.
+    c-direct-cgo:
+      name: Direct OS/driver APIs through small C shims (cgo)
+      pros:
+      - Headers, structs and callbacks come for free; simplest code per backend.
+      cons:
+      - Loses cross-compilation; macOS needs Xcode SDK, Windows needs MinGW with Media Foundation headers.
+      - Same per-backend parsing/DPB work as option B.
+    d-gstreamer:
+      name: GStreamer via go-gst
+      pros:
+      - Cross-platform pipelines with hardware plugins (applemedia vtdec/vtenc, va, nvcodec, mediafoundation,
+        d3d11/d3d12).
+      cons:
+      - Requires an installed GStreamer runtime and cgo; heavyweight for a codec-only library.
+    e-hybrid:
+      name: Direct purego backends plus an optional FFmpeg backend in a separate module (build tag)
+      pros:
+      - Keeps the core cgo-free while offering FFmpeg coverage (e.g. Linux NVIDIA, software fallback)
+        for users who accept cgo.
+      cons:
+      - Two code paths to keep behaviourally identical; adds a conformance test burden.
+  recommendation:
+    choice: b-direct-purego
+    why: Matches the stated goal (call the OS/driver engines, multi-platform, from Go) and keeps the build
+      simple. Option A is the better choice only if "working on all three OSes with every codec as soon
+      as possible" outranks build simplicity and library identity; option E can be added later without
+      reversing B.
+    main_tradeoff: Significantly more upfront binding work, and the Linux VA-API backend needs a Go-side
+      H.264/HEVC bitstream parser and DPB manager (or a full-decoder alternative on Linux).
+  provisional: false
+  verify_by_building:
+    experiment: M1 (macOS VideoToolbox H.264 decode with purego)
+    stop_criteria: Decode of a reference stream matches ffmpeg checksums, or a concrete purego limitation
+      (callback ABI, CF type handling) is hit and documented.
+  decision:
+    chosen: b-direct-purego
+    decided_on: '2026-10-09'
+    by: author
+    wording: purego/syscall wherever possible
+    escape_hatch: cgo may be used for a single backend only after a concrete blocker (callback ABI, struct
+      layout, COM callback object) is documented here with evidence.
+  evidence_from_m1:
+    date: '2026-10-09'
+    summary: 'Option B validated on macOS: CoreFoundation, CoreMedia, CoreVideo and VideoToolbox bound
+      with purego, zero cgo, CGO_ENABLED=0 builds on six targets, conformance tests pass.'
+    blockers_hit: none
+    notes:
+    - Callbacks with struct-by-value parameters are avoided by truncating the parameter list.
+    - Struct-by-pointer (CMSampleTimingInfo, callback record) works as plain Go structs with matching
+      layout.
+relations:
+- relation: constrains
+  to: requirement:hwmediacodec
+- relation: informed_by
+  to: analysis:go-hw-codec-feasibility
+- relation: informed_by
+  to: reference:go-ecosystem
+- relation: tested_by
+  to: milestone:m1-darwin-h264-decode
+history:
+  accepted-2026-10-09:
+    summary: Author chose direct OS/driver bindings without cgo (purego on darwin/linux, x/sys/windows
+      on windows); FFmpeg stays a test oracle and a possible optional module.
+  validated-2026-10-09:
+    summary: M1 implementation confirmed the purego approach on the first platform.

@@ -1,0 +1,295 @@
+id: milestone:m1-darwin-h264-decode
+type: milestone
+title: M1 - API skeleton, Probe() and H.264 decode on macOS via VideoToolbox
+summary: 'First usable slice (proposed as a stated assumption): a public Go API with Probe(), Decoder
+  and Frame, one backend (VideoToolbox) that decodes an H.264 Annex-B elementary stream into NV12 frames,
+  built with CGO_ENABLED=0 and checked against an ffmpeg-produced reference.'
+lifecycle: active
+authority: authored
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: m1
+constraints:
+- CGO_ENABLED=0 for the library and tests; the ffmpeg CLI may be used only by test helpers to generate
+  inputs and reference output.
+- Annex-B input (start codes); the backend converts to AVCC and builds the CMVideoFormatDescription from
+  in-band SPS/PPS.
+- Output frames are NV12 ('420v') copied into Go-owned buffers with Release().
+non_goals:
+- Encoding, HEVC/AV1, container demux, other platforms.
+acceptance:
+  decode-reference:
+    text: Decoding testdata/*.h264 produces the same frame count and per-frame NV12 checksums as ffmpeg
+      -c:v h264 -f rawvideo -pix_fmt nv12 (software decode) within the tolerance of bit-exact output.
+    scope:
+      milestone: m1
+    verified_by:
+    - decode-reference-test
+  probe-darwin:
+    text: Probe() on an Apple Silicon Mac reports backend videotoolbox with decode h264 and hevc; on a
+      machine without VideoToolbox the backend is absent and no error is returned.
+    scope:
+      milestone: m1
+    verified_by:
+    - probe-test
+  parameter-set-change:
+    text: A stream whose SPS/PPS change mid-way (resolution change) is decoded by recreating the session,
+      with no frames lost before the change.
+    scope:
+      milestone: m1
+    verified_by:
+    - sps-change-test
+  cross-build:
+    text: GOOS=linux and GOOS=windows builds of the module succeed with CGO_ENABLED=0 (backends compile
+      to stubs that report absent).
+    scope:
+      milestone: m1
+    verified_by:
+    - cross-build-check
+verification:
+  decode-reference-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+    test: TestDecodeH264MatchesReference
+    authority: observed
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeH264MatchesReference
+    basis:
+    - &id004
+      path: internal/videotoolbox/decoder.go
+      input_hash: f25c3ef4d34ff6fa7c52b8f73ea8a0e41e2c7350474ddaa1369d207a970b979d
+    - &id005
+      path: internal/videotoolbox/sys/sys.go
+      input_hash: 583dbca77cb7220b98082ce0de5e4e80a578e9ee5a2cb6496bae5dc2c89a67f5
+    - &id006
+      path: annexb/annexb.go
+      input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
+    - &id007
+      path: hwmediacodec.go
+      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+    - &id001
+      path: decode_darwin_test.go
+      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+    - &id002
+      path: probe_test.go
+      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+    - &id003
+      path: internal/testutil/ffmpeg.go
+      input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
+  probe-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+    test: TestProbe
+    authority: observed
+    evidence:
+      path: probe_test.go
+      locator: TestProbe
+    basis:
+    - *id001
+    - *id002
+    - *id003
+  sps-change-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+    test: TestDecodeParameterSetChange
+    authority: observed
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeParameterSetChange
+      note: 320x240 then 160x120 concatenated; 60 frames, sizes switch at frame 30, checksums equal to
+        reference
+    basis:
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - *id001
+    - *id002
+    - *id003
+  cross-build-check:
+    state: passed
+    method: static
+    scope:
+      milestone: m1
+    test: CGO_ENABLED=0 GOOS=linux go build ./... && CGO_ENABLED=0 GOOS=windows go build ./...
+    authority: observed
+    evidence:
+      path: scripts/crossbuild.sh
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+  hevc-reference-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+    test: TestDecodeHEVCMatchesReference
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeHEVCMatchesReference
+      note: bonus beyond the M1 scope; libx265 source, bit-exact
+    basis:
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - *id001
+    - *id002
+    - *id003
+  flush-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+    test: TestFlushResumesAtKeyframe
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestFlushResumesAtKeyframe
+    basis:
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - *id001
+    - *id002
+    - *id003
+  race-check:
+    state: passed
+    method: unit
+    authority: observed
+    test: go test -race . ./annexb/ ./internal/bitstream/
+    evidence:
+      path: internal/videotoolbox/decoder.go
+      note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: f25c3ef4d34ff6fa7c52b8f73ea8a0e41e2c7350474ddaa1369d207a970b979d
+  bframe-set-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+    test: TestDecodeBFramesMatchesReference
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeBFramesMatchesReference
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: f25c3ef4d34ff6fa7c52b8f73ea8a0e41e2c7350474ddaa1369d207a970b979d
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 583dbca77cb7220b98082ce0de5e4e80a578e9ee5a2cb6496bae5dc2c89a67f5
+    - path: annexb/annexb.go
+      input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
+    - path: hwmediacodec.go
+      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+    - path: decode_darwin_test.go
+      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+    - path: probe_test.go
+      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
+open_questions:
+  annexb-parser-scope:
+    text: Is a minimal Go Annex-B NAL splitter plus SPS/PPS extraction enough for M1, or should M1 already
+      include a full SPS parser (needed later for VA-API)?
+    state: answered
+    resolution: 'Minimal parser was enough: NAL split, first_mb/first_slice flag, parameter-set ids (incl.
+      HEVC profile_tier_level skip). A full SPS/slice parser is only needed for POC-based reordering and
+      for VA-API; tracked as requirement open question frame-reordering.'
+facts:
+  provisional_api:
+    note: Provisional shape to validate in M1; not an agreed final API.
+    sketch: "package hwmediacodec\n\ntype Codec int // H264, HEVC, AV1\ntype Direction int // Decode,\
+      \ Encode\n\ntype Capability struct {\n    Backend   string   // \"videotoolbox\", \"mediafoundation\"\
+      , \"vaapi\", \"nvidia\"\n    Codec     Codec\n    Direction Direction\n    Profiles  []string\n\
+      \    MaxWidth, MaxHeight int\n}\nfunc Probe(ctx context.Context) ([]Capability, error)\n\ntype Packet\
+      \ struct { Data []byte; PTS, DTS int64; Keyframe bool }\ntype Frame struct {\n    Width, Height\
+      \ int\n    Format        PixelFormat // NV12 in M1\n    Planes        [][]byte\n    Strides    \
+      \   []int\n    PTS           int64\n}\nfunc (f *Frame) Release()\nfunc (f *Frame) Native() any //\
+      \ reserved: backend surface handle, nil in M1\n\ntype Decoder interface {\n    Send(ctx context.Context,\
+      \ p Packet) error   // ErrAgain when the queue is full\n    Receive(ctx context.Context) (*Frame,\
+      \ error) // ErrAgain when nothing is ready; io.EOF after Flush drains\n    Flush(ctx context.Context)\
+      \ error\n    Close() error\n}\nfunc NewDecoder(ctx context.Context, codec Codec, opts ...DecoderOption)\
+      \ (Decoder, error)\n\nvar ErrUnsupported = errors.New(\"hwmediacodec: unsupported\")\n"
+  steps:
+  - Module layout; public types; ErrUnsupported; stub backends for non-darwin GOOS.
+  - internal/videotoolbox/sys - purego bindings for VideoToolbox, CoreMedia, CoreVideo and CoreFoundation
+    functions used by decode.
+  - Annex-B splitter, SPS/PPS capture, AVCC conversion, CMVideoFormatDescriptionCreateFromH264ParameterSets.
+  - VTDecompressionSession with a Go callback (purego.NewCallback); copy CVPixelBuffer planes into Frame;
+    ordered output by PTS.
+  - Test helper that generates testdata with ffmpeg (testsrc, libx264, h264_mp4toannexb) and computes
+    reference checksums; skip when ffmpeg is absent.
+  - Probe() for darwin via VTIsHardwareDecodeSupported / VTCopySupportedPropertyDictionaryForEncoder.
+  known_risks:
+  - VideoToolbox session creation uses global encoder/decoder registry state; serialize session creation.
+  - purego callback ABI on arm64 vs amd64 must be covered by CI on both.
+  - Intel Macs are out of scope, so tests may assume Apple Silicon hardware paths; still compare against
+    the same machine's ffmpeg output rather than fixed golden hashes because hardware decoders are not
+    required to be bit-exact.
+  api_notes_from_use_cases:
+  - Reserve a DecoderOption for output pixel format (NV12 default, BGRA later for Ebitengine) but verify
+    only NV12 in M1.
+  - Flush() must be usable as a seek reset (playback use case) - drop queued frames and allow restarting
+    at a keyframe.
+  - Keep Send/Receive synchronous with ErrAgain; the batch-transcode use case needs no callbacks.
+  result:
+    status: delivered 2026-10-09
+    environment:
+      host: Apple M3, macOS 27.0.1 (build 26A434)
+      go: go1.27.0 darwin/arm64
+      purego: github.com/ebitengine/purego v0.11.1
+      oracle: ffmpeg 9.0.1 (libx264, libx265 available)
+      date: '2026-10-09'
+    tests:
+    - TestDecodeH264MatchesReference
+    - TestDecodeHEVCMatchesReference
+    - TestDecodeParameterSetChange
+    - TestFlushResumesAtKeyframe
+    - TestInvalidData
+    - TestProbe
+    - TestUnsupportedCodec
+    - TestUnsupportedOutputFormat
+    - annexb and bitstream unit tests
+    performance: 1080p H.264 (no B-frames) 300 frames in 360 ms = ~834 fps; with B-frames ~430 fps; B-frame
+      frame set equals ffmpeg output but in decode order.
+  learned:
+  - 'purego handles every call needed: dlopen of system frameworks, CF constants via Dlsym + pointer deref,
+    9-argument CoreMedia calls (stack args), and a NewCallback invoked by VideoToolbox; declaring only
+    the first five callback parameters and ignoring the trailing CMTime values works on arm64.'
+  - Synchronous VTDecompressionSessionDecodeFrame (flags 0) emits the output callback before returning,
+    giving a deterministic Send/Receive contract without goroutines.
+  - Hardware H.264/HEVC output is bit-exact with ffmpeg software decoding for 8-bit 4:2:0 (per-frame SHA-256
+    equality), so checksums are a valid oracle.
+  - go vet rejects uintptr->unsafe.Pointer conversions; returning *byte from purego-bound functions and
+    unsafe.Add(nil, addr) for Dlsym constants keeps vet clean.
+  - Session recreation on SPS/PPS change (drain, invalidate, create) loses no frames.
+  - VideoToolbox requires AVCC (length-prefixed) samples; Annex-B conversion plus in-band parameter-set
+    extraction is cheap and sufficient.
+  - 'VideoToolbox does not reorder H.264/HEVC output into display order on this path: temporal processing
+    (sync or async) with real PTS still yields decode order. A PTS/POC reorder buffer in Go is required
+    for display order; a WithPresentationOrder option was prototyped and removed because it did not work.'
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: tests_decision
+  to: decision:ffi-strategy
+history:
+  accepted-2026-10-09:
+    summary: Author confirmed M1 = macOS + decode + H.264 with purego.
+  delivered-2026-10-09:
+    summary: All M1 acceptance checks passed on the author's M3 Mac; HEVC decode and a flush/seek test
+      were added beyond the original scope.
