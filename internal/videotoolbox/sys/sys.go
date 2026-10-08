@@ -154,6 +154,16 @@ func (b *binder) ptrConst(dst *uintptr, name string) {
 	*dst = *(*uintptr)(unsafe.Add(unsafe.Pointer(nil), addr))
 }
 
+// optPtrConst is ptrConst for symbols that older macOS releases lack; the
+// destination stays 0 when the symbol is absent.
+func (b *binder) optPtrConst(dst *uintptr, name string) {
+	addr, err := purego.Dlsym(b.handle, name)
+	if err != nil {
+		return
+	}
+	*dst = *(*uintptr)(unsafe.Add(unsafe.Pointer(nil), addr))
+}
+
 func (b *binder) addrConst(dst *uintptr, name string) {
 	addr, err := purego.Dlsym(b.handle, name)
 	if err != nil {
@@ -230,6 +240,8 @@ func load() error {
 	if addr, err := purego.Dlsym(vt.handle, "VTRegisterSupplementalVideoDecoderIfAvailable"); err == nil {
 		purego.RegisterFunc(&VTRegisterSupplementalVideoDecoderIfAvailable, addr)
 	}
+
+	bindEncode(cf, cm, cv, vt)
 
 	var missing []string
 	for _, b := range []*binder{cf, cm, cv, vt} {
@@ -326,6 +338,9 @@ var statusNames = map[int32]string{
 	StatusVTSessionMalfunction:             "session malfunction",
 	StatusVTVideoDecoderReferenceMissing:   "reference frame missing",
 	StatusVTVideoDecoderUnknown:            "unknown decoder error",
+	StatusVTVideoEncoderMalfunction:        "encoder malfunction",
+	StatusVTVideoEncoderNotAvailableNow:    "encoder not available now",
+	StatusVTVideoEncoderAuthorization:      "encoder authorization error",
 }
 
 // StatusString describes an OSStatus value.

@@ -66,6 +66,56 @@ func (p PixelFormat) String() string {
 	return fmt.Sprintf("pixelformat(%d)", uint8(p))
 }
 
+// RateControl selects how an encoder spends its bit budget.
+type RateControl uint8
+
+const (
+	// VBR targets the configured bitrate on average and lets the size of
+	// individual frames vary with content.
+	VBR RateControl = iota + 1
+	// CBR holds the bitrate constant, padding frames when necessary. It is
+	// meant for streaming paths that require a steady rate.
+	CBR
+)
+
+func (r RateControl) String() string {
+	switch r {
+	case VBR:
+		return "vbr"
+	case CBR:
+		return "cbr"
+	}
+	return fmt.Sprintf("ratecontrol(%d)", uint8(r))
+}
+
+// Profile selects the coding profile of an encoder.
+type Profile uint8
+
+const (
+	// ProfileDefault lets the backend choose.
+	ProfileDefault Profile = iota
+	// ProfileBaseline is H.264 Baseline (no B-frames, CAVLC).
+	ProfileBaseline
+	// ProfileMain is H.264 Main or HEVC Main.
+	ProfileMain
+	// ProfileHigh is H.264 High.
+	ProfileHigh
+)
+
+func (p Profile) String() string {
+	switch p {
+	case ProfileDefault:
+		return "default"
+	case ProfileBaseline:
+		return "baseline"
+	case ProfileMain:
+		return "main"
+	case ProfileHigh:
+		return "high"
+	}
+	return fmt.Sprintf("profile(%d)", uint8(p))
+}
+
 // Capability is one codec/direction pair a backend can serve on this machine.
 type Capability struct {
 	Backend   string
@@ -79,25 +129,34 @@ type Capability struct {
 	MaxHeight int
 }
 
-// Packet is one compressed access unit (one picture) handed to a decoder.
+// Packet is one compressed access unit (one picture). Decoders consume
+// Packets and encoders produce them.
 //
-// Data must hold a complete access unit in Annex-B byte-stream form (start
-// codes). Parameter sets (SPS/PPS/VPS) may be included in-band.
+// Data holds a complete access unit in Annex-B byte-stream form (start
+// codes). Parameter sets (SPS/PPS/VPS) may be included in-band; encoders put
+// them in front of every keyframe.
 type Packet struct {
 	Data []byte
-	// PTS is the presentation timestamp in TimeScale units (see the decoder
-	// options). It is passed through to the resulting Frame.
+	// PTS is the presentation timestamp in TimeScale units (see the
+	// options). Decoders pass it through to the resulting Frame; encoders
+	// copy it from the input Frame.
 	PTS int64
-	// DTS is optional and currently informational.
+	// DTS is the decode timestamp. Decoders treat it as informational.
+	// Encoders set it; it equals PTS unless B-frames are enabled, in which
+	// case packets arrive in decode order and DTS may lag PTS.
 	DTS int64
-	// Keyframe is a hint only; decoders inspect the bitstream themselves.
+	// Keyframe reports whether the access unit is a random access point. For
+	// decoder input it is a hint only; decoders inspect the bitstream
+	// themselves. Encoders set it authoritatively.
 	Keyframe bool
 }
 
-// Frame is one decoded picture in CPU memory.
+// Frame is one raw picture in CPU memory.
 //
-// Planes and Strides follow Format. The memory is owned by the library and
-// must be returned with Release once the caller is done with it.
+// Planes and Strides follow Format. Frames returned by a decoder are owned
+// by the library and must be returned with Release once the caller is done
+// with them. Frames handed to an encoder are owned by the caller; the encoder
+// copies them before Send returns.
 type Frame struct {
 	Width   int
 	Height  int
@@ -105,22 +164,23 @@ type Frame struct {
 	Planes  [][]byte
 	Strides []int
 	PTS     int64
+	// ForceKeyframe asks an encoder to code this frame as a keyframe. It is
+	// an input to Encoder.Send only; decoders leave it false.
+	ForceKeyframe bool
 
 	release func()
 	native  any
 }
 
 // Release returns the frame memory to the decoder. The frame must not be
-// used afterwards. Release is idempotent.
+// used afterwards. Release is idempotent and a no-op for caller-owned frames.
 func (f *Frame) Release() {
-	if f == nil {
+	if f == nil || f.release == nil {
 		return
 	}
-	if f.release != nil {
-		r := f.release
-		f.release = nil
-		r()
-	}
+	r := f.release
+	f.release = nil
+	r()
 	f.Planes = nil
 	f.Strides = nil
 }
@@ -158,18 +218,43 @@ type Decoder interface {
 	Close() error
 }
 
+// Encoder turns Frames into Packets.
+//
+// Methods are safe to call from one goroutine at a time. The typical loop
+// mirrors the Decoder: Send a frame, then call Receive until it returns
+// ErrAgain, repeat; at end of stream call Flush and Receive until io.EOF.
+type Encoder interface {
+	// Send encodes one raw frame. The frame's Format, Width and Height must
+	// match the encoder configuration and PTS must increase from frame to
+	// frame. The pixel data is copied before Send returns, so the caller may
+	// reuse the frame memory. Send returns ErrAgain when too many packets
+	// are waiting to be received.
+	Send(ctx context.Context, f *Frame) error
+	// Receive returns the next encoded access unit in decode order. It
+	// returns ErrAgain when no packet is ready and more input is needed, and
+	// io.EOF after Flush once every packet has been returned.
+	Receive(ctx context.Context) (Packet, error)
+	// Flush makes the encoder emit every frame it is holding. It blocks
+	// until the backend has produced them. After Flush the encoder can be
+	// reused; the next frame is coded as a keyframe.
+	Flush(ctx context.Context) error
+	// Close releases backend resources. Packets already returned stay valid.
+	Close() error
+}
+
 var (
 	// ErrUnsupported is matched by errors.Is for every unsupported codec,
 	// direction, format or platform. The concrete error is *UnsupportedError.
 	ErrUnsupported = errors.New("hwmediacodec: unsupported")
-	// ErrAgain means "nothing to do right now": Receive has no frame and the
+	// ErrAgain means "nothing to do right now": Receive has no output and the
 	// caller should Send more input, or Send cannot accept input until
 	// Receive has drained output.
 	ErrAgain = errors.New("hwmediacodec: try again")
 	// ErrClosed is returned after Close.
-	ErrClosed = errors.New("hwmediacodec: decoder is closed")
-	// ErrInvalidData is returned for input that is not a usable bitstream.
-	ErrInvalidData = errors.New("hwmediacodec: invalid bitstream data")
+	ErrClosed = errors.New("hwmediacodec: closed")
+	// ErrInvalidData is returned for input that is not a usable bitstream or
+	// frame.
+	ErrInvalidData = errors.New("hwmediacodec: invalid data")
 )
 
 // UnsupportedError explains which combination is unsupported and why.
@@ -218,8 +303,55 @@ type DecoderConfig struct {
 	TimeScale int32
 }
 
+// EncoderConfig is the resolved set of encoder options handed to a backend.
+type EncoderConfig struct {
+	Codec  Codec
+	Width  int
+	Height int
+	// AllowSoftware permits a backend to use the OS software encoder when no
+	// hardware engine exists. Default false: unsupported is reported instead.
+	AllowSoftware bool
+	// InputFormat is the pixel format of frames given to Send.
+	InputFormat PixelFormat
+	// TimeScale is the number of PTS units per second.
+	TimeScale int32
+	// FrameRate is the expected frames per second, or 0 when unknown. Rate
+	// control is more accurate when it is set.
+	FrameRate float64
+	// Bitrate is the target in bits per second, or 0 for the backend default.
+	Bitrate int
+	// RateControl selects VBR (default) or CBR when Bitrate is set.
+	RateControl RateControl
+	// Quality is a constant-quality target in (0, 1], or 0 when bitrate
+	// control is used instead.
+	Quality float64
+	// KeyframeInterval is the number of frames from one keyframe to the
+	// next, or 0 for the backend default.
+	KeyframeInterval int
+	// BFrames allows the encoder to reorder frames (use B-frames).
+	BFrames bool
+	// LowLatency configures the encoder for live streaming.
+	LowLatency bool
+	// Profile selects the coding profile; ProfileDefault lets the backend
+	// choose.
+	Profile Profile
+}
+
 // DecoderOption adjusts a DecoderConfig.
-type DecoderOption func(*DecoderConfig)
+type DecoderOption interface {
+	ApplyDecoder(*DecoderConfig)
+}
+
+// EncoderOption adjusts an EncoderConfig.
+type EncoderOption interface {
+	ApplyEncoder(*EncoderConfig)
+}
+
+// Option is accepted by both NewDecoder and NewEncoder.
+type Option interface {
+	DecoderOption
+	EncoderOption
+}
 
 // Backend is implemented by each platform package.
 type Backend interface {
@@ -229,6 +361,8 @@ type Backend interface {
 	Probe(ctx context.Context) ([]Capability, error)
 	// NewDecoder returns a decoder or an error matching ErrUnsupported.
 	NewDecoder(ctx context.Context, cfg DecoderConfig) (Decoder, error)
+	// NewEncoder returns an encoder or an error matching ErrUnsupported.
+	NewEncoder(ctx context.Context, cfg EncoderConfig) (Encoder, error)
 }
 
 var (
