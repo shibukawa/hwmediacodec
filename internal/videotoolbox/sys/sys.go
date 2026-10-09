@@ -29,6 +29,8 @@ const (
 
 	PixelFormat420YpCbCr8BiPlanarVideoRange uint32 = 0x34323076 // '420v'
 	PixelFormat420YpCbCr8BiPlanarFullRange  uint32 = 0x34323066 // '420f'
+	PixelFormat32BGRA                       uint32 = 0x42475241 // 'BGRA'
+	PixelFormat32RGBA                       uint32 = 0x52474241 // 'RGBA'
 )
 
 const (
@@ -89,6 +91,8 @@ var (
 	CVPixelBufferGetHeight             func(pb uintptr) uintptr
 	CVPixelBufferGetPixelFormatType    func(pb uintptr) uint32
 	CVPixelBufferGetPlaneCount         func(pb uintptr) uintptr
+	CVPixelBufferGetBaseAddress        func(pb uintptr) *byte
+	CVPixelBufferGetBytesPerRow        func(pb uintptr) uintptr
 	CVPixelBufferGetBaseAddressOfPlane func(pb uintptr, plane uintptr) *byte
 	CVPixelBufferGetBytesPerRowOfPlane func(pb uintptr, plane uintptr) uintptr
 	CVPixelBufferGetWidthOfPlane       func(pb uintptr, plane uintptr) uintptr
@@ -222,6 +226,8 @@ func load() error {
 	cv.fn(&CVPixelBufferGetHeight, "CVPixelBufferGetHeight")
 	cv.fn(&CVPixelBufferGetPixelFormatType, "CVPixelBufferGetPixelFormatType")
 	cv.fn(&CVPixelBufferGetPlaneCount, "CVPixelBufferGetPlaneCount")
+	cv.fn(&CVPixelBufferGetBaseAddress, "CVPixelBufferGetBaseAddress")
+	cv.fn(&CVPixelBufferGetBytesPerRow, "CVPixelBufferGetBytesPerRow")
 	cv.fn(&CVPixelBufferGetBaseAddressOfPlane, "CVPixelBufferGetBaseAddressOfPlane")
 	cv.fn(&CVPixelBufferGetBytesPerRowOfPlane, "CVPixelBufferGetBytesPerRowOfPlane")
 	cv.fn(&CVPixelBufferGetWidthOfPlane, "CVPixelBufferGetWidthOfPlane")

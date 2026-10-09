@@ -43,8 +43,9 @@ var (
 // CFStringRef constants read from the frameworks. The ones marked optional
 // are 0 on macOS releases that predate them.
 var (
-	KCVPixelBufferWidthKey  uintptr
-	KCVPixelBufferHeightKey uintptr
+	KCVPixelBufferWidthKey               uintptr
+	KCVPixelBufferHeightKey              uintptr
+	KCVPixelBufferIOSurfacePropertiesKey uintptr
 
 	KVTEnableHardwareEncoder       uintptr
 	KVTRequireHardwareEncoder      uintptr
@@ -65,6 +66,15 @@ var (
 	KVTProfileH264Main     uintptr
 	KVTProfileH264High     uintptr
 	KVTProfileHEVCMain     uintptr
+
+	// Colour description written to the stream (and used for the RGB to
+	// YCbCr conversion of packed input).
+	KVTColorPrimaries      uintptr
+	KVTTransferFunction    uintptr
+	KVTYCbCrMatrix         uintptr
+	KCMColorPrimaries709   uintptr
+	KCMTransferFunction709 uintptr
+	KCMYCbCrMatrix709      uintptr
 )
 
 func bindEncode(cf, cm, cv, vt *binder) {
@@ -83,6 +93,7 @@ func bindEncode(cf, cm, cv, vt *binder) {
 	cv.fn(&CVPixelBufferPoolCreatePixelBuffer, "CVPixelBufferPoolCreatePixelBuffer")
 	cv.ptrConst(&KCVPixelBufferWidthKey, "kCVPixelBufferWidthKey")
 	cv.ptrConst(&KCVPixelBufferHeightKey, "kCVPixelBufferHeightKey")
+	cv.ptrConst(&KCVPixelBufferIOSurfacePropertiesKey, "kCVPixelBufferIOSurfacePropertiesKey")
 
 	vt.fn(&VTCompressionSessionCreate, "VTCompressionSessionCreate")
 	vt.fn(&VTCompressionSessionPrepareToEncodeFrames, "VTCompressionSessionPrepareToEncodeFrames")
@@ -110,6 +121,12 @@ func bindEncode(cf, cm, cv, vt *binder) {
 	vt.ptrConst(&KVTProfileH264Main, "kVTProfileLevel_H264_Main_AutoLevel")
 	vt.ptrConst(&KVTProfileH264High, "kVTProfileLevel_H264_High_AutoLevel")
 	vt.ptrConst(&KVTProfileHEVCMain, "kVTProfileLevel_HEVC_Main_AutoLevel")
+	vt.ptrConst(&KVTColorPrimaries, "kVTCompressionPropertyKey_ColorPrimaries")
+	vt.ptrConst(&KVTTransferFunction, "kVTCompressionPropertyKey_TransferFunction")
+	vt.ptrConst(&KVTYCbCrMatrix, "kVTCompressionPropertyKey_YCbCrMatrix")
+	cm.ptrConst(&KCMColorPrimaries709, "kCMFormatDescriptionColorPrimaries_ITU_R_709_2")
+	cm.ptrConst(&KCMTransferFunction709, "kCMFormatDescriptionTransferFunction_ITU_R_709_2")
+	cm.ptrConst(&KCMYCbCrMatrix709, "kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2")
 }
 
 // CFNumberFloat32 creates a CFNumberRef holding a float. The caller owns the

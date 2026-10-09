@@ -75,9 +75,18 @@ type encoder struct {
 	handle  uintptr
 
 	session  uintptr
-	pool     uintptr // owned by the session
+	usePool  bool    // the session's pixel buffer pool delivers usable buffers
 	keyProps uintptr // frame properties forcing a keyframe
 	duration sys.CMTime
+	// bufFormat is the format of the pixel buffers handed to VideoToolbox;
+	// swizzle is set when it differs from the input format by an R/B swap.
+	bufFormat codec.PixelFormat
+	bufVT     uint32
+	swizzle   bool
+	// bufAttrs makes directly allocated pixel buffers IOSurface-backed, as
+	// the session's pool buffers are; the encoder's pixel transfer rejects
+	// plain memory buffers.
+	bufAttrs uintptr
 
 	// frameIndex counts frames since the start or the last Flush; it drives
 	// the keyframe interval.
@@ -100,7 +109,13 @@ type encoder struct {
 }
 
 func newEncoder(cfg codec.EncoderConfig, vtCodec uint32) (*encoder, error) {
-	e := &encoder{cfg: cfg, vtCodec: vtCodec, forceNext: true}
+	e := &encoder{cfg: cfg, vtCodec: vtCodec, forceNext: true, bufFormat: cfg.InputFormat}
+	if cfg.InputFormat == codec.RGBA {
+		// The hardware encoders take BGRA (and NV12) pixel buffers; RGBA
+		// input is swapped into BGRA while it is copied into the buffer.
+		e.bufFormat, e.swizzle = codec.BGRA, true
+	}
+	e.bufVT, _ = vtPixelFormat(e.bufFormat)
 	encRegistryMu.Lock()
 	e.handle = encNextHandle
 	encNextHandle++
@@ -139,7 +154,7 @@ func (e *encoder) createSession() error {
 		key uintptr
 		val int32
 	}{
-		{sys.KCVPixelBufferPixelFormatTypeKey, int32(sys.PixelFormat420YpCbCr8BiPlanarVideoRange)},
+		{sys.KCVPixelBufferPixelFormatTypeKey, int32(e.bufVT)},
 		{sys.KCVPixelBufferWidthKey, int32(cfg.Width)},
 		{sys.KCVPixelBufferHeightKey, int32(cfg.Height)},
 	} {
@@ -168,6 +183,23 @@ func (e *encoder) createSession() error {
 	}
 	if err := e.setProperty("AllowFrameReordering", sys.KVTAllowFrameReordering, sys.CFBoolean(cfg.BFrames && !cfg.LowLatency), false); err != nil {
 		return err
+	}
+	if cfg.InputFormat != codec.NV12 {
+		// Packed RGB input is converted to YCbCr by VideoToolbox with the
+		// BT.709 matrix (measured on an M3, 2026-10-09); say so in the
+		// stream so that decoders convert back with the same matrix.
+		for _, kv := range []struct {
+			name       string
+			key, value uintptr
+		}{
+			{"ColorPrimaries", sys.KVTColorPrimaries, sys.KCMColorPrimaries709},
+			{"TransferFunction", sys.KVTTransferFunction, sys.KCMTransferFunction709},
+			{"YCbCrMatrix", sys.KVTYCbCrMatrix, sys.KCMYCbCrMatrix709},
+		} {
+			if err := e.setProperty(kv.name, kv.key, kv.value, false); err != nil {
+				return err
+			}
+		}
 	}
 	if cfg.Profile != codec.ProfileDefault {
 		level, ok := vtProfile(cfg.Codec, cfg.Profile)
@@ -220,7 +252,7 @@ func (e *encoder) createSession() error {
 	if st := sys.VTCompressionSessionPrepareToEncodeFrames(session); st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "VTCompressionSessionPrepareToEncodeFrames", Status: int64(st), Message: sys.StatusString(st)}
 	}
-	e.pool = sys.VTCompressionSessionGetPixelBufferPool(session)
+	e.usePool = true
 
 	e.keyProps = sys.NewDictionary()
 	sys.CFDictionarySetValue(e.keyProps, sys.KVTForceKeyFrame, sys.KCFBooleanTrue)
@@ -287,7 +319,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 		return err
 	}
 	defer sys.Release(pb)
-	if err := copyFrameIn(pb, f); err != nil {
+	if err := copyFrameIn(pb, f, e.bufFormat, e.swizzle); err != nil {
 		return err
 	}
 
@@ -312,6 +344,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 }
 
 func (e *encoder) checkFrame(f *codec.Frame) error {
+	n := e.cfg.InputFormat.PlaneCount()
 	switch {
 	case f == nil:
 		return fmt.Errorf("%w: nil frame", codec.ErrInvalidData)
@@ -319,16 +352,15 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 		return fmt.Errorf("%w: frame format %s, encoder expects %s", codec.ErrInvalidData, f.Format, e.cfg.InputFormat)
 	case f.Width != e.cfg.Width || f.Height != e.cfg.Height:
 		return fmt.Errorf("%w: frame size %dx%d, encoder expects %dx%d", codec.ErrInvalidData, f.Width, f.Height, e.cfg.Width, e.cfg.Height)
-	case len(f.Planes) != 2 || len(f.Strides) != 2:
-		return fmt.Errorf("%w: NV12 frame needs 2 planes and 2 strides, got %d and %d", codec.ErrInvalidData, len(f.Planes), len(f.Strides))
+	case len(f.Planes) != n || len(f.Strides) != n:
+		return fmt.Errorf("%w: %s frame needs %d planes and %d strides, got %d and %d", codec.ErrInvalidData, f.Format, n, n, len(f.Planes), len(f.Strides))
 	}
-	rows := [2]int{f.Height, (f.Height + 1) / 2}
-	rowBytes := [2]int{f.Width, (f.Width + 1) / 2 * 2}
 	for i := range f.Planes {
-		if f.Strides[i] < rowBytes[i] {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes[i])
+		rows, rowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
+		if f.Strides[i] < rowBytes {
+			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes)
 		}
-		if need := (rows[i]-1)*f.Strides[i] + rowBytes[i]; len(f.Planes[i]) < need {
+		if need := (rows-1)*f.Strides[i] + rowBytes; len(f.Planes[i]) < need {
 			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
 		}
 	}
@@ -337,60 +369,54 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 
 func (e *encoder) newPixelBuffer() (uintptr, error) {
 	var pb uintptr
-	if e.pool != 0 {
-		if st := sys.CVPixelBufferPoolCreatePixelBuffer(0, e.pool, &pb); st == 0 && pb != 0 {
-			if sys.CVPixelBufferGetPixelFormatType(pb) == sys.PixelFormat420YpCbCr8BiPlanarVideoRange &&
+	// The session owns its pool and may replace it while encoding (it does
+	// so after the first RGB frame), so the pool is looked up every time
+	// instead of being cached.
+	if pool := sys.VTCompressionSessionGetPixelBufferPool(e.session); pool != 0 && e.usePool {
+		if st := sys.CVPixelBufferPoolCreatePixelBuffer(0, pool, &pb); st == 0 && pb != 0 {
+			if isFormat(sys.CVPixelBufferGetPixelFormatType(pb), e.bufFormat) &&
 				int(sys.CVPixelBufferGetWidth(pb)) == e.cfg.Width && int(sys.CVPixelBufferGetHeight(pb)) == e.cfg.Height {
 				return pb, nil
 			}
+			// The pool makes buffers of another layout: allocate directly
+			// from now on.
 			sys.Release(pb)
 			pb = 0
+			e.usePool = false
 		}
-		// The pool did not deliver a usable buffer; allocate directly from
-		// now on.
-		e.pool = 0
+		// Otherwise the pool is exhausted (the encoder still holds its
+		// buffers); allocate this one directly and keep using the pool.
 	}
-	if st := sys.CVPixelBufferCreate(0, uintptr(e.cfg.Width), uintptr(e.cfg.Height), sys.PixelFormat420YpCbCr8BiPlanarVideoRange, 0, &pb); st != 0 || pb == 0 {
+	if e.bufAttrs == 0 {
+		e.bufAttrs = sys.NewDictionary()
+		props := sys.NewDictionary()
+		sys.CFDictionarySetValue(e.bufAttrs, sys.KCVPixelBufferIOSurfacePropertiesKey, props)
+		sys.Release(props)
+	}
+	if st := sys.CVPixelBufferCreate(0, uintptr(e.cfg.Width), uintptr(e.cfg.Height), e.bufVT, e.bufAttrs, &pb); st != 0 || pb == 0 {
 		return 0, &codec.BackendError{Backend: Name, Op: "CVPixelBufferCreate", Status: int64(st)}
 	}
 	return pb, nil
 }
 
-// copyFrameIn copies the NV12 planes of f into the pixel buffer.
-func copyFrameIn(pb uintptr, f *codec.Frame) error {
+// copyFrameIn copies the planes of f into the pixel buffer, which holds
+// bufFormat pixels; swizzle exchanges R and B on the way.
+func copyFrameIn(pb uintptr, f *codec.Frame, bufFormat codec.PixelFormat, swizzle bool) error {
 	if st := sys.CVPixelBufferLockBaseAddress(pb, 0); st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "CVPixelBufferLockBaseAddress", Status: int64(st)}
 	}
 	defer sys.CVPixelBufferUnlockBaseAddress(pb, 0)
-	if n := sys.CVPixelBufferGetPlaneCount(pb); n != 2 {
-		return &codec.BackendError{Backend: Name, Op: "copy frame", Status: int64(n), Message: "unexpected plane count"}
+	planes, ok := bufferPlanes(pb, bufFormat)
+	if !ok {
+		return &codec.BackendError{Backend: Name, Op: "copy frame", Status: int64(sys.CVPixelBufferGetPixelFormatType(pb)), Message: "unexpected pixel buffer layout from the pool"}
 	}
-	for i := 0; i < 2; i++ {
-		base := sys.CVPixelBufferGetBaseAddressOfPlane(pb, uintptr(i))
-		stride := int(sys.CVPixelBufferGetBytesPerRowOfPlane(pb, uintptr(i)))
-		rows := int(sys.CVPixelBufferGetHeightOfPlane(pb, uintptr(i)))
-		rowBytes := int(sys.CVPixelBufferGetWidthOfPlane(pb, uintptr(i)))
-		if i == 1 {
-			rowBytes *= 2
-		}
-		if base == nil || stride < rowBytes {
-			return &codec.BackendError{Backend: Name, Op: "copy frame", Message: "plane base address unavailable"}
-		}
+	for i, pl := range planes {
 		// The frame was validated against the encoder size; clamp to what
 		// the buffer actually has in case the two disagree by rounding.
-		srcRows := (f.Height + 1) / 2
-		srcRowBytes := (f.Width + 1) / 2 * 2
-		if i == 0 {
-			srcRows, srcRowBytes = f.Height, f.Width
-		}
-		rows = min(rows, srcRows)
-		rowBytes = min(rowBytes, srcRowBytes)
-		dst := unsafe.Slice(base, stride*rows)
-		src := f.Planes[i]
-		sstride := f.Strides[i]
-		for r := 0; r < rows; r++ {
-			copy(dst[r*stride:r*stride+rowBytes], src[r*sstride:r*sstride+rowBytes])
-		}
+		srcRows, srcRowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
+		rows := min(pl.rows, srcRows)
+		rowBytes := min(pl.width, srcRowBytes)
+		copyRows(pl.bytes(), pl.stride, f.Planes[i], f.Strides[i], rows, rowBytes, swizzle)
 	}
 	return nil
 }
@@ -594,10 +620,11 @@ func (e *encoder) Close() error {
 		sessionMu.Unlock()
 		sys.Release(e.session)
 		e.session = 0
-		e.pool = 0
 	}
 	sys.Release(e.keyProps)
 	e.keyProps = 0
+	sys.Release(e.bufAttrs)
+	e.bufAttrs = 0
 	sys.Release(e.cachedFD)
 	e.cachedFD = 0
 	e.outMu.Lock()
