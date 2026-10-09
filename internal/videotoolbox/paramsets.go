@@ -9,7 +9,6 @@ import (
 	"unsafe"
 
 	"github.com/shibukawa/hwmediacodec/annexb"
-	"github.com/shibukawa/hwmediacodec/internal/bitstream"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/videotoolbox/sys"
 )
@@ -33,7 +32,7 @@ func newParamSetStore(c codec.Codec) *paramSetStore {
 
 // add records a parameter-set NAL unit and reports whether anything changed.
 func (s *paramSetStore) add(nalType int, nal []byte) bool {
-	kind, id, ok := parameterSetID(s.codec, nalType, nal)
+	kind, id, ok := annexb.ParameterSetID(s.codec, nalType, nal)
 	if !ok {
 		return false
 	}
@@ -91,113 +90,4 @@ func (s *paramSetStore) formatDescription() (uintptr, int32) {
 	runtime.KeepAlive(sets)
 	s.dirty = false
 	return fd, status
-}
-
-// parameterSetID returns the kind index (0 VPS, 1 SPS, 2 PPS) and id of a
-// parameter-set NAL unit.
-func parameterSetID(c codec.Codec, nalType int, nal []byte) (kind int, id uint32, ok bool) {
-	switch c {
-	case codec.H264:
-		if len(nal) < 2 {
-			return 0, 0, false
-		}
-		r := bitstream.NewRBSP(nal[1:])
-		switch nalType {
-		case annexb.H264NALSPS:
-			if err := r.SkipBits(24); err != nil { // profile_idc, constraint flags, level_idc
-				return 0, 0, false
-			}
-			id, err := r.ReadUE()
-			if err != nil {
-				return 0, 0, false
-			}
-			return 1, id, true
-		case annexb.H264NALPPS:
-			id, err := r.ReadUE()
-			if err != nil {
-				return 0, 0, false
-			}
-			return 2, id, true
-		}
-	case codec.HEVC:
-		if len(nal) < 3 {
-			return 0, 0, false
-		}
-		r := bitstream.NewRBSP(nal[2:])
-		switch nalType {
-		case annexb.HEVCNALVPS:
-			id, err := r.ReadBits(4)
-			if err != nil {
-				return 0, 0, false
-			}
-			return 0, uint32(id), true
-		case annexb.HEVCNALSPS:
-			if err := r.SkipBits(4); err != nil { // sps_video_parameter_set_id
-				return 0, 0, false
-			}
-			maxSubLayersMinus1, err := r.ReadBits(3)
-			if err != nil {
-				return 0, 0, false
-			}
-			if err := r.SkipBits(1); err != nil { // temporal_id_nesting_flag
-				return 0, 0, false
-			}
-			if err := skipProfileTierLevel(r, int(maxSubLayersMinus1)); err != nil {
-				return 0, 0, false
-			}
-			id, err := r.ReadUE()
-			if err != nil {
-				return 0, 0, false
-			}
-			return 1, id, true
-		case annexb.HEVCNALPPS:
-			id, err := r.ReadUE()
-			if err != nil {
-				return 0, 0, false
-			}
-			return 2, id, true
-		}
-	}
-	return 0, 0, false
-}
-
-// skipProfileTierLevel skips profile_tier_level(1, maxSubLayersMinus1).
-func skipProfileTierLevel(r *bitstream.Reader, maxSubLayersMinus1 int) error {
-	// general_profile_space(2) tier(1) idc(5) compat(32) flags(48) = 88 bits,
-	// then general_level_idc(8).
-	if err := r.SkipBits(88 + 8); err != nil {
-		return err
-	}
-	profilePresent := make([]bool, maxSubLayersMinus1)
-	levelPresent := make([]bool, maxSubLayersMinus1)
-	for i := 0; i < maxSubLayersMinus1; i++ {
-		p, err := r.ReadBit()
-		if err != nil {
-			return err
-		}
-		l, err := r.ReadBit()
-		if err != nil {
-			return err
-		}
-		profilePresent[i] = p == 1
-		levelPresent[i] = l == 1
-	}
-	if maxSubLayersMinus1 > 0 {
-		if err := r.SkipBits(2 * (8 - maxSubLayersMinus1)); err != nil {
-			return err
-		}
-	}
-	for i := 0; i < maxSubLayersMinus1; i++ {
-		if profilePresent[i] {
-			if err := r.SkipBits(88); err != nil {
-				return err
-			}
-		}
-		if levelPresent[i] {
-			if err := r.SkipBits(8); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

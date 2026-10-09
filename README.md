@@ -3,10 +3,11 @@
 Hardware video decoding and encoding from Go, without cgo.
 
 The library loads the operating system's codec engines at run time
-(VideoToolbox on macOS and VA-API on Linux today; Media Foundation, Intel
-VPL and NVENC/NVDEC are planned) through
-[purego](https://github.com/ebitengine/purego), so `CGO_ENABLED=0 go build`
-works and the module cross-compiles from one machine.
+(VideoToolbox on macOS, VA-API on Linux and Media Foundation on Windows
+today; Intel VPL and NVENC/NVDEC are planned) through
+[purego](https://github.com/ebitengine/purego) on macOS and Linux and
+`golang.org/x/sys/windows` plus raw COM vtable calls on Windows, so
+`CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
 
 ## Status
 
@@ -14,9 +15,9 @@ works and the module cross-compiles from one machine.
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
-| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
+| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux | Intel VPL | planned | planned |
-| Windows | Media Foundation / NVENC | planned | planned |
+| Windows x64 / ARM64, Intel, AMD, NVIDIA | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -45,8 +46,11 @@ Known limitations:
   RGBA as a destination. Untagged streams are converted with the matrix
   VideoToolbox assumes (BT.601 for standard definition in our tests).
   RGB input is converted with BT.709 and the stream is tagged accordingly.
-  Alpha is 255 on output and ignored on input. The VA-API backend offers
-  NV12 only for now; requesting RGBA or BGRA there reports `ErrUnsupported`.
+  Alpha is 255 on output and ignored on input. The VA-API and Media
+  Foundation backends offer NV12 only for now; requesting RGBA or BGRA there
+  reports `ErrUnsupported`.
+- On Windows the display order comes from the Media Foundation decoder
+  itself, so `WithDecodeOrder` has no effect there.
 - Input and output are Annex-B, one access unit per `Packet`; use
   `annexb.Reader` to split a raw elementary stream. Containers (MP4, MKV, TS)
   are not parsed. AVCC/HVCC output is not offered yet.
@@ -77,6 +81,60 @@ Known limitations:
   requires this; Mesa generates its own otherwise), so every keyframe
   carries in-band SPS/PPS. Each picture is encoded synchronously inside
   `Send`.
+
+### Windows (Media Foundation)
+
+Decoding drives the synchronous decoder MFTs that ship with Windows
+(`Msmpeg2vdec.dll` for H.264, the "HEVC Video Extensions" package for HEVC)
+with a Direct3D 11 device attached through `IMFDXGIDeviceManager`, so the
+GPU's DXVA engine does the decoding whatever the vendor. `Probe` reports a
+decoder only when the GPU exposes the matching DXVA profile with NV12 output
+*and* a usable decoder MFT exists; `NewDecoder` fails with `ErrUnsupported`
+otherwise instead of decoding in software.
+
+Encoding drives the vendor's hardware encoder MFT (Intel Quick Sync Video,
+AMD, NVIDIA), which Media Foundation exposes as an asynchronous MFT: the
+backend unlocks it, feeds NV12 frames from system memory on
+`METransformNeedInput` and collects Annex-B access units on
+`METransformHaveOutput`. Encoder controls map to `ICodecAPI`
+(`AVEncCommonRateControlMode`, `AVEncCommonMeanBitRate`, `AVEncCommonQuality`,
+`AVEncMPVGOPSize`, `AVEncMPVDefaultBPictureCount`, `AVLowLatencyMode`,
+`AVEncVideoForceKeyFrame`) and to the output media type (`MF_MT_AVG_BITRATE`,
+`MF_MT_FRAME_RATE`, `MF_MT_MPEG2_PROFILE`). Keyframes always carry in-band
+VPS/SPS/PPS: the backend stores the parameter sets it sees in the stream or in
+`MF_MT_MPEG_SEQUENCE_HEADER` and prepends them when the encoder leaves them
+out. `Probe` reports an encoder only when the driver registers a hardware
+encoder MFT; `WithSoftwareFallback` allows the synchronous Microsoft H.264
+encoder (software) instead. When no bitrate or quality is given the backend
+asks for 0.1 bit per pixel per frame (at least 200 kbit/s); when no frame rate
+is given it declares 30 fps.
+
+- Requires Windows 10 or later, a GPU driver with DXVA support, and for
+  HEVC the free "HEVC Video Extensions from Device Manufacturer" (or the
+  paid "HEVC Video Extensions") Store package.
+- Decoded textures are copied to CPU memory through a staging texture; the
+  visible picture is cropped from the padded coded size using
+  `MF_MT_MINIMUM_DISPLAY_APERTURE`.
+- `WithSoftwareFallback` is not implemented for decoding on Windows yet.
+  Vendor asynchronous hardware *decoder* MFTs (for example the Intel VP9
+  decoder MFT) are not used; H.264 and HEVC go through the Microsoft decoders,
+  which is the common path on Intel, AMD and NVIDIA.
+- Which encoder controls work depends on the vendor MFT: a control the MFT
+  rejects (constant quality, CBR, B-frames, low latency, a profile) makes
+  `NewEncoder` return `ErrUnsupported` naming the control and the MFT.
+  B-frames request up to two consecutive B-pictures.
+- 8-bit 4:2:0 only (NV12). 10-bit HEVC (P010) is rejected. Above 1920x1088
+  the Microsoft H.264 decoder may fall back to software internally without
+  reporting it.
+- 32-bit Windows is out of scope; the backend builds only for `windows/amd64`
+  and `windows/arm64`.
+- The backend was written and cross-compiled on macOS against the Windows
+  SDK headers (GUIDs, vtable layouts and structure sizes are checked at
+  compile time) and has **not been run on Windows hardware yet**. Run
+  `go test ./...` on a Windows machine with ffmpeg and ffprobe installed to
+  verify; the conformance tests skip when `Probe` reports no hardware engine,
+  and the encoder tests for optional controls skip when the vendor MFT
+  rejects them.
 
 ## Usage
 
@@ -242,14 +300,16 @@ and header writer are checked against ffmpeg's own view of the stream
 with ffmpeg; the reorder logic is also checked without hardware, against
 the presentation timestamps ffmpeg writes into an MP4 of the same stream.
 The decode and encode conformance tests run where `Probe` reports a
-hardware engine (Apple Silicon, or Linux with a VA-API driver) and use
-`ffmpeg` and `ffprobe` as the reference. Decoded B-frame streams must match
-ffmpeg's output frame for frame in display order. RGB output and input are
-compared to ffmpeg's conversion by block-averaged PSNR (the two converters
-interpolate chroma differently) and RGBA must be the exact mirror of BGRA.
-Encoded streams are decoded by ffmpeg and compared to the source by PSNR,
-and their keyframe and B-frame structure is checked with ffprobe. All of
-them are skipped when ffmpeg is not installed.
+hardware engine (Apple Silicon, Linux with a VA-API driver, or Windows with
+a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
+streams must match ffmpeg's output frame for frame in display order. RGB
+output and input are compared to ffmpeg's conversion by block-averaged PSNR
+(the two converters interpolate chroma differently) and RGBA must be the
+exact mirror of BGRA. Encoded streams are decoded by ffmpeg and compared to
+the source by PSNR, and their keyframe and B-frame structure is checked
+with ffprobe. All of them are skipped when ffmpeg is not installed, and the
+encoder tests for optional controls skip when the hardware encoder rejects
+them.
 
 ```sh
 go test ./...

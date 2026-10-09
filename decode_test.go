@@ -227,6 +227,9 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 // the hardware produces them: the same set of frames, not in display order.
 func TestDecodeOrderOption(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.H264)
+	if runtime.GOOS == "windows" {
+		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on Windows")
+	}
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264, hwmediacodec.WithDecodeOrder())
@@ -425,10 +428,16 @@ func TestFlushResumesAtKeyframe(t *testing.T) {
 		t.Fatalf("got %d frames from a non-keyframe after flush, want 0", n)
 	}
 	// Decoding resumes at the next keyframe (the stream starts with an IDR).
+	// A backend may hold the picture until more input or a flush arrives, so
+	// drain before counting.
 	if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[0]}); err != nil {
 		t.Fatal(err)
 	}
-	if n := count(); n != 1 {
+	n := count()
+	if err := dec.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n += count(); n != 1 {
 		t.Fatalf("got %d frames from the keyframe after flush, want 1", n)
 	}
 }

@@ -1,0 +1,464 @@
+id: milestone:windows-media-foundation
+type: milestone
+title: Windows backend - H.264/HEVC decode (Media Foundation + D3D11 DXVA) and encode (vendor hardware MFTs)
+summary: Second backend, delivered in two slices on one branch (PR shibukawa/hwmediacodec#4). Decode
+  drives the synchronous Microsoft decoder MFTs (H.264 in Msmpeg2vdec.dll, HEVC from the HEVC Video
+  Extensions package) with a Direct3D 11 device attached through IMFDXGIDeviceManager, so the GPU's
+  DXVA engine decodes regardless of vendor. Encode drives the vendor's asynchronous hardware encoder
+  MFT (Intel Quick Sync, AMD, NVIDIA) through the IMFMediaEventGenerator event model with
+  system-memory NV12 input. Written and cross-compiled on macOS against the Windows SDK headers;
+  hardware verification on the author's Intel Windows machine is pending.
+lifecycle: active
+authority: authored
+aliases:
+- Windows Intel decode
+- Windows Intel encode
+- Media Foundation decoder
+- Media Foundation encoder
+- M3
+scope:
+  platform: windows
+  gpu:
+  - intel
+  - amd
+  - nvidia
+  milestone: m3
+constraints:
+- CGO_ENABLED=0; native access through golang.org/x/sys/windows (LoadLibraryEx with system32
+  search) and raw COM vtable calls via syscall.SyscallN. No cgo, no third-party COM library.
+- Hardware only. Probe reports a codec when the GPU exposes the DXVA profile with NV12 output
+  (ID3D11VideoDevice) and a synchronous decoder MFT exists; NewDecoder returns ErrUnsupported
+  otherwise. WithSoftwareFallback is not implemented on Windows.
+- Annex-B input, one access unit per Packet, passed to the MFT unchanged (MFVideoFormat_H264 /
+  MFVideoFormat_HEVC accept start codes with in-band parameter sets).
+- Output NV12 copied to Go memory through a staging texture (CopySubresourceRegion + Map); the
+  visible picture is cropped with MF_MT_MINIMUM_DISPLAY_APERTURE.
+- Encoder input is NV12 in system memory (tightly packed, MF_MT_DEFAULT_STRIDE = width); output
+  is Annex-B with VPS/SPS/PPS guaranteed in front of every keyframe (prepended from the stream or
+  MF_MT_MPEG_SEQUENCE_HEADER when the MFT omits them). Hardware encoder MFTs only; WithSoftwareFallback
+  admits the synchronous Microsoft H.264 encoder.
+- Encoder controls map to ICodecAPI before SetOutputType (rate control mode, mean bitrate, quality,
+  GOP size, B-picture count, low latency) plus MF_MT_AVG_BITRATE / MF_MT_FRAME_RATE / MF_MT_MPEG2_PROFILE
+  on the output type; AVEncVideoForceKeyFrame per forced frame. A control the MFT rejects is
+  ErrUnsupported naming the control and the MFT.
+- "windows/amd64 and windows/arm64 only (author decision 2026-10-09: 32-bit Windows is out of
+  scope). windows/386 still builds with no backend."
+non_goals:
+- Vendor asynchronous hardware decoder MFTs, AV1, 10-bit (P010), software decode fallback,
+  zero-copy texture hand-off, Direct3D texture input for the encoder.
+acceptance:
+  decode-reference-windows:
+    text: Decoding a 320x240 H.264 stream on a Windows machine with a DXVA-capable GPU yields the
+      same frame count and per-frame NV12 checksums as ffmpeg software decode, in display order.
+    scope:
+      milestone: m3
+    verified_by:
+    - decode-reference-test-windows
+  hevc-reference-windows:
+    text: Same as decode-reference-windows for HEVC (needs the HEVC Video Extensions package).
+    scope:
+      milestone: m3
+    verified_by:
+    - hevc-reference-test-windows
+  bframes-display-order:
+    text: Streams with B-frames come back in display order (Media Foundation reorders internally),
+      bit-exact against ffmpeg.
+    scope:
+      milestone: m3
+    verified_by:
+    - bframe-order-test-windows
+  parameter-set-change-windows:
+    text: A resolution change mid-stream is handled through MF_E_TRANSFORM_STREAM_CHANGE with no
+      frames lost.
+    scope:
+      milestone: m3
+    verified_by:
+    - sps-change-test-windows
+  flush-resume-windows:
+    text: Flush drains every frame (MFT_MESSAGE_COMMAND_DRAIN); the decoder restarts at the next
+      keyframe with stored parameter sets prefixed when the keyframe lacks them.
+    scope:
+      milestone: m3
+    verified_by:
+    - flush-seek-test-windows
+  probe-windows:
+    text: Probe reports backend mediafoundation decode h264 (and hevc when the extension is
+      installed) with Hardware=true on a GPU machine and nothing on a GPU-less VM; no error either
+      way.
+    scope:
+      milestone: m3
+    verified_by:
+    - probe-test-windows
+  encode-matches-source-windows:
+    text: Encoding 60 synthetic NV12 frames with a vendor hardware MFT yields one Annex-B packet per
+      frame, the first a keyframe with in-band parameter sets, PTS passthrough, luma PSNR above 30 dB
+      after ffmpeg decode, and ffprobe keyframe flags that agree with Packet.Keyframe.
+    scope:
+      milestone: m3
+    verified_by:
+    - encode-reference-test-windows
+  encode-controls-windows:
+    text: Keyframe interval and forced keyframes are honoured; B-frames, CBR, constant quality,
+      low latency and profiles work when the vendor MFT accepts them and otherwise return
+      ErrUnsupported (the tests skip in that case and report which control was refused).
+    scope:
+      milestone: m3
+    verified_by:
+    - encode-controls-test-windows
+  transcode-roundtrip-windows:
+    text: Hardware encode followed by hardware decode of the result reproduces the source above 30 dB
+      luma PSNR, frame for frame.
+    scope:
+      milestone: m3
+    verified_by:
+    - transcode-test-windows
+  cross-build-m3:
+    text: CGO_ENABLED=0 builds for windows/amd64, windows/arm64 and windows/386 (no backend) from
+      macOS; go vet passes for windows/amd64 and windows/arm64; struct layouts match the SDK at
+      compile time.
+    scope:
+      milestone: m3
+    verified_by:
+    - cross-build-check-m3
+    - layout-check-m3
+    - unit-tests-m3
+verification:
+  decode-reference-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestDecodeH264MatchesReference (decode_test.go)
+    authority: authored
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeH264MatchesReference
+      note: Needs a Windows machine with a DXVA GPU and ffmpeg; skips when Probe reports no hardware.
+  hevc-reference-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestDecodeHEVCMatchesReference (decode_test.go)
+    authority: authored
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeHEVCMatchesReference
+  bframe-order-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestDecodeBFramesMatchesReference (decode_test.go)
+    authority: authored
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeBFramesMatchesReference
+      note: Compares frame for frame in display order, which the Media Foundation decoders produce
+        natively (TestDecodeOrderOption is skipped on Windows).
+  sps-change-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestDecodeParameterSetChange (decode_test.go)
+    authority: authored
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeParameterSetChange
+  flush-seek-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestFlushResumesAtKeyframe (decode_test.go)
+    authority: authored
+    evidence:
+      path: decode_test.go
+      locator: TestFlushResumesAtKeyframe
+  encode-reference-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestEncodeMatchesSource (encode_test.go)
+    authority: authored
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeMatchesSource
+  encode-controls-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestEncodeKeyframeInterval, TestEncodeForceKeyframe, TestEncodeBFrames, TestEncodeBitrateControl,
+      TestEncodeQuality, TestEncodeLowLatency, TestEncodeProfiles, TestEncodeFlushAndReuse,
+      TestEncodeInvalidInput (encode_test.go)
+    authority: authored
+    evidence:
+      path: encode_test.go
+      locator: newTestEncoder
+      note: Optional controls skip with the ErrUnsupported reason so a run documents the driver's
+        capabilities.
+  transcode-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestTranscodeRoundTrip (encode_test.go)
+    authority: authored
+    evidence:
+      path: encode_test.go
+      locator: TestTranscodeRoundTrip
+  probe-test-windows:
+    state: not_run
+    method: integration
+    scope:
+      milestone: m3
+      platform: windows
+    test: TestProbe on windows
+    authority: authored
+    evidence:
+      path: probe_test.go
+      locator: TestProbe
+  cross-build-check-m3:
+    state: passed
+    method: static
+    scope:
+      milestone: m3
+    test: CGO_ENABLED=0 GOOS=windows GOARCH={amd64,arm64,386} go build ./... ; GOOS=windows GOARCH={amd64,arm64} go vet ./... ; scripts/crossbuild.sh
+    authority: observed
+    evidence:
+      path: scripts/crossbuild.sh
+      note: Run on macOS (go1.27.0 darwin/arm64) on 2026-10-09; all targets ok, vet clean.
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: backends_windows.go
+      input_hash: 9cd5cccd9b59e8f032c7bb5c2d4631fa0ae8787f5d2415454cfb12850c83acd6
+    - path: backends_other.go
+      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+    - &mf_backend
+      path: internal/mediafoundation/backend.go
+      input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
+    - &mf_decoder
+      path: internal/mediafoundation/decoder.go
+      input_hash: ae11d17155be5a1f185161117e7506cc31bfef03792b6875b8427cbb7c066f24
+    - &mf_sys
+      path: internal/mediafoundation/sys/sys.go
+      input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
+    - &mf_com
+      path: internal/mediafoundation/sys/com.go
+      input_hash: 843756643e6b4ca274a15616f27aedb8bc5cb6370876f2acea6ca791315b0288
+    - &mf_d3d11
+      path: internal/mediafoundation/sys/d3d11.go
+      input_hash: 8fa889aa62aa62e4a9e31790bac54ea00cf2ac6856a6d66cecaef6f9df837e66
+    - &mf_guid
+      path: internal/mediafoundation/sys/guid.go
+      input_hash: c6606cfef15d5c23f546718cd90087f1ab926cde25bd57e61291b642f9d70fef
+    - path: internal/mediafoundation/sys/mftenumex_amd64.go
+      input_hash: a9b71b9f4c2e17761de291f630e221f84ab13965b627be1a4b1f03b80aaff5be
+    - path: internal/mediafoundation/sys/mftenumex_arm64.go
+      input_hash: 17adee94e73aa9bfa32381632547621fcf4d87185ab988689589451d4654332e
+    - &mf_encoder
+      path: internal/mediafoundation/encoder.go
+      input_hash: 8d27e0c9005148538185c0c06c8f3c0b062f3697131831cbda5760a4e2e2ded4
+    - &mf_sys_encode
+      path: internal/mediafoundation/sys/encode.go
+      input_hash: 202b5cd3a676d70ae5f6b7893623cc31b83e91866bb612784d02903d017122af
+  layout-check-m3:
+    state: passed
+    method: static
+    scope:
+      milestone: m3
+    test: Compile-time array-length assertions in internal/mediafoundation/sys/sys.go compare
+      unsafe.Sizeof of MFT_OUTPUT_DATA_BUFFER, MFT_*_STREAM_INFO, MFT_REGISTER_TYPE_INFO,
+      MFVideoArea, D3D11_TEXTURE2D_DESC, D3D11_MAPPED_SUBRESOURCE, D3D11_VIDEO_DECODER_DESC and
+      VARIANT with the sizes derived from the mingw-w64 14.0 SDK headers; GUIDs, vtable orders,
+      HRESULT codes and enum values (including the Codec API) were extracted from the same headers.
+    authority: observed
+    evidence:
+      path: internal/mediafoundation/sys/sys.go
+      locator: Compile-time layout checks
+    basis:
+    - *mf_sys
+    - *mf_com
+    - *mf_d3d11
+    - *mf_guid
+    - *mf_sys_encode
+  unit-tests-m3:
+    state: passed
+    method: unit
+    scope:
+      milestone: m3
+    test: go test ./internal/mediafoundation/ ./annexb/ (platform-independent parts)
+    authority: observed
+    evidence:
+      path: internal/mediafoundation/frame_test.go
+      note: NV12 crop/copy with padded coded height, MFVideoArea decoding, 100 ns timestamp round
+        trips, frame-rate ratios (29.97 -> 30000/1001), parameter-set store, ParameterSetID
+        (H.264/HEVC), NV12 input packing, frame validation and keyframe parameter-set prepending pass
+        on macOS 2026-10-09.
+    basis:
+    - path: internal/mediafoundation/frame.go
+      input_hash: f494eb75c61e2bcd764602234bec37397ed8e85667710391eda82ba911b12561
+    - path: internal/mediafoundation/time.go
+      input_hash: 6cade0f2a36a7356f801482f5b83a29b8e3f3911c9d0ad01e4d3f6da36b73553
+    - path: internal/mediafoundation/paramsets.go
+      input_hash: 6935f0a81a5c8467783d3967d270524a59d626e2e84546058e1fb93d922e7df3
+    - path: annexb/paramsets.go
+      input_hash: 63834eae0dd58bd494d66b5488ba59cf89ba638bf7e3a0d03c91e3e9fc6a434a
+    - path: internal/mediafoundation/frame_test.go
+      input_hash: 14545212fb75a36d42b2f8f8293976d6482827f567b2630cc52e975886c214df
+    - path: internal/mediafoundation/paramsets_test.go
+      input_hash: 33e4afdd97a3668b4419f4460c417d4828f93a41b0a4b90c9ff2abd6fd2228e2
+    - path: internal/mediafoundation/time_test.go
+      input_hash: 41957ebf74a3f2ff62c8db67dee4a63a3c277c600f04e936ba07524012bedb53
+    - path: annexb/paramsets_test.go
+      input_hash: b95fcf8864b98cffc9d94a23a5837b6c0322608168dbf0138fc039b8f804b954
+    - path: internal/mediafoundation/encodeutil.go
+      input_hash: ba9071362ac512856b342ee66411b34801be031828a366264ecfc2dd8cc2dcd5
+    - path: internal/mediafoundation/encodeutil_test.go
+      input_hash: 24ea374200a61af9e90c6001cae4c3102390c047b7d889bc93e26c0d0282b211
+open_questions:
+  hardware-verification:
+    text: Does the implementation work on real Intel hardware? The riskiest unverified points are
+      (1) DXGI sample readback through CopySubresourceRegion/Map on decoder-bound texture arrays,
+      (2) whether the Microsoft decoders attach the input sample time to the matching output frame
+      when input timestamps are in decode order, (3) HEVC extension discovery through MFTEnumEx
+      (first without, then with MFT_ENUM_FLAG_UNTRUSTED_STOREMFT), (4) the HEVC input type without
+      MF_MT_VIDEO_PROFILE. For the encoder, (5) whether the vendor MFT accepts tightly packed
+      system-memory NV12 without a D3D manager (ffmpeg's mfenc does this), (6) whether ICodecAPI
+      settings are accepted before SetOutputType on Intel/AMD/NVIDIA MFTs, (7) whether output
+      keyframes carry SPS/PPS inline or only via MF_MT_MPEG_SEQUENCE_HEADER, (8) whether
+      MFSampleExtension_DecodeTimestamp is set without B-frames (DTS must equal PTS then).
+    state: open
+    resolution: Run go test ./... on the author's Windows Intel machine with ffmpeg; record results
+      in verification and flip the capability states.
+  async-hardware-mfts:
+    text: Should vendor asynchronous hardware decoder MFTs be supported, for codecs the Microsoft
+      decoders do not cover (VP9 on Intel) or for drivers that register their own H.264/HEVC decoders?
+    state: deferred
+    resolution: Not needed for H.264/HEVC on Intel/AMD/NVIDIA, which all go through the Microsoft
+      decoders with DXVA. The event-driven model now exists in the encoder (pump/needInput/haveOutput
+      bookkeeping) and could be lifted into the decoder. Revisit if a target machine reports only async
+      decoder candidates or when VP9/AV1 decode is requested.
+  encoder-event-wait:
+    text: Send blocks in IMFMediaEventGenerator::GetEvent while waiting for METransformNeedInput
+      (ffmpeg does the same) and Flush blocks until METransformDrainComplete; neither observes context
+      cancellation once blocked. Should the wait be bounded or moved to a polling loop?
+    state: deferred
+    resolution: Bound it or poll with MF_EVENT_FLAG_NO_WAIT if a driver is observed to stall; the
+      VideoToolbox encoder's Flush has the same limitation.
+  software-fallback-windows:
+    text: WithSoftwareFallback is accepted by the API but the Windows backend returns ErrUnsupported
+      for it. Implement the memory-buffer output path (16-row padded NV12 from the Microsoft
+      decoders) for GPU-less CI?
+    state: deferred
+    resolution: GPU-less machines are out of scope (policy:support-tiers); revisit if CI coverage of
+      the Send/Receive logic on hosted Windows runners becomes valuable.
+facts:
+  design:
+    decoder_selection: MFTEnumEx(MFT_CATEGORY_VIDEO_DECODER, SYNCMFT|ASYNCMFT|HARDWARE|LOCALMFT|SORTANDFILTER,
+      input {MFMediaType_Video, subtype}) then take the first candidate whose
+      MF_TRANSFORM_FLAGS_Attribute is synchronous and not hardware, whose MF_SA_D3D11_AWARE is TRUE
+      and that accepts MFT_MESSAGE_SET_D3D_MANAGER. Async/hardware candidates are skipped and named
+      in the error reason.
+    hardware_gate: D3D11CreateDevice(HARDWARE, VIDEO_SUPPORT|BGRA_SUPPORT) + ID3D10Multithread
+      protection; ID3D11VideoDevice::GetVideoDecoderProfile must list
+      D3D11_DECODER_PROFILE_H264_VLD_NOFGT / HEVC_VLD_MAIN and CheckVideoDecoderFormat(NV12) must be
+      TRUE. This is the only hardware signal; the Microsoft decoders can still fall back to software
+      internally above 1920x1088.
+    input: MFCreateMemoryBuffer + MFCreateSample per access unit, sample time = PTS converted to
+      100 ns (toHNS); MFSampleExtension_CleanPoint on keyframes, MFSampleExtension_Discontinuity on
+      the first sample after start/flush. ProcessInput; MF_E_NOTACCEPTING maps to ErrAgain.
+    output: ProcessOutput with MFT-provided samples (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES; a
+      system-memory sample is allocated otherwise). MF_E_TRANSFORM_STREAM_CHANGE renegotiates NV12
+      and re-reads MF_MT_FRAME_SIZE / MF_MT_MINIMUM_DISPLAY_APERTURE. MF_E_TRANSFORM_NEED_MORE_INPUT
+      maps to ErrAgain (io.EOF after Flush).
+    readback: IMFDXGIBuffer::GetResource(ID3D11Texture2D) + GetSubresourceIndex; a cached staging
+      texture (USAGE_STAGING, CPU_ACCESS_READ) receives CopySubresourceRegion; Map gives RowPitch
+      and DepthPitch; the CbCr plane starts at RowPitch * texture height; copyNV12 crops the
+      aperture. IMF2DBuffer2::Lock2DSize is the fallback for non-DXGI buffers.
+    timestamps: inflight map from 100 ns sample time to the caller's PTS gives exact round trips;
+      fromHNS rounds to nearest otherwise.
+    display_order: the Microsoft decoders reorder natively; the decoder implements codec.DisplayOrderer
+      so the public API does not wrap it in internal/reorder (milestone:display-order-rgba). Decode order
+      cannot be requested, so WithDecodeOrder has no effect on Windows. Output is NV12 only; the
+      RGBA/BGRA option of that milestone is not available on Windows yet.
+    flush: MFT_MESSAGE_COMMAND_DRAIN, drain every frame into a pending queue, then
+      NOTIFY_START_OF_STREAM before the next input, which is prefixed with stored VPS/SPS/PPS when
+      it lacks them (annexb.ParameterSetID, shared with the VideoToolbox store).
+    threading: runtime.LockOSThread + CoInitializeEx(MTA) only around enumeration/activation;
+      vtable calls are free-threaded. No dedicated COM goroutine.
+    encoder_selection: MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, SYNCMFT|ASYNCMFT|HARDWARE|SORTANDFILTER,
+      in {Video, NV12}, out {Video, subtype}); keep candidates whose MF_TRANSFORM_FLAGS_Attribute has
+      HARDWARE; with AllowSoftware and no hardware candidate, enumerate without HARDWARE for the
+      Microsoft software encoder. Candidates are tried in order until one configures.
+    encoder_setup: GetStreamIDs; if MF_TRANSFORM_ASYNC then set MF_TRANSFORM_ASYNC_UNLOCK and QI
+      IMFMediaEventGenerator; QI ICodecAPI; apply controls; SetOutputType (first type with the subtype
+      from GetOutputAvailableType or a fresh one, with FRAME_SIZE, FRAME_RATE, PAR 1:1, progressive,
+      AVG_BITRATE, MPEG2_PROFILE); SetInputType (NV12, DEFAULT_STRIDE = width); read stream infos;
+      read MF_MT_MPEG_SEQUENCE_HEADER; NOTIFY_BEGIN_STREAMING; NOTIFY_START_OF_STREAM before the first
+      frame and after every Flush.
+    encoder_io: Send waits for a METransformNeedInput credit (serving METransformHaveOutput into a
+      pending queue meanwhile, ErrAgain when 64 packets wait), packs the frame into an aligned memory
+      buffer with sample time/duration, sets AVEncVideoForceKeyFrame for forced frames, ProcessInput.
+      Receive pumps events without waiting and ProcessOutputs per HaveOutput. Flush sends
+      COMMAND_DRAIN and pumps until METransformDrainComplete. Synchronous MFTs use ProcessInput /
+      ProcessOutput-until-NEED_MORE_INPUT instead.
+    encoder_output: ConvertToContiguousBuffer; PTS from the inflight sample-time map; DTS from
+      MFSampleExtension_DecodeTimestamp when present; keyframes from NAL unit types; parameter sets
+      recorded and prepended when a keyframe lacks them.
+  files:
+  - internal/mediafoundation/sys (guid.go, sys.go, com.go, d3d11.go, encode.go, mftenumex_{amd64,arm64}.go)
+  - internal/mediafoundation (backend.go, decoder.go, encoder.go, encodeutil.go, frame.go, time.go, paramsets.go)
+  - backends_windows.go, decode_test.go, encode_test.go, decode_test.go and
+    encode_test.go (helpers shared with the macOS tests)
+  - annexb/paramsets.go (ParameterSetID moved out of the VideoToolbox backend)
+  known_risks:
+  - Everything above the compile-time checks is unverified on real hardware; see
+    open_questions.hardware-verification.
+  - The Microsoft H.264 decoder silently uses software above 1920x1088 when DXVA cannot; Probe
+    reports Hardware=true regardless.
+  - MF_TRANSFORM_FLAGS_Attribute may be absent on some activation objects; it is then treated as
+    synchronous and the MF_TRANSFORM_ASYNC attribute of the activated object is checked instead.
+  - "Encoder defaults when the caller gives none: 0.1 bit per pixel per frame (floor 200 kbit/s) and
+    30 fps, because MF_MT_AVG_BITRATE and MF_MT_FRAME_RATE are required on encoder types."
+  - Some drivers register no hardware H.264 encoder MFT at all (see the quirks of
+    backend:media-foundation); Probe then reports no encode capability and NewEncoder returns ErrUnsupported.
+  environment:
+    authored_on: macOS 27.0.1 (Apple M3), go1.27.0, mingw-w64 14.0.0 headers for SDK constants
+    date: '2026-10-09'
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:media-foundation
+- relation: tests_decision
+  to: decision:ffi-strategy
+- relation: follows
+  to: milestone:m1-darwin-h264-decode
+- relation: ranked_by
+  to: policy:support-tiers
+history:
+  started-2026-10-09:
+    summary: Author asked for Windows Intel support, decoder first ("Windows Intelの対応をお願いしたい。デコーダから").
+      Media Foundation + Direct3D 11 chosen per policy:support-tiers (primary backend for Windows
+      Intel/AMD, also covers NVIDIA decode); Intel VPL kept as an alternative.
+  authored-2026-10-09:
+    summary: Decoder implementation, unit tests and Windows conformance tests written on macOS; cross-build
+      and vet pass for windows/amd64 and windows/arm64; author excluded 32-bit Windows. Hardware
+      verification pending. Opened as PR shibukawa/hwmediacodec#4 after merging main (M2 encode).
+  encoder-authored-2026-10-09:
+    summary: Author asked for the encoder next, appended to the same PR ("次にエンコーダーもお願いします。このまま同じPRに追記で").
+      Vendor asynchronous hardware encoder MFTs driven through the event model; Codec API mapping of the
+      shared encoder controls; conformance tests mirror the macOS ones. Hardware verification pending.
