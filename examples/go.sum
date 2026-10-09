@@ -54,6 +54,10 @@ github.com/pion/webrtc/v4 v4.2.23 h1:AlVixhTtQmxrheSv6lAH0w2sH5qjM7OTos5Lt811nk0
 github.com/pion/webrtc/v4 v4.2.23/go.mod h1:vzf5RQ0uMBuXAYTK2pabZUtnZyj2t3TF88eL4xzQZvI=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=
+github.com/shibukawa/hwmediacodec v0.1.0 h1:k3jqrAixFT2Ds3IKU18h/3Yb7ZvF2M8pdbS1w2/sC/4=
+github.com/shibukawa/hwmediacodec v0.1.0/go.mod h1:8TOQiVa/pxpdVNIA6G+uuFj8RmseYPXKRlcaw2kZvdI=
+github.com/shibukawa/hwmediacodec/ebitenvideo v0.1.0 h1:Lgqwe3NqcB2Hv+cLnembOrlDKukuhxiYTRWLLvhJHuY=
+github.com/shibukawa/hwmediacodec/ebitenvideo v0.1.0/go.mod h1:fX6dIeWX07Die1VYe2kHM4K1GPLVPJt30Qk4yfCkLWI=
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef h1:Ch6Q+AZUxDBCVqdkI8FSpFyZDtCVBc2VmejdNrm5rRQ=
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef/go.mod h1:nXTWP6+gD5+LUJ8krVhhoeHjvHTutPxMYl5SvkcnJNE=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=

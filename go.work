@@ -1,0 +1,10 @@
+go 1.27.0
+
+// Local development: the three modules build against each other's working
+// tree. Consumers never see this file; the published go.mod files require
+// the released versions.
+use (
+	.
+	./ebitenvideo
+	./examples
+)

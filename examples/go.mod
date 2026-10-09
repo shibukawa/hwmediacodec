@@ -2,8 +2,6 @@ module github.com/shibukawa/hwmediacodec/examples
 
 go 1.27.0
 
-replace github.com/shibukawa/hwmediacodec => ../
-
 require (
 	github.com/Eyevinn/mp4ff v0.59.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
@@ -44,5 +42,3 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 )
-
-replace github.com/shibukawa/hwmediacodec/ebitenvideo => ../ebitenvideo
