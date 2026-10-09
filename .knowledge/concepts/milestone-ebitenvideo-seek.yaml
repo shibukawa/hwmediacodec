@@ -1,0 +1,194 @@
+id: milestone:ebitenvideo-seek
+type: milestone
+title: ebitenvideo - packet sources with timestamps, seeking and length
+summary: 'ebitenvideo gains a Source interface (access units with presentation times) and a Seeker
+  interface (keyframe seek, length), NewPlayerFromSource, Player.Seek/Length/Seekable, and an end
+  marker so a seekable player can be resumed after the end. NewPlayer keeps its signature: a raw stream
+  becomes a streamSource whose frames are timed by output order (B-frames!) and which seeks when the
+  reader is an io.ReadSeeker by scanning once for keyframe offsets, using the new annexb.Reader.Offset.
+  examples/container.VideoTrack.PacketSource implements both interfaces for MP4; the texture sample and
+  the ebitenvideo example seek with the arrow keys.'
+lifecycle: active
+authority: authored
+aliases:
+- ebitenvideo seek
+- Source interface
+- シーク対応
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: ebitenvideo-seek
+constraints:
+- 'Source{Codec(), ReadPacket() (data, pts time.Duration, error)}; Seeker{SeekKeyframe(t) (keyframe
+  time, error), Length()}; the decoder runs with WithTimeScale(1e6) so presentation times round-trip through
+  Packet.PTS / Frame.PTS in microseconds.'
+- 'Raw elementary streams are timed after decoding: frame k out of the decoder (display order) is at
+  k/fps, counting from the keyframe index a seek landed on (a keyframe''s decode-order index equals its
+  display-order index). Timing packets by decode-order index was wrong for B-frame streams (the first
+  attempt did that and frame 1 came out at 2/fps).'
+- 'Seek protocol: Player.Seek bumps a generation counter, posts a request (newest wins), resets the timeline
+  clock to the target and stops it until the first frame of the new generation arrives; the decode goroutine
+  flushes and discards, calls SeekKeyframe, then decodes and drops frames before the target (precise seek).
+  Items carry gen/loop/rebase; the player releases items of older generations. An end marker item (no
+  frame) tells the player a generation finished; with a Seeker the goroutine then waits for the next
+  seek instead of exiting, so seeking after the end resumes playback.'
+- 'annexb.Reader.Offset reports the stream offset of the three-byte start code of the last access unit
+  (one byte into a four-byte start code); the stream source scans the whole file once (annexb.Split +
+  IsKeyframe) to build index->offset pairs and Length = count/fps.'
+- 'PacketSource.Length is the presentation length (max PTS+duration minus the edit-list offset), not the
+  decode-time duration, which is one B-frame delay shorter.'
+- NewPlayer still handles H.264/HEVC Annex-B only; AV1 plays through a Source (MP4 demuxer).
+non_goals:
+- Keyframe-only (fast) seeking mode, trick play, audio, frame-accurate seeking inside open GOPs beyond
+  what dropping frames before the target gives, seeking raw AV1/IVF streams.
+acceptance:
+  source-seek-exact:
+    text: On a 90-frame H.264 B-frame stream (keyframes every 25) the first frame after a seek to 2 s is
+      frame 60 (keyframe 50 decoded from, 50..59 dropped) and matches ffmpeg's frame 60 within 30 dB block
+      PSNR; a seek between frames gives the first frame at or after the target; a seek onto a keyframe
+      gives it; a seek past the end gives only the end marker; a later seek resumes; Length is 3 s after
+      the scan.
+    scope:
+      milestone: ebitenvideo-seek
+    verified_by:
+    - source-seek-test
+  player-seek:
+    text: Player.Seek sets Position to the target at once, the clock resumes with the first frame after
+      it, Length reports 3 s, seeking past the end ends playback and seeking back resumes it, and a
+      non-seekable reader reports ErrNotSeekable and Length 0.
+    scope:
+      milestone: ebitenvideo-seek
+    verified_by:
+    - player-seek-test
+  timeline-reset:
+    text: After reset the clock sits at the target and does not run until a frame of the new generation
+      arrives; frames then show relative to the target.
+    scope:
+      milestone: ebitenvideo-seek
+    verified_by:
+    - timeline-unit-test
+  packet-source:
+    text: PacketSource delivers every sample with presentation times starting at 0, Length 2 s for a
+      60-frame 30 fps track, and SeekKeyframe lands on the sync sample at or before the target (1.5 s ->
+      1.333 s sample 40; past the end -> the last keyframe) with that sample read next.
+    scope:
+      milestone: ebitenvideo-seek
+    verified_by:
+    - packet-source-test
+  annexb-offset:
+    text: Offset points at the start code of the returned access unit and re-reading from it yields the
+      same access unit, also through a one-byte-at-a-time reader.
+    scope:
+      milestone: ebitenvideo-seek
+    verified_by:
+    - annexb-offset-test
+verification:
+  source-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestSourceSeek, TestSourceDeliversDisplayOrderRGBA
+    evidence:
+      path: ebitenvideo/seek_darwin_test.go
+      locator: TestSourceSeek
+      note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
+    basis:
+    - path: ebitenvideo/source.go
+      input_hash: af2f4210c3ce6a0db66705443743cd433efc235d70f5d8e3177bb8042978662e
+    - path: ebitenvideo/seek_darwin_test.go
+      input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
+    - path: annexb/annexb.go
+      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+  player-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerSeek, TestPlayerPlaysAndLoops
+    evidence:
+      path: ebitenvideo/seek_darwin_test.go
+      locator: TestPlayerSeek
+      note: run 2026-10-09
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 463b467fdfae414006e177f829f06ee61993d1a06d36a1a198ab00a340fdeb5f
+    - path: ebitenvideo/timeline.go
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
+    - path: ebitenvideo/seek_darwin_test.go
+      input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
+  timeline-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+    test: TestTimelineSeekResetsClock and the existing timeline tests (now pts based)
+    evidence:
+      path: ebitenvideo/timeline_test.go
+      locator: TestTimelineSeekResetsClock
+    basis:
+    - path: ebitenvideo/timeline.go
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
+    - path: ebitenvideo/timeline_test.go
+      input_hash: e1025e38e3f856dcb4f2e1da62101594729047cefb45ca28e85ea580de1ff3c8
+  packet-source-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+    test: TestPacketSource
+    evidence:
+      path: examples/container/packetsource_test.go
+      locator: TestPacketSource
+      note: no hardware; ffmpeg-made MP4; run 2026-10-09
+    basis:
+    - path: examples/container/packetsource.go
+      input_hash: cd830475ef2cbfcee21e4461c0cddfed7e2fd229c5161a44c794cbc5baebbe5d
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: examples/container/packetsource_test.go
+      input_hash: 1e58c3bf19a740c5738b7492ae83f7cee304a62caf691534ec897866ead60442
+  annexb-offset-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+    test: TestReaderOffset
+    evidence:
+      path: annexb/annexb_test.go
+      locator: TestReaderOffset
+    basis:
+    - path: annexb/annexb.go
+      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+    - path: annexb/annexb_test.go
+      input_hash: d759de2aa0f82d53ce154f230e8c3e1d8a8279407e127012f9029307c7044951
+facts:
+  api:
+    ebitenvideo: 'Source, Seeker, ErrNotSeekable, NewPlayerFromSource(src, opts...), Player.Seek(t) error,
+      Player.Length(), Player.Seekable(); NewPlayer unchanged (seeks when r is an io.ReadSeeker)'
+    container: 'VideoTrack.PacketSource() *PacketSource{Codec, ReadPacket, SeekKeyframe, Length}; Track.PresentationLength()'
+    annexb: 'Reader.Offset() int64'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: Requested by the author right after the usage-sample PR (#10) was opened; added to the same
+      branch.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:examples-heif-avif
+- relation: depends_on
+  to: milestone:display-order-rgba

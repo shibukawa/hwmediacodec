@@ -17,6 +17,7 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/ivf"
 )
 
 // requireHardware skips the test unless Probe reports a hardware engine for
@@ -116,14 +117,80 @@ type decodedFrame struct {
 	pts           int64
 }
 
-// decodeFrames feeds every access unit of an Annex-B stream, checks that
-// the frames come back in format f with tight strides, and returns copies
-// in output order.
+// splitStream splits an elementary stream into the packets a decoder
+// consumes: Annex-B access units for H.264 and HEVC, IVF frames (temporal
+// units) for AV1.
+func splitStream(t *testing.T, c hwmediacodec.Codec, stream []byte) [][]byte {
+	t.Helper()
+	var out [][]byte
+	if c == hwmediacodec.AV1 {
+		r, err := ivf.NewReader(bytes.NewReader(stream))
+		if err != nil {
+			t.Fatalf("ivf: %v", err)
+		}
+		for {
+			tu, _, err := r.Next()
+			if err == io.EOF {
+				return out
+			}
+			if err != nil {
+				t.Fatalf("ivf: %v", err)
+			}
+			out = append(out, tu)
+		}
+	}
+	r := annexb.NewReader(bytes.NewReader(stream), c)
+	for {
+		au, err := r.Next()
+		if err == io.EOF {
+			return out
+		}
+		if err != nil {
+			t.Fatalf("annexb: %v", err)
+		}
+		out = append(out, au)
+	}
+}
+
+// concatStreams joins two elementary streams of the same codec into one:
+// by appending for Annex-B, by rewriting the frames of both IVF files into
+// one IVF file for AV1.
+func concatStreams(t *testing.T, c hwmediacodec.Codec, a, b []byte) []byte {
+	t.Helper()
+	if c != hwmediacodec.AV1 {
+		return append(append([]byte(nil), a...), b...)
+	}
+	var buf bytes.Buffer
+	w := ivf.NewWriter(&buf, "AV01", 0, 0, 1, 30)
+	var pts uint64
+	for _, s := range [][]byte{a, b} {
+		for _, tu := range splitStream(t, c, s) {
+			if err := w.WriteFrame(tu, pts); err != nil {
+				t.Fatal(err)
+			}
+			pts++
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// decodeFrames feeds every packet of an elementary stream (see splitStream),
+// checks that the frames come back in format f with tight strides, and
+// returns copies in output order.
 func decodeFrames(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, stream []byte, format hwmediacodec.PixelFormat) []decodedFrame {
+	t.Helper()
+	return decodePackets(t, dec, splitStream(t, c, stream), format)
+}
+
+// decodePackets is decodeFrames for packets already split. Packet i is sent
+// with PTS 3000*i.
+func decodePackets(t *testing.T, dec hwmediacodec.Decoder, packets [][]byte, format hwmediacodec.PixelFormat) []decodedFrame {
 	t.Helper()
 	var out []decodedFrame
 	ctx := context.Background()
-	r := annexb.NewReader(bytes.NewReader(stream), c)
 	var pts int64
 	drain := func(final bool) {
 		for {
@@ -155,15 +222,8 @@ func decodeFrames(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, 
 			f.Release()
 		}
 	}
-	for {
-		au, err := r.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("annexb: %v", err)
-		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
+	for _, p := range packets {
+		if err := dec.Send(ctx, hwmediacodec.Packet{Data: p, PTS: pts}); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 		pts += 3000
@@ -284,7 +344,7 @@ func TestDecodeOrderOption(t *testing.T) {
 // channels 4 dB). RGBA and BGRA must be exact mirrors of each other.
 func TestDecodeRGBA(t *testing.T) {
 	const minPSNR = 30.0
-	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC, hwmediacodec.AV1} {
 		if !hasHardware(t, c, hwmediacodec.Decode) {
 			continue
 		}
@@ -354,15 +414,18 @@ func TestDecodeHEVCMatchesReference(t *testing.T) {
 	compareChecksums(t, got, want)
 }
 
+// TestDecodeParameterSetChange decodes two streams of different sizes
+// joined into one: the parameter sets (or AV1 sequence header) change in
+// the middle and the decoder has to start a new session.
 func TestDecodeParameterSetChange(t *testing.T) {
-	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC, hwmediacodec.AV1} {
 		t.Run(c.String(), func(t *testing.T) {
 			requireHardwareDecode(t, c)
 			s1 := testutil.GenerateStream(t, c, 320, 240, 30)
 			s2 := testutil.GenerateStream(t, c, 160, 120, 30)
 			want := append(testutil.ReferenceNV12(t, s1.Path, s1.Codec, s1.Width, s1.Height),
 				testutil.ReferenceNV12(t, s2.Path, s2.Codec, s2.Width, s2.Height)...)
-			stream := append(testutil.ReadFile(t, s1.Path), testutil.ReadFile(t, s2.Path)...)
+			stream := concatStreams(t, c, testutil.ReadFile(t, s1.Path), testutil.ReadFile(t, s2.Path))
 
 			dec, err := hwmediacodec.NewDecoder(context.Background(), c)
 			if err != nil {
@@ -388,23 +451,11 @@ func TestDecodeParameterSetChange(t *testing.T) {
 }
 
 func TestFlushResumesAtKeyframe(t *testing.T) {
-	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC, hwmediacodec.AV1} {
 		t.Run(c.String(), func(t *testing.T) {
 			requireHardwareDecode(t, c)
 			s := testutil.GenerateStream(t, c, 160, 120, 20)
-			data := testutil.ReadFile(t, s.Path)
-			r := annexb.NewReader(bytes.NewReader(data), c)
-			var aus [][]byte
-			for {
-				au, err := r.Next()
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				aus = append(aus, au)
-			}
+			aus := splitStream(t, c, testutil.ReadFile(t, s.Path))
 			if len(aus) != 20 {
 				t.Fatalf("got %d access units, want 20", len(aus))
 			}

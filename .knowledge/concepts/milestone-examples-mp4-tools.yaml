@@ -1,0 +1,231 @@
+id: milestone:examples-mp4-tools
+type: milestone
+title: Examples module - MP4 container bridge, file converter and keyframe thumbnails
+summary: 'First slice of the usage samples: a third Go module (examples/, own go.mod, replace ../)
+  with a small MP4 demuxer/muxer on top of mp4ff (examples/container), a video file converter that
+  re-encodes the video track with the hardware codecs while keeping sample timestamps and copying
+  audio (examples/convert), and a keyframe thumbnail extractor that decodes sync samples only
+  (examples/thumbnails). The container package is the shared piece the later samples (recording,
+  HLS, texture playback, WebRTC) build on.'
+lifecycle: active
+authority: authored
+aliases:
+- examples module
+- MP4 converter sample
+- サムネイル抽出
+- 動画ファイルコンバーター
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-mp4-tools
+constraints:
+- The core module stays free of container code and of new dependencies; container handling lives
+  in the examples module, which depends on github.com/Eyevinn/mp4ff (pure Go). Inside the repository
+  examples/go.mod uses replace ../ like ebitenvideo.
+- 'Timestamps pass through unchanged. Both decoder and encoder are opened with WithTimeScale(track
+  time scale), so frame PTS are MP4 sample times and encoder packets carry PTS/DTS in the same unit;
+  the muxer stores them as given, apart from a constant DTS shift.'
+- VideoToolbox with B-frames numbers decode times from the first PTS, so reordered pictures carry
+  DTS > PTS (observed - the first P has pts 2048 / dts 512, a pyramid B has pts 512 / dts 1536 at
+  15360 Hz). MP4 requires DTS <= PTS, so the muxer shifts every DTS back by the largest lag and
+  writes an edit list (elst media_time = first presentation time) that hides the start delay; ffprobe
+  then reports presentation times identical to the source.
+- Demuxed access units are Annex-B with the parameter sets from avcC/hvcC prepended to every sync
+  sample, so decoding can start at any keyframe; the muxer learns VPS/SPS/PPS from the packets and
+  strips them from the samples (avc1/hvc1 sample entries).
+- Track.MediaTimeOffset exposes the edit-list offset; thumbnails are named with presentation time
+  (PTS minus that offset), and KeyframeAtOrBefore works in presentation time.
+- 'Thumbnails decode with WithDecodeOrder() and WithOutputFormat(RGBA): a sequence of keyframes has
+  decode order equal to display order, so each picture comes out immediately instead of waiting in
+  the reorder buffer, and the plane maps onto image.RGBA without copying.'
+non_goals:
+- Fragmented MP4 input, MKV, MPEG-TS; faststart (moov first) output; AV1 muxing (no encoder exists
+  on Apple Silicon). Demuxing av01 tracks is wired (temporal units passed through) but untested
+  until the AV1 decoder lands.
+- Audio transcoding (other tracks are copied); subtitle handling beyond passthrough.
+- Contact sheets or scene detection in the thumbnail tool.
+acceptance:
+  demux-matches-ffprobe:
+    text: For H.264 (B-frames) and HEVC (hvc1 and hev1) files written by ffmpeg, the demuxer reports
+      the same sample count, the same normalised presentation-time sequence and the same number of
+      keyframes as ffprobe, and the Annex-B access units it emits decode with ffmpeg to the same
+      per-frame MD5s as the MP4 itself.
+    scope:
+      milestone: examples-mp4-tools
+    verified_by:
+    - container-demux-test
+  mux-round-trip:
+    text: Remuxing the demuxed access units plus the audio track yields a file that ffmpeg decodes
+      without errors, with the same codecs, packet counts, size, has_b_frames, hvc1 tag, per-frame
+      MD5s, presentation times and duration (within 50 ms) as the source.
+    scope:
+      milestone: examples-mp4-tools
+    verified_by:
+    - container-mux-test
+  convert-end-to-end:
+    text: convert produces an MP4 whose video has the target codec, the source frame count and size,
+      PSNR >= 30 dB against the source, B-frames when requested, identical presentation times as
+      reported by ffprobe, and the audio track copied with the same codec and packet count.
+    scope:
+      milestone: examples-mp4-tools
+    verified_by:
+    - convert-test
+    - convert-1080p-run
+  thumbnails-end-to-end:
+    text: With -all the tool writes one image per keyframe named by presentation time, each within
+      30 dB (8x8 block PSNR) of ffmpeg's decode of the same frame; -every picks the keyframe at or
+      before each instant; -width scales with the aspect ratio kept.
+    scope:
+      milestone: examples-mp4-tools
+    verified_by:
+    - thumbnails-test
+verification:
+  container-demux-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+    test: TestDemuxMatchesFFprobe
+    evidence:
+      path: examples/container/container_test.go
+      locator: TestDemuxMatchesFFprobe
+      note: no hardware needed; ffmpeg 9.0.1 generated the inputs (libx264 bf=2 with AAC, libx265
+        bf=2 hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
+    basis:
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: examples/container/container_test.go
+      input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
+    - path: examples/internal/testutil/ffmpeg.go
+      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+  container-mux-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+    test: TestMuxRoundTrip
+    evidence:
+      path: examples/container/container_test.go
+      locator: TestMuxRoundTrip
+      note: no hardware needed; H.264 bf=2 with audio, H.264 bf=0, HEVC bf=2 with audio; run 2026-10-09
+    basis:
+    - path: examples/container/mux.go
+      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: examples/container/container_test.go
+      input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
+    - path: examples/internal/testutil/ffmpeg.go
+      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+  convert-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestConvert
+    evidence:
+      path: examples/convert/main_test.go
+      locator: TestConvert
+      note: Apple M3, macOS 26; 320x240 H.264 bf=2 + AAC -> HEVC 2 Mbit/s gop 30, and HEVC -> H.264
+        quality 0.7 with B-frames; run 2026-10-09
+    basis:
+    - path: examples/convert/main.go
+      input_hash: f79da7e01c24086010077ad007aff7e4374a3a21a7ebc1b12070bb2b9713d8eb
+    - path: examples/container/mux.go
+      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: examples/convert/main_test.go
+      input_hash: 34dae9b24042d17cba767160d35509b49598d7bd0471c9a6a59e808efa110ed5
+  convert-1080p-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: convert -codec hevc -bitrate 8M -bframes on a 300-frame 1080p30 libx264 bf=2 file with AAC
+    evidence:
+      path: examples/convert/main.go
+      locator: run
+      note: 2026-10-09 on an M3 - 162 fps end to end, output hevc 1920x1080 300 frames has_b_frames 2
+        duration 10.000 s, AAC 469 packets copied, ffmpeg decodes without errors, PSNR 47.1 dB
+    basis:
+    - path: examples/convert/main.go
+      input_hash: f79da7e01c24086010077ad007aff7e4374a3a21a7ebc1b12070bb2b9713d8eb
+  thumbnails-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestThumbnails
+    evidence:
+      path: examples/thumbnails/main_test.go
+      locator: TestThumbnails
+      note: 160x120 H.264 bf=2 gop 30, 90 frames - three keyframes at 0/1/2 s; names, sizes, block
+        PSNR vs ffmpeg's frames, -every 1.5s gives two files, -width 80 gives 80x60; run 2026-10-09
+    basis:
+    - path: examples/thumbnails/main.go
+      input_hash: 742e2eae037726cc681d2312be09fd74236e9d43cb09487c293171b1c2226f38
+    - path: examples/thumbnails/resize.go
+      input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: examples/thumbnails/main_test.go
+      input_hash: fbd8f7d81db4f64c032c49929e7732d5eda3e55f97fe9503991af92b2849a6d0
+open_questions:
+  encoder-dts-semantics:
+    text: Should the VideoToolbox encoder (and the Encoder contract in general) guarantee DTS <= PTS
+      by shifting decode times itself, instead of leaving it to the muxer? ffmpeg's videotoolbox
+      encoder does such a shift.
+    state: open
+    resolution: Left in the muxer for now because the shift needs the whole stream's largest lag (or
+      the encoder's reorder depth) and the current packets are still internally consistent; revisit
+      if a second consumer of DTS appears (fMP4/HLS segmenter in the next slice).
+facts:
+  api:
+    container: Open/NewDemuxer -> Demuxer{Video() *VideoTrack, Others() []*Track, Duration()};
+      Track{ID, Handler, TimeScale, MediaTimeOffset, SampleCount, Sample(i), Info(i), TimeOf,
+      PresentationTime}; VideoTrack{Codec, Width, Height, FrameRate, Keyframes, KeyframeAtOrBefore,
+      AccessUnit(i), Packet(i)}; Create/NewMuxer -> Muxer{AddVideoTrack(codec, timeScale) *VideoWriter,
+      AddPassthroughTrack(*Track) *TrackWriter, Close}; VideoWriter.WritePacket(hwmediacodec.Packet);
+      TrackWriter.WriteSample(Sample)
+    convert: 'flags -codec h264|hevc -bitrate 6M|2500k -cbr -quality -gop -bframes -profile -software -q'
+    thumbnails: 'flags -every 10s -all -width -format jpg|png -quality -o -software'
+  implementation:
+    demux: mp4.DecodeFile with DecModeLazyMdat; sample offsets expanded from stsc/stco/co64, times
+      from stts/ctts, sync from stss; Mdat.ReadData per sample
+    mux: ftyp + 64-bit-size mdat written up front and patched at Close, moov last; stbl built from
+      mp4ff box structs (stts/ctts/stss/stsc/stsz/stco|co64); passthrough tracks reuse the source
+      stsd, hdlr, media header, language and edit list
+    testutil: examples/internal/testutil drives ffmpeg/ffprobe (GenerateMP4, Streams, Frames as JSON,
+      FrameMD5, PSNR, ExtractFrame, CheckDecodes)
+  result:
+    status: delivered 2026-10-09
+    performance: 1080p H.264 (bf=2) -> HEVC 8 Mbit/s with B-frames at 162 fps on an M3 including demux,
+      mux and audio copy
+history:
+  accepted-2026-10-09:
+    summary: Author asked for usage samples (file converter, keyframe thumbnails, HEIC/HEIF and AVIF
+      conversion, Ebitengine playback, playback as a texture, screen recording with HLS/WebRTC viewing)
+      and agreed to the proposed order - converter and thumbnails first, then recording and HLS, texture
+      playback, WebRTC, HEIF/AVIF last.
+  delivered-2026-10-09:
+    summary: Examples module with the container bridge, convert and thumbnails; container tests pass with
+      ffmpeg alone, convert and thumbnails tests and a 1080p run pass on the author's M3.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:display-order-rgba

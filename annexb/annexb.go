@@ -183,6 +183,11 @@ type Reader struct {
 	au     []byte
 	hasVCL bool
 	done   bool
+
+	base    int64 // stream offset of buf[0]
+	nalOff  int64 // stream offset of the start code of the NAL unit nextNAL returned last
+	auOff   int64 // stream offset of the first NAL unit of the access unit being assembled
+	lastOff int64 // stream offset of the access unit Next returned last
 }
 
 const readChunk = 64 << 10
@@ -212,6 +217,7 @@ func (r *Reader) Next() ([]byte, error) {
 			r.done = true
 			if len(r.au) > 0 {
 				au := r.au
+				r.lastOff = r.auOff
 				r.au = nil
 				return au, nil
 			}
@@ -223,6 +229,7 @@ func (r *Reader) Next() ([]byte, error) {
 		}
 		if r.hasVCL && beginsAccessUnit(r.codec, t, nal) {
 			au := r.au
+			r.lastOff = r.auOff
 			r.au = nil
 			r.hasVCL = false
 			r.appendNAL(nal)
@@ -236,7 +243,18 @@ func (r *Reader) Next() ([]byte, error) {
 	}
 }
 
+// Offset returns the byte offset in the underlying stream at which the
+// access unit most recently returned by Next begins: the position of the
+// three-byte start code of its first NAL unit (one byte into a four-byte
+// start code). Seeking an io.ReadSeeker there and starting a new Reader
+// yields that access unit again, which is how a player builds a keyframe
+// index for seeking.
+func (r *Reader) Offset() int64 { return r.lastOff }
+
 func (r *Reader) appendNAL(nal []byte) {
+	if len(r.au) == 0 {
+		r.auOff = r.nalOff
+	}
 	r.au = append(r.au, 0, 0, 0, 1)
 	r.au = append(r.au, nal...)
 }
@@ -262,6 +280,7 @@ func (r *Reader) nextNAL() ([]byte, error) {
 			continue
 		}
 		start := r.off + i + 3
+		r.nalOff = r.base + int64(r.off+i)
 		j := bytes.Index(r.buf[start:], startCode)
 		if j < 0 {
 			if !r.eof {
@@ -290,6 +309,7 @@ func (r *Reader) fill() error {
 	if r.off > 0 && r.off >= len(r.buf)/2 {
 		n := copy(r.buf, r.buf[r.off:])
 		r.buf = r.buf[:n]
+		r.base += int64(r.off)
 		r.off = 0
 	}
 	if cap(r.buf)-len(r.buf) < readChunk {

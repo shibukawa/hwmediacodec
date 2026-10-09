@@ -188,9 +188,12 @@ type Capability struct {
 // Packet is one compressed access unit (one picture). Decoders consume
 // Packets and encoders produce them.
 //
-// Data holds a complete access unit in Annex-B byte-stream form (start
-// codes). Parameter sets (SPS/PPS/VPS) may be included in-band; encoders put
-// them in front of every keyframe.
+// For H.264 and HEVC, Data holds a complete access unit in Annex-B
+// byte-stream form (start codes). Parameter sets (SPS/PPS/VPS) may be
+// included in-band; encoders put them in front of every keyframe. For AV1,
+// Data holds one temporal unit in the low-overhead OBU format (the content
+// of an IVF frame or an ISOBMFF sample), with or without temporal delimiter
+// OBUs; the sequence header travels in-band the same way.
 type Packet struct {
 	Data []byte
 	// PTS is the presentation timestamp in TimeScale units (see the

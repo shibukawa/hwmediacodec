@@ -37,7 +37,11 @@ func TestSourceDeliversDisplayOrderRGBA(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	src, err := newSource(f, hwmediacodec.H264, 2, false, false)
+	ss, err := newStreamSource(f, hwmediacodec.H264, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := newSource(&seekableStream{ss}, 2, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,8 +51,8 @@ func TestSourceDeliversDisplayOrderRGBA(t *testing.T) {
 	for len(got) < len(want) {
 		it, ok := src.next()
 		if !ok {
-			if src.ended() {
-				t.Fatalf("stream ended after %d frames, want %d (err %v)", len(got), len(want), src.Err())
+			if err := src.Err(); err != nil {
+				t.Fatal(err)
 			}
 			if time.Now().After(deadline) {
 				t.Fatalf("timed out after %d frames", len(got))
@@ -56,8 +60,11 @@ func TestSourceDeliversDisplayOrderRGBA(t *testing.T) {
 			time.Sleep(time.Millisecond)
 			continue
 		}
-		if it.index != len(got) || it.loop != 0 {
-			t.Fatalf("frame %d came as index %d loop %d", len(got), it.index, it.loop)
+		if it.end {
+			t.Fatalf("stream ended after %d frames, want %d", len(got), len(want))
+		}
+		if want := ss.frameTime(len(got)); it.pts != want || it.loop != 0 {
+			t.Fatalf("frame %d came at %v loop %d, want %v", len(got), it.pts, it.loop, want)
 		}
 		if it.frame.Format != hwmediacodec.RGBA || it.frame.Strides[0] != s.Width*4 {
 			t.Fatalf("frame %d: format %s stride %d", len(got), it.frame.Format, it.frame.Strides[0])
@@ -70,12 +77,16 @@ func TestSourceDeliversDisplayOrderRGBA(t *testing.T) {
 			t.Fatalf("frame %d: block PSNR %.2f dB against ffmpeg", i, psnr)
 		}
 	}
-	for {
-		if _, ok := src.next(); !ok {
-			break
+	ended := false
+	for time.Now().Before(deadline) && !ended {
+		it, ok := src.next()
+		if !ok {
+			time.Sleep(time.Millisecond)
+			continue
 		}
+		ended = it.end
 	}
-	if !src.ended() {
+	if !ended {
 		t.Error("source did not report the end of the stream")
 	}
 	if err := src.Err(); err != nil {

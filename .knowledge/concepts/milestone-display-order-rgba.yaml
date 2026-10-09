@@ -119,13 +119,13 @@ verification:
     - path: internal/hevc/hevc.go
       input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - path: decode_test.go
-      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   reorder-oracle-test:
     state: passed
     method: integration
@@ -153,7 +153,7 @@ verification:
     - path: internal/reorder/reorder_test.go
       input_hash: c602035448064880985b37d6b9ef936f7c09712500ebea643f1129baaeb3fe87
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   reorder-buffer-unit-test:
     state: passed
     method: unit
@@ -205,9 +205,9 @@ verification:
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - path: decode_test.go
-      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
   rgba-decode-test:
     state: passed
     method: integration
@@ -225,17 +225,17 @@ verification:
         channels 4 dB; alpha 255; RGBA == mirror(BGRA)
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/codec/codec.go
-      input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
+      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: decode_test.go
-      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   rgb-encode-test:
     state: passed
     method: integration
@@ -260,7 +260,7 @@ verification:
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   timeline-unit-test:
     state: passed
     method: unit
@@ -274,9 +274,9 @@ verification:
       locator: TestTimelineShowsFramesAtTheirTime
     basis:
     - path: ebitenvideo/timeline.go
-      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/timeline_test.go
-      input_hash: 0db50f888890bf7612f45f3a4c47afa5f0b4cab22d777a50ef43fd41ea46da35
+      input_hash: e1025e38e3f856dcb4f2e1da62101594729047cefb45ca28e85ea580de1ff3c8
   player-hardware-test:
     state: passed
     method: integration
@@ -293,13 +293,13 @@ verification:
         a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 7e5449afada07486bd29c3a4e7b0c3585d6f855fa620e2d412960916e7886286
+      input_hash: 463b467fdfae414006e177f829f06ee61993d1a06d36a1a198ab00a340fdeb5f
     - path: ebitenvideo/source.go
-      input_hash: 6f4fc954a35550093cbe9a3464717b00eaf31afecbd76424636968d3ed88a189
+      input_hash: af2f4210c3ce6a0db66705443743cd433efc235d70f5d8e3177bb8042978662e
     - path: ebitenvideo/timeline.go
-      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 1674a8a12c24da3361c69180550f352989629e33487bb734321384458036ad26
+      input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
   module-build-check:
     state: passed
     method: static

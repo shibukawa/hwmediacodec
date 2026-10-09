@@ -13,7 +13,7 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
-| macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
+| macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
@@ -23,7 +23,9 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
 the stream's reorder bound. `WithDecodeOrder` switches back to the order the
-hardware produces. `WithOutputFormat(hwmediacodec.RGBA)` (or `BGRA`) returns
+hardware produces. (AV1 temporal units already arrive in presentation order
+and yield one frame each, so neither applies to them.)
+`WithOutputFormat(hwmediacodec.RGBA)` (or `BGRA`) returns
 packed 8-bit pixels with rows of exactly `4*Width` bytes, ready for
 `ebiten.Image.WritePixels` or an `image.RGBA`; `WithInputFormat` accepts the
 same formats for encoding, which is what `ebiten.Image.ReadPixels` produces.
@@ -53,15 +55,22 @@ Known limitations:
 - On Windows the display order comes from the Media Foundation decoder
   itself, and on Linux with Intel VPL from the VPL runtime, so
   `WithDecodeOrder` has no effect there.
-- Input and output are Annex-B, one access unit per `Packet`; use
-  `annexb.Reader` to split a raw elementary stream. Containers (MP4, MKV, TS)
-  are not parsed. AVCC/HVCC output is not offered yet.
+- H.264 and HEVC input and output are Annex-B, one access unit per `Packet`;
+  use `annexb.Reader` to split a raw elementary stream. AV1 input is one
+  temporal unit per `Packet` in the low-overhead OBU format (what an IVF
+  frame or an ISOBMFF `av01` sample holds, with or without temporal
+  delimiters); use `ivf.Reader` to split an IVF file. Containers (MP4, MKV,
+  TS) are not parsed by the library; the `examples/container` package shows
+  how to bridge MP4 files with mp4ff. AVCC/HVCC output is not offered yet.
 - On an M3, 1080p H.264 with B-frames decodes at roughly 780 frames per
   second to NV12 in display order, 350 to BGRA and 250 to RGBA, including
   the copy; 1080p H.264 encodes at roughly 200 frames per second from NV12
   and 180 from RGBA or BGRA.
 - The VideoToolbox hardware decoder rejects very small pictures (64x48
   fails with "decoder malfunction"; 96x64 works).
+- The VideoToolbox encoder rounds odd picture sizes down to even: a
+  321x203 request yields a 320x202 stream. Pad to even and crop at the
+  consumer (as `examples/heif` does with a `clap` property).
 - `Encoder.Flush` blocks until VideoToolbox has emitted every pending frame;
   it does not observe context cancellation once the call has started.
 - Intel Macs are out of scope; the VideoToolbox backend requires hardware
@@ -100,6 +109,44 @@ Known limitations:
   encode runs through libva against a checking test driver, but no run on
   AMD or Intel hardware has happened yet: what the GPU makes of the
   buffers, and the pixels, are still to be confirmed.
+
+### macOS notes
+
+AV1 decoding uses the hardware decoder Apple added with the M3
+(`VTIsHardwareDecodeSupported('av01')`). `Probe` lists `av1 decode` only on
+such machines, and `NewDecoder` reports `ErrUnsupported` on M1 and M2 Macs
+even with `WithSoftwareFallback`: macOS 26 lists a "SW AV1 Decoder"
+(`com.apple.videotoolbox.videodecoder.av1.sw`) in `VTCopyVideoDecoderList`,
+but VideoToolbox refuses to create a session with it
+(`kVTCouldNotFindVideoDecoderErr` with hardware decoding disabled, with or
+without `VTRegisterSupplementalVideoDecoderIfAvailable`, which changes
+nothing for AV1; measured on an M3). No Apple Silicon chip has an AV1
+encoder, so `NewEncoder` with `AV1` reports `ErrUnsupported`.
+
+- A `Packet` is one temporal unit in the low-overhead OBU format, which is
+  what an IVF frame or an ISOBMFF `av01` sample holds; `ivf.Reader` splits
+  an IVF file and `ivf.Writer` writes one. Temporal delimiter OBUs may be
+  present or absent: VideoToolbox produced identical frames either way, so
+  the unit is handed over as it is. The sequence header is parsed in Go
+  (`internal/av1`) to build the `av1C` record that goes into the format
+  description (`CMVideoFormatDescriptionCreate` with the
+  `SampleDescriptionExtensionAtoms` extension); a new sequence header (for
+  example a size change) starts a new decompression session, and after
+  `Flush` decoding resumes at the next unit with a shown key frame.
+- Every temporal unit yields exactly one frame, in presentation order and
+  with the packet's PTS; hidden alternate reference frames come out when
+  the stream shows them through `show_existing_frame`. The Go reorder layer
+  is therefore not used for AV1 and `WithDecodeOrder` has no effect.
+- Main profile streams decode, 8-bit and 10-bit 4:2:0; the output is 8-bit
+  (NV12, RGBA or BGRA). 8-bit decoding is bit-exact with libdav1d. 10-bit
+  pictures are converted by VideoToolbox itself, within 53.5 dB PSNR of
+  ffmpeg's conversion (the two round differently). High and Professional
+  profile (4:4:4, 4:2:2, 12-bit) and monochrome streams report
+  `ErrUnsupported`. Untagged streams are converted to RGB with BT.601, as
+  for the other codecs.
+- On an M3, 1080p AV1 (SVT-AV1 preset 10, 300 frames) decodes at roughly
+  820 frames per second to NV12, 310 to BGRA and 220 to RGBA, including the
+  copy.
 
 ### Windows (Media Foundation)
 
@@ -268,6 +315,33 @@ layout of each format. `WithDecodeOrder()` returns frames as the hardware
 produces them, which is what a transcoder that keeps the original
 timestamps wants.
 
+## Examples
+
+The [`examples/`](examples/) directory is a third Go module with complete
+programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
+(`examples/container`, on top of mp4ff), a video file converter that keeps
+timestamps and copies audio (`examples/convert`), a keyframe thumbnail
+extractor (`examples/thumbnails`), an Ebitengine screen recorder
+(`examples/screencast`, `examples/record`), live HLS and WebRTC servers for
+a fireworks show (`examples/hls`, `examples/webrtc`), a video player
+(`examples/player`), video as a texture on a box and in a Kage shader
+(`examples/texture`) and HEIC/AVIF still images (`examples/heif`,
+`examples/heifconv`). The players default to a bundled clip
+(`examples/assets`). See [examples/README.md](examples/README.md).
+
+```sh
+cd examples
+go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
+go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
+go run ./record -o capture.mp4 -seconds 10
+go run ./hls -addr :8080      # then open http://localhost:8080/
+go run ./webrtc -addr :8080   # same, about 100 ms of latency
+go run ./player               # the bundled clip; space pause, arrows seek
+go run ./texture              # 1 flat, 2 box, 3 shader
+go run ./heifconv photo.heic photo.png
+go run ./heifconv -quality 0.8 picture.png picture.heic
+```
+
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
@@ -291,11 +365,21 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 Elementary streams carry no timestamps, so the frame rate is a parameter.
 Frames are skipped when decoding or the game loop falls behind
-(`Player.Skipped` counts them). A runnable example plays a file in a
-window:
+(`Player.Skipped` counts them). `NewPlayerFromSource` takes a `Source`
+instead of a reader: anything that hands out access units with
+presentation times, such as the MP4 demuxer in `examples/container`
+(`VideoTrack.PacketSource()`). A source that also implements `Seeker`
+(a keyframe index) gives the player `Seek`, `Length` and looping; an
+`io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
+once for keyframes on the first seek. `Seek(t)` restarts decoding at the
+keyframe before `t` and drops the frames up to it, so the next picture
+shown is the one at `t`; `Position` reports `t` meanwhile. A minimal
+example plays a raw stream in a window (space pauses, the arrow keys
+seek); the MP4-capable player with a bundled clip is `examples/player`:
 
 ```sh
 cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264
+cd examples && go run ./player
 ```
 
 Inside the repository `ebitenvideo/go.mod` points at the core module with a
@@ -311,6 +395,7 @@ go run ./cmd/hwmediacodec probe
 go run ./cmd/hwmediacodec decode -hash input.h264                       # display order, NV12
 go run ./cmd/hwmediacodec decode -format rgba -o out.rgba input.hevc -codec hevc
 go run ./cmd/hwmediacodec decode -decode-order -hash input.h264
+go run ./cmd/hwmediacodec decode -codec av1 -hash input.ivf                  # AV1: IVF input (macOS, M3+)
 go run ./cmd/hwmediacodec encode -size 1920x1080 -bitrate 8M -gop 60 -o out.h264 input.nv12
 go run ./cmd/hwmediacodec encode -size 1920x1080 -format rgba -o out.h264 input.rgba
 go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc input.h264
@@ -388,7 +473,14 @@ buffers built from HEVC streams (reference frames and their set flags,
 reference list indices, `slice_data_byte_offset`, `st_rps_bits`, prediction
 weights) are compared with the same two oracles on any platform, and the
 parameter sets and slice headers the HEVC encoder writes are read back by
-ffmpeg and ffprobe.
+ffmpeg and ffprobe. The AV1 OBU splitter, sequence header and frame header
+parsers are checked against `trace_headers` on SVT-AV1 streams (8-bit and
+10-bit), and the `av1C` record against the one ffmpeg writes into an MP4 of
+the same stream; the `ivf` package is checked against ffmpeg's own IVF
+files. These tests skip when ffmpeg lacks libsvtav1. The AV1 decode
+conformance tests need libdav1d as well: every NV12 frame of an 8-bit
+stream with hidden frames and `show_existing_frame` must equal dav1d's
+output exactly, and a 10-bit stream is compared by PSNR.
 
 The VA-API backend itself runs without a GPU against a fake VA driver
 (`internal/vaapi/testdata/fakedriver`, about 1,400 lines of C).
@@ -423,6 +515,7 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
+(cd examples && go test ./...)      # separate module: MP4 container tests (ffmpeg only) and sample end-to-end tests (hardware)
 ```
 
 Project knowledge (requirements, decisions, backend notes) lives in

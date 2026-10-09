@@ -1,11 +1,13 @@
 // Command hwmediacodec probes the hardware codecs on this machine, decodes
-// raw Annex-B elementary streams, encodes raw frames and transcodes between
-// the two.
+// elementary streams, encodes raw frames and transcodes between the two.
 //
 //	hwmediacodec probe
-//	hwmediacodec decode [-codec h264|hevc] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file.h264
+//	hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
 //	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
-//	hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+//	hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+//
+// H.264 and HEVC input is a raw Annex-B stream; AV1 input is an IVF file
+// (one temporal unit per frame, as ffmpeg -f ivf writes it).
 //
 // Encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes
 // -lowlatency -profile baseline|main|high -software.
@@ -26,6 +28,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/ivf"
 )
 
 func main() {
@@ -56,9 +59,10 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   hwmediacodec probe
-  hwmediacodec decode [-codec h264|hevc] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
+  hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
   hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
-  hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+  hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+h264/hevc input is a raw Annex-B stream, av1 input an IVF file
 encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes -lowlatency -profile baseline|main|high -software`)
 }
 
@@ -87,9 +91,55 @@ func parseCodec(name string) (hwmediacodec.Codec, error) {
 		return hwmediacodec.H264, nil
 	case "hevc", "h265":
 		return hwmediacodec.HEVC, nil
+	case "av1":
+		return hwmediacodec.AV1, nil
 	}
 	return 0, fmt.Errorf("unknown codec %q", name)
 }
+
+// packetReader yields the packets of an input file: Annex-B access units
+// for H.264 and HEVC, stamped as 30 fps, or IVF frames (temporal units) for
+// AV1 with the file's own timestamps rescaled to DefaultTimeScale.
+type packetReader struct {
+	next func() (data []byte, pts int64, err error)
+}
+
+func newPacketReader(in io.Reader, c hwmediacodec.Codec) (*packetReader, error) {
+	if c != hwmediacodec.AV1 {
+		r := annexb.NewReader(in, c)
+		var pts int64
+		return &packetReader{next: func() ([]byte, int64, error) {
+			au, err := r.Next()
+			if err != nil {
+				return nil, 0, err
+			}
+			p := pts
+			pts += ptsStep(30)
+			return au, p, nil
+		}}, nil
+	}
+	r, err := ivf.NewReader(in)
+	if err != nil {
+		return nil, err
+	}
+	h := r.Header()
+	var index int64
+	return &packetReader{next: func() ([]byte, int64, error) {
+		tu, ts, err := r.Next()
+		if err != nil {
+			return nil, 0, err
+		}
+		pts := index * ptsStep(30)
+		if h.TimebaseDen > 0 {
+			pts = int64(ts) * int64(h.TimebaseNum) * int64(hwmediacodec.DefaultTimeScale) / int64(h.TimebaseDen)
+		}
+		index++
+		return tu, pts, nil
+	}}, nil
+}
+
+// Next returns the next packet, or io.EOF.
+func (r *packetReader) Next() ([]byte, int64, error) { return r.next() }
 
 func parseFormat(name string) (hwmediacodec.PixelFormat, error) {
 	switch strings.ToLower(name) {
@@ -361,7 +411,7 @@ func encode(args []string) error {
 // with B-frames come out with their pictures reordered; see the README.
 func transcode(args []string) error {
 	fs := flag.NewFlagSet("transcode", flag.ExitOnError)
-	inCodec := fs.String("in", "h264", "input codec: h264 or hevc")
+	inCodec := fs.String("in", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
 	out := fs.String("o", "", "write the Annex-B stream to this file")
 	ef := addEncodeFlags(fs)
 	if err := fs.Parse(args); err != nil {
@@ -448,16 +498,19 @@ func transcode(args []string) error {
 			}
 		}
 	}
-	r := annexb.NewReader(in, ic)
+	r, err := newPacketReader(bufio.NewReaderSize(in, 1<<20), ic)
+	if err != nil {
+		return err
+	}
 	for {
-		au, err := r.Next()
+		au, pts, err := r.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
+		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
 			return fmt.Errorf("decode: %w", err)
 		}
 		if err := drainDecoder(); err != nil {
@@ -488,7 +541,7 @@ func transcode(args []string) error {
 
 func decode(args []string) error {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
-	codecName := fs.String("codec", "h264", "input codec: h264 or hevc")
+	codecName := fs.String("codec", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
 	formatName := fs.String("format", "nv12", "output pixel format: nv12, rgba or bgra")
 	decodeOrder := fs.Bool("decode-order", false, "return frames in decode order instead of display order")
 	out := fs.String("o", "", "write decoded raw frames to this file")
@@ -574,10 +627,12 @@ func decode(args []string) error {
 		}
 	}
 
-	r := annexb.NewReader(in, c)
-	var pts int64
+	r, err := newPacketReader(bufio.NewReaderSize(in, 1<<20), c)
+	if err != nil {
+		return err
+	}
 	for {
-		au, err := r.Next()
+		au, pts, err := r.Next()
 		if err == io.EOF {
 			break
 		}
@@ -599,7 +654,6 @@ func decode(args []string) error {
 			}
 			break
 		}
-		pts += 3000
 		if err := drain(); err != nil {
 			return err
 		}

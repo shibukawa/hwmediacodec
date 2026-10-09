@@ -84,6 +84,11 @@ func GenerateStreamBFrames(t testing.TB, c codec.Codec, width, height, frames, b
 		path = filepath.Join(dir, fmt.Sprintf("test_%dx%d_%d_b%d.hevc", width, height, frames, bframes))
 		args = append(args, "-c:v", "libx265", "-preset", "veryfast",
 			"-x265-params", fmt.Sprintf("bframes=%d:open-gop=0:keyint=25:log-level=error", bframes), "-f", "hevc", path)
+	case codec.AV1:
+		// SVT-AV1's random-access structure always has hidden frames (shown
+		// through show_existing_frame), whatever bframes says; the stream is
+		// an IVF file of temporal units.
+		return Stream{Path: GenerateAV1(t, width, height, frames), Codec: c, Width: width, Height: height, Frames: frames}
 	default:
 		t.Fatalf("no generator for %s", c)
 	}
@@ -127,9 +132,9 @@ func ReferenceNV12Frames(t testing.TB, path string, c codec.Codec, width, height
 func ReferenceFrames(t testing.TB, path string, c codec.Codec, f codec.PixelFormat, width, height int) [][]byte {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
-	args := []string{"-hide_banner", "-loglevel", "error",
-		"-f", format, "-i", path, "-fps_mode", "passthrough"}
+	args := []string{"-hide_banner", "-loglevel", "error", "-f", containerFormat(c)}
+	args = append(args, decoderArgs(t, c)...)
+	args = append(args, "-i", path, "-fps_mode", "passthrough")
 	if f != codec.NV12 {
 		args = append(args, "-vf", "scale=flags=bilinear+full_chroma_int+accurate_rnd")
 	}
@@ -333,9 +338,8 @@ func ProbeFrames(t testing.TB, path string, c codec.Codec) []FrameInfo {
 	if err != nil {
 		t.Skip("ffprobe not found in PATH")
 	}
-	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
 	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
-		"-f", format, "-i", path, "-select_streams", "v:0",
+		"-f", containerFormat(c), "-i", path, "-select_streams", "v:0",
 		"-show_entries", "frame=key_frame,pict_type", "-of", "csv=p=0")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -372,9 +376,8 @@ func ProbeStreamField(t testing.TB, path string, c codec.Codec, field string) st
 	if err != nil {
 		t.Skip("ffprobe not found in PATH")
 	}
-	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
 	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
-		"-f", format, "-i", path, "-select_streams", "v:0",
+		"-f", containerFormat(c), "-i", path, "-select_streams", "v:0",
 		"-show_entries", "stream="+field, "-of", "csv=p=0")
 	out, err := cmd.Output()
 	if err != nil {

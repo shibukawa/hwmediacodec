@@ -1,0 +1,134 @@
+id: milestone:examples-texture
+type: milestone
+title: Examples - video as a texture in Ebitengine (cube, Kage shader) and MP4 input for ebitenvideo
+summary: 'Third usage-sample slice: examples/texture plays a video through ebitenvideo and draws the
+  player image flat, on the faces of a spinning cube with DrawTriangles (8x8 subdivided faces, winding
+  culling, vertex-colour lighting) and through a Kage shader (barrel distortion, ripple, scanlines,
+  vignette). MP4 files are played directly: container.VideoTrack.ElementaryStream() exposes the track
+  as a rewindable Annex-B io.ReadSeeker and FrameRate() supplies the frame rate, so ebitenvideo needs
+  no change.'
+lifecycle: active
+authority: authored
+aliases:
+- texture sample
+- video on a cube
+- テクスチャ動画再生
+- MP4 直読み
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-texture
+constraints:
+- 'The player image is a plain *ebiten.Image updated in place, so no ebitenvideo API change was needed:
+  DrawImage, DrawTriangles (as the texture) and DrawRectShader (Images[0]) all take it as is.'
+- 'Ebitengine DrawTriangles interpolates texture coordinates affinely; each cube face is split into an
+  8x8 grid whose corners are projected individually so that the perspective error stays invisible.'
+- 'Back faces are culled by the projected winding (corners listed counter-clockwise from outside give
+  a positive cross product on screen with y down when facing the camera); the first attempt had the sign
+  inverted and showed five faces head-on, which the mesh unit test caught.'
+- 'DrawRectShader requires the destination rectangle and Images[0] to have the same size, so the shader
+  is drawn at video size and scaled with GeoM; scanlines are keyed to dstPos.y so they do not alias with
+  the video resolution.'
+- 'ElementaryStream supports only Seek(0, io.SeekStart) (ebitenvideo loops by rewinding); other seeks
+  return an error.'
+non_goals:
+- Seeking inside the video, audio, several simultaneous videos (one player per video works but is not
+  demonstrated), perspective-correct interpolation inside a triangle.
+acceptance:
+  elementary-stream:
+    text: ElementaryStream yields exactly the concatenation of AccessUnit(i), annexb.Reader splits it back
+      into the same access units after a rewind, and seeking elsewhere fails.
+    scope:
+      milestone: examples-texture
+    verified_by:
+    - stream-test
+  cube-mesh:
+    text: Head-on only the front face is emitted (25 vertices, 96 indices for 4x4 cells) with texture
+      coordinates spanning the texture once and a centred square projection; 45 degrees shows two faces,
+      tilted three; all indices are in range.
+    scope:
+      milestone: examples-texture
+    verified_by:
+    - mesh-test
+  renders:
+    text: The app plays an HEVC MP4 at 1280x720 and, recorded through screencast for 13 s, shows the
+      flat video, the lit cube with the video on three visible faces, and the shader effect in frames
+      extracted at 2 s, 6 s and 10 s.
+    scope:
+      milestone: examples-texture
+    verified_by:
+    - texture-run
+verification:
+  stream-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-texture
+    test: TestElementaryStream
+    evidence:
+      path: examples/container/stream_test.go
+      locator: TestElementaryStream
+      note: ffmpeg-made H.264 bf=2 file; run 2026-10-09
+    basis:
+    - path: examples/container/stream.go
+      input_hash: f95ad8d253d86d14e31558c47cb41c8d4308c05e947873faabac72e31da26cf3
+    - path: examples/container/stream_test.go
+      input_hash: 88f006f77ab9b4063ad5db185bb494dcfb0538c6ec18c7e04de689acdda6d781
+  mesh-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-texture
+    test: TestCubeMeshCullsBackFaces
+    evidence:
+      path: examples/texture/mesh_test.go
+      locator: TestCubeMeshCullsBackFaces
+    basis:
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+    - path: examples/texture/mesh_test.go
+      input_hash: 1c5cdbef5942f474cff38e9dae580fa4563070bf98d202ab2e598b6f0131af60
+  texture-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -seconds 13 -record demo.mp4 big_hevc.mp4 (1080p HEVC with B-frames from the
+      convert sample)
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 724 frames recorded, 0 dropped; frames at 2 s (flat), 6 s (cube, three
+        lit faces) and 10 s (shader) inspected
+    basis:
+    - path: examples/texture/main.go
+      input_hash: a4241062bda628f551865250d6c9515752ef87ebd9b6eda30175db3b51a6a9ce
+    - path: examples/texture/shader.go
+      input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+facts:
+  api:
+    container: 'VideoTrack.ElementaryStream() io.ReadSeeker'
+    texture: 'flags -codec -fps (raw streams only) -size -seconds -record -software; keys 1/2/3 modes,
+      space pause; modes cycle every 4 s until a key is pressed'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: Third sample slice delivered after recording/HLS; mesh and stream tests pass, rendering checked
+      through a screencast recording.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:examples-screencast-hls
+- relation: depends_on
+  to: milestone:display-order-rgba

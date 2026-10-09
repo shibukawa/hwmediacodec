@@ -22,7 +22,8 @@ type config struct {
 }
 
 // WithLoop restarts the stream from the beginning when it ends. The source
-// must be an io.ReadSeeker.
+// must be able to seek: an io.ReadSeeker for NewPlayer, a Seeker for
+// NewPlayerFromSource.
 func WithLoop() Option { return func(c *config) { c.loop = true } }
 
 // WithSoftwareFallback allows the operating system's software decoder on
@@ -33,8 +34,8 @@ func WithSoftwareFallback() Option { return func(c *config) { c.software = true 
 // (default 4). Each one holds a full RGBA picture in memory.
 func WithPrefetch(frames int) Option { return func(c *config) { c.prefetch = frames } }
 
-// Player plays an H.264 or HEVC elementary stream through the hardware
-// decoder and keeps the current frame in an *ebiten.Image.
+// Player plays hardware-decoded video and keeps the current frame in an
+// *ebiten.Image.
 //
 // Decoding runs on a background goroutine; the methods of Player are meant
 // to be called from the game's goroutine (Update and Draw).
@@ -48,6 +49,8 @@ type Player struct {
 
 	playing bool
 	ended   bool
+	endSeen bool
+	gen     int
 	err     error
 	last    time.Time
 	skipped int
@@ -55,20 +58,37 @@ type Player struct {
 
 // NewPlayer starts decoding the Annex-B elementary stream r (for example a
 // .h264 or .hevc file) of codec c, to be shown at fps frames per second.
-// Playback starts paused; call Play.
+// Playback starts paused; call Play. When r is an io.ReadSeeker the player
+// can loop and Seek (the stream is scanned once for keyframes on the first
+// seek).
 func NewPlayer(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (*Player, error) {
 	if fps <= 0 {
 		return nil, fmt.Errorf("ebitenvideo: frame rate must be positive, got %g", fps)
 	}
+	ss, err := newStreamSource(r, c, fps)
+	if err != nil {
+		return nil, err
+	}
+	var src Source = ss
+	if ss.rs != nil {
+		src = &seekableStream{ss}
+	}
+	return NewPlayerFromSource(src, opts...)
+}
+
+// NewPlayerFromSource starts decoding packets from src, which carries its
+// own presentation times (an MP4 demuxer, for example). Looping and Seek
+// need src to implement Seeker.
+func NewPlayerFromSource(src Source, opts ...Option) (*Player, error) {
 	cfg := config{prefetch: 4}
 	for _, o := range opts {
 		o(&cfg)
 	}
-	src, err := newSource(r, c, cfg.prefetch, cfg.loop, cfg.software)
+	s, err := newSource(src, cfg.prefetch, cfg.loop, cfg.software)
 	if err != nil {
 		return nil, err
 	}
-	return &Player{src: src, tl: timeline{fps: fps}}, nil
+	return &Player{src: s}, nil
 }
 
 // Play starts or resumes playback.
@@ -81,15 +101,49 @@ func (p *Player) Pause() { p.playing = false }
 func (p *Player) IsPlaying() bool { return p.playing && !p.ended && p.err == nil }
 
 // Ended reports whether the last frame has been shown. A looping player
-// never ends.
+// never ends; Seek clears the flag.
 func (p *Player) Ended() bool { return p.ended }
 
 // Err returns the decoding error that stopped playback, or nil.
 func (p *Player) Err() error { return p.err }
 
 // Position returns the playback position within the current loop
-// iteration.
+// iteration. Right after Seek it is the seek target.
 func (p *Player) Position() time.Duration { return p.tl.position() }
+
+// Length returns the stream duration when the source knows it (an MP4
+// track always does; a raw stream after its first seek), otherwise 0.
+func (p *Player) Length() time.Duration {
+	if p.src.seeker == nil {
+		return 0
+	}
+	return p.src.seeker.Length()
+}
+
+// Seekable reports whether Seek works for this player's source.
+func (p *Player) Seekable() bool { return p.src.seeker != nil }
+
+// Seek moves playback to t: decoding restarts at the last keyframe before
+// t and the frames up to t are skipped, so the next picture shown is the
+// one at t (or the first one after it). Frames already decoded are
+// dropped. Seeking past the end ends playback; seeking a finished player
+// resumes it. It returns ErrNotSeekable when the source cannot seek.
+func (p *Player) Seek(t time.Duration) error {
+	if p.err != nil {
+		return p.err
+	}
+	if p.src.seeker == nil {
+		return ErrNotSeekable
+	}
+	if t < 0 {
+		t = 0
+	}
+	p.gen++
+	p.src.requestSeek(seekRequest{target: t, gen: p.gen})
+	p.tl.reset(t)
+	p.ended, p.endSeen = false, false
+	return nil
+}
 
 // Skipped returns how many frames were dropped so far because decoding or
 // the game loop fell behind.
@@ -113,7 +167,7 @@ func (p *Player) Update() error {
 		p.last = time.Time{}
 		return nil
 	}
-	show, skipped := p.tl.advance(p.tick(), p.src.next)
+	show, skipped := p.tl.advance(p.tick(), p.next)
 	p.skipped += skipped
 	if show.frame != nil {
 		p.upload(show.frame)
@@ -123,10 +177,31 @@ func (p *Player) Update() error {
 		p.err = err
 		return err
 	}
-	if p.src.ended() && !p.tl.hasPending {
+	if p.endSeen && !p.tl.hasPending {
 		p.ended = true
 	}
 	return nil
+}
+
+// next pulls the next frame of the current generation from the decoder,
+// dropping frames that belong to a position Seek has left and noting the
+// end marker.
+func (p *Player) next() (item, bool) {
+	for {
+		it, ok := p.src.next()
+		if !ok {
+			return item{}, false
+		}
+		if it.gen != p.gen {
+			it.doRelease() // decoded before the last seek was picked up
+			continue
+		}
+		if it.end {
+			p.endSeen = true
+			continue
+		}
+		return it, true
+	}
 }
 
 // tick returns the time one Update represents.

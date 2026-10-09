@@ -21,6 +21,9 @@
 // Decoded frames are returned in display order (see NewDecoder and
 // WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
 // natively, so WithDecodeOrder has no effect on those backends).
+// AV1 decoding is available on macOS with an Apple M3 or newer: a Packet is
+// then one temporal unit (an IVF frame or ISOBMFF sample; see package ivf),
+// each yielding one frame in presentation order. No backend encodes AV1.
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
 //

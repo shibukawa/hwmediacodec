@@ -142,3 +142,53 @@ func TestReaderLargeNAL(t *testing.T) {
 		t.Fatalf("large NAL corrupted: got %d bytes want %d", len(au), len(buildStream(nal)))
 	}
 }
+
+// TestReaderOffset checks that Offset points at the start of the access
+// unit just returned, so that a seekable stream can be re-entered there.
+func TestReaderOffset(t *testing.T) {
+	// Three access units with 4- and 3-byte start codes, an SPS/PPS in
+	// front of the first, and some trailing zeros.
+	var stream []byte
+	add := func(sc []byte, nal ...byte) int {
+		off := len(stream)
+		stream = append(stream, sc...)
+		stream = append(stream, nal...)
+		return off
+	}
+	sc4, sc3 := []byte{0, 0, 0, 1}, []byte{0, 0, 1}
+	au0 := add(sc4, 0x67, 1, 2) // SPS
+	add(sc4, 0x68, 3)           // PPS
+	add(sc3, 0x65, 0x88, 0x80)  // IDR, first_mb 0
+	au1 := add(sc4, 0x41, 0x9a, 0x00)
+	stream = append(stream, 0, 0) // trailing zeros before the next start code
+	au2 := add(sc3, 0x41, 0x9a, 0x40)
+	r := NewReader(iotest.OneByteReader(bytes.NewReader(stream)), codec.H264)
+	var offsets []int64
+	var aus [][]byte
+	for {
+		au, err := r.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		offsets = append(offsets, r.Offset())
+		aus = append(aus, au)
+	}
+	// Offset points at the three-byte start code, so a four-byte one is
+	// reported one byte in (the zero byte could as well belong to the
+	// previous NAL unit).
+	want := []int64{int64(au0) + 1, int64(au1) + 1, int64(au2)}
+	if len(offsets) != 3 || offsets[0] != want[0] || offsets[1] != want[1] || offsets[2] != want[2] {
+		t.Fatalf("offsets %v, want %v", offsets, want)
+	}
+	// Re-entering at an offset yields the same access unit first.
+	for i, off := range offsets {
+		r2 := NewReader(bytes.NewReader(stream[off:]), codec.H264)
+		au, err := r2.Next()
+		if err != nil || !bytes.Equal(au, aus[i]) {
+			t.Fatalf("access unit %d re-read at %d differs (%v)", i, off, err)
+		}
+	}
+}

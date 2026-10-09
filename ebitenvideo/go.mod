@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
-	github.com/shibukawa/hwmediacodec v0.0.0
+	github.com/shibukawa/hwmediacodec v0.1.0
 )
 
 require (
@@ -14,5 +14,3 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )
-
-replace github.com/shibukawa/hwmediacodec => ../
