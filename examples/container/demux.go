@@ -302,6 +302,21 @@ func (t *Track) Duration() int64 {
 	return last.dts + int64(last.dur)
 }
 
+// PresentationLength is the length of the track as a player sees it: the
+// end of the last presented sample minus the edit-list offset.
+func (t *Track) PresentationLength() time.Duration {
+	var end int64
+	for _, s := range t.samples {
+		if e := s.dts + int64(s.cto) + int64(s.dur); e > end {
+			end = e
+		}
+	}
+	if d := t.PresentationTime(end); d > 0 {
+		return d
+	}
+	return 0
+}
+
 // TimeOf converts a track time to a duration.
 func (t *Track) TimeOf(ts int64) time.Duration {
 	return time.Duration(ts) * time.Second / time.Duration(t.TimeScale)

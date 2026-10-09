@@ -6,11 +6,13 @@
 //	go run ./texture -codec hevc -fps 30 stream.hevc
 //	go run ./texture -seconds 12 -record demo.mp4 movie.mp4
 //
-// Keys: 1 flat, 2 cube, 3 shader, space pause; without a key press the
-// modes cycle every few seconds. MP4 input is demuxed by the container
-// package into the elementary stream ebitenvideo plays; the frame rate
-// comes from the sample table. The player's image is an ordinary
-// *ebiten.Image updated in place, so it works wherever an image does.
+// Keys: 1 flat, 2 cube, 3 shader, space pause, left/right seek 5 s, home
+// restart; without a key press the modes cycle every few seconds. MP4
+// input is demuxed by the container package into a packet source with
+// presentation times and a sync-sample table, so the player seeks through
+// it; raw streams seek too (the file is scanned for keyframes once). The
+// player's image is an ordinary *ebiten.Image updated in place, so it
+// works wherever an image does.
 package main
 
 import (
@@ -53,6 +55,7 @@ type game struct {
 	tick   int
 	limit  time.Duration
 	start  time.Time
+	status string
 }
 
 func (g *game) Update() error {
@@ -79,11 +82,28 @@ func (g *game) Update() error {
 			g.player.Play()
 		}
 	}
+	switch {
+	case inpututil.IsKeyJustPressed(ebiten.KeyArrowRight):
+		g.seek(g.player.Position() + 5*time.Second)
+	case inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft):
+		g.seek(g.player.Position() - 5*time.Second)
+	case inpututil.IsKeyJustPressed(ebiten.KeyHome):
+		g.seek(0)
+	}
 	g.tick++
 	if g.auto && g.tick%(4*ebiten.TPS()) == 0 {
 		g.mode = (g.mode + 1) % modeCount
 	}
 	return g.player.Update()
+}
+
+func (g *game) seek(t time.Duration) {
+	if err := g.player.Seek(t); err != nil {
+		g.status = err.Error()
+		return
+	}
+	g.player.Play()
+	g.status = fmt.Sprintf("seek to %.1fs", t.Seconds())
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -121,8 +141,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 	if g.rec != nil {
 		g.rec.Capture(screen)
 	}
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("[1] flat  [2] cube  [3] shader  [space] pause   mode %d  %.1f fps  video %.2fs  skipped %d",
-		g.mode+1, ebiten.ActualFPS(), g.player.Position().Seconds(), g.player.Skipped()))
+	length := ""
+	if l := g.player.Length(); l > 0 {
+		length = fmt.Sprintf(" / %.1fs", l.Seconds())
+	}
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("[1] flat  [2] cube  [3] shader  [space] pause  [<-][->] seek 5s  [home] restart\nmode %d  %.1f fps  video %.2fs%s  skipped %d  %s",
+		g.mode+1, ebiten.ActualFPS(), g.player.Position().Seconds(), length, g.player.Skipped(), g.status))
 }
 
 func (g *game) Layout(int, int) (int, int) { return g.w, g.h }
@@ -150,19 +174,15 @@ func main() {
 		log.Fatalf("bad -size %q", *size)
 	}
 
-	stream, codec, rate, closer, err := openVideo(flag.Arg(0), *codecName, *fps)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer closer.Close()
 	opts := []ebitenvideo.Option{ebitenvideo.WithLoop()}
 	if *software {
 		opts = append(opts, ebitenvideo.WithSoftwareFallback())
 	}
-	player, err := ebitenvideo.NewPlayer(stream, codec, rate, opts...)
+	player, closer, err := openVideo(flag.Arg(0), *codecName, *fps, opts)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer closer.Close()
 	defer player.Close()
 	player.Play()
 
@@ -195,32 +215,40 @@ func main() {
 	}
 }
 
-// openVideo returns the elementary stream of path: demuxed from an MP4, or
-// the file itself for a raw .h264/.hevc stream.
-func openVideo(path, codecName string, fps float64) (io.ReadSeeker, hwmediacodec.Codec, float64, io.Closer, error) {
+// openVideo opens a player for path: an MP4 is demuxed by the container
+// package into a seekable packet source; anything else is read as a raw
+// .h264/.hevc stream at the given frame rate.
+func openVideo(path, codecName string, fps float64, opts []ebitenvideo.Option) (*ebitenvideo.Player, io.Closer, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".mp4", ".mov", ".m4v":
 		d, err := container.Open(path)
 		if err != nil {
-			return nil, 0, 0, nil, err
+			return nil, nil, err
 		}
 		v := d.Video()
 		if v == nil {
 			d.Close()
-			return nil, 0, 0, nil, fmt.Errorf("%s has no H.264, HEVC or AV1 video track", path)
+			return nil, nil, fmt.Errorf("%s has no H.264, HEVC or AV1 video track", path)
 		}
-		return v.ElementaryStream(), v.Codec, v.FrameRate(), d, nil
+		p, err := ebitenvideo.NewPlayerFromSource(v.PacketSource(), opts...)
+		if err != nil {
+			d.Close()
+			return nil, nil, err
+		}
+		return p, d, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, 0, 0, nil, err
+		return nil, nil, err
 	}
 	codec := hwmediacodec.H264
-	switch strings.ToLower(codecName) {
-	case "hevc", "h265":
+	if c := strings.ToLower(codecName); c == "hevc" || c == "h265" {
 		codec = hwmediacodec.HEVC
-	case "av1":
-		codec = hwmediacodec.AV1
 	}
-	return f, codec, fps, f, nil
+	p, err := ebitenvideo.NewPlayer(f, codec, fps, opts...)
+	if err != nil {
+		f.Close()
+		return nil, nil, err
+	}
+	return p, f, nil
 }

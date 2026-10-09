@@ -180,12 +180,14 @@ updates in place, so the video goes wherever an image goes:
   bends the picture, ripples it and adds scanlines and a vignette with
   `imageSrc0At`.
 
-MP4 input is demuxed by the container package: `VideoTrack.ElementaryStream()`
-is an `io.ReadSeeker` of the Annex-B stream (rewindable, which is what
-`WithLoop` needs) and `FrameRate()` comes from the sample table, so the
-player needs no `-fps`. `-record` turns the screencast recorder on the
-window itself, which is how the demo recording in the repository's history
-was made.
+MP4 input is demuxed by the container package: `VideoTrack.PacketSource()`
+implements `ebitenvideo.Source` and `Seeker` (access units with
+presentation times, the sync-sample table for seeking, the track length),
+so `ebitenvideo.NewPlayerFromSource` plays it without an `-fps` flag and
+the arrow keys seek five seconds (`Home` restarts). Raw `.h264`/`.hevc`
+files go through `NewPlayer` and seek as well, after a one-time scan for
+keyframes. `-record` turns the screencast recorder on the window itself,
+which is how the demo recording in the repository's history was made.
 
 ## webrtc
 

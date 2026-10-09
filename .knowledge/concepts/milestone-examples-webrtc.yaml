@@ -81,7 +81,7 @@ verification:
     - path: examples/webrtc/server_test.go
       input_hash: 67200c94f010aff568fda9b47d5593b46f93385817e9d157230627b3cab67a0a
     - path: examples/container/demux.go
-      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
   recorder-keyframe-test:
     state: passed
     method: integration

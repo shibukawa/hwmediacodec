@@ -2,7 +2,8 @@
 //
 //	go run ./example -codec h264 -fps 30 video.h264
 //
-// Space pauses and resumes. The stream loops.
+// Space pauses and resumes, the left and right arrow keys seek five seconds
+// back and forward, Home restarts. The stream loops.
 package main
 
 import (
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -31,6 +33,21 @@ func (g *game) Update() error {
 			g.player.Play()
 		}
 	}
+	var seek time.Duration = -1
+	switch {
+	case inpututil.IsKeyJustPressed(ebiten.KeyArrowRight):
+		seek = g.player.Position() + 5*time.Second
+	case inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft):
+		seek = g.player.Position() - 5*time.Second
+	case inpututil.IsKeyJustPressed(ebiten.KeyHome):
+		seek = 0
+	}
+	if seek >= 0 {
+		if err := g.player.Seek(seek); err != nil {
+			return err
+		}
+		g.player.Play()
+	}
 	return g.player.Update()
 }
 
@@ -47,7 +64,8 @@ func (g *game) Draw(screen *ebiten.Image) {
 	op.GeoM.Scale(scale, scale)
 	op.GeoM.Translate((float64(sw)-float64(w)*scale)/2, (float64(sh)-float64(h)*scale)/2)
 	screen.DrawImage(img, op)
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("%.1f fps  position %.2fs  skipped %d", ebiten.ActualFPS(), g.player.Position().Seconds(), g.player.Skipped()))
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("%.1f fps  position %.2fs / %.1fs  skipped %d   [space] pause  [<-][->] seek  [home] restart",
+		ebiten.ActualFPS(), g.player.Position().Seconds(), g.player.Length().Seconds(), g.player.Skipped()))
 }
 
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {

@@ -94,7 +94,7 @@ verification:
         bf=2 hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
     basis:
     - path: examples/container/demux.go
-      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
     - path: examples/container/container_test.go
       input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
     - path: examples/internal/testutil/ffmpeg.go
@@ -114,7 +114,7 @@ verification:
     - path: examples/container/mux.go
       input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
     - path: examples/container/demux.go
-      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
     - path: examples/container/container_test.go
       input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
     - path: examples/internal/testutil/ffmpeg.go
@@ -139,7 +139,7 @@ verification:
     - path: examples/container/mux.go
       input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
     - path: examples/container/demux.go
-      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
     - path: examples/convert/main_test.go
       input_hash: 34dae9b24042d17cba767160d35509b49598d7bd0471c9a6a59e808efa110ed5
   convert-1080p-run:
@@ -179,7 +179,7 @@ verification:
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: examples/container/demux.go
-      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
     - path: examples/thumbnails/main_test.go
       input_hash: fbd8f7d81db4f64c032c49929e7732d5eda3e55f97fe9503991af92b2849a6d0
 open_questions:

@@ -274,9 +274,9 @@ verification:
       locator: TestTimelineShowsFramesAtTheirTime
     basis:
     - path: ebitenvideo/timeline.go
-      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/timeline_test.go
-      input_hash: 0db50f888890bf7612f45f3a4c47afa5f0b4cab22d777a50ef43fd41ea46da35
+      input_hash: e1025e38e3f856dcb4f2e1da62101594729047cefb45ca28e85ea580de1ff3c8
   player-hardware-test:
     state: passed
     method: integration
@@ -293,13 +293,13 @@ verification:
         a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 7e5449afada07486bd29c3a4e7b0c3585d6f855fa620e2d412960916e7886286
+      input_hash: 463b467fdfae414006e177f829f06ee61993d1a06d36a1a198ab00a340fdeb5f
     - path: ebitenvideo/source.go
-      input_hash: 6f4fc954a35550093cbe9a3464717b00eaf31afecbd76424636968d3ed88a189
+      input_hash: af2f4210c3ce6a0db66705443743cd433efc235d70f5d8e3177bb8042978662e
     - path: ebitenvideo/timeline.go
-      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 1674a8a12c24da3361c69180550f352989629e33487bb734321384458036ad26
+      input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
   module-build-check:
     state: passed
     method: static

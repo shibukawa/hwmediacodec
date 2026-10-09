@@ -1,28 +1,19 @@
 package ebitenvideo
 
-import (
-	"math"
-	"time"
-)
+import "time"
 
 // timeline paces frames: it keeps a playback position and decides which
 // decoded frame should be on screen.
 type timeline struct {
-	fps float64
 	pos time.Duration // position within the current loop iteration
 
 	// started is set once the first frame is available; the clock does not
 	// run before that, so decoder start-up latency does not skip frames.
 	started    bool
+	gen        int
 	loop       int
-	lastIndex  int
 	pending    item
 	hasPending bool
-}
-
-// frameTime returns the presentation time of display index i.
-func (t *timeline) frameTime(i int) time.Duration {
-	return time.Duration(math.Round(float64(i) * float64(time.Second) / t.fps))
 }
 
 // advance moves the position forward by dt and returns the frame that
@@ -43,13 +34,17 @@ func (t *timeline) advance(dt time.Duration, next func() (item, bool)) (show ite
 			t.pending, t.hasPending = it, true
 			t.started = true
 		}
-		if t.pending.loop != t.loop {
+		switch {
+		case t.pending.gen != t.gen:
+			// After a seek: reset already put the clock at the target.
+			t.gen, t.loop = t.pending.gen, t.pending.loop
+		case t.pending.loop != t.loop:
 			// The stream restarted: continue the clock from the end of the
 			// previous iteration so that its last frame keeps its duration.
 			t.loop = t.pending.loop
-			t.pos -= t.frameTime(t.lastIndex + 1)
+			t.pos -= t.pending.rebase
 		}
-		if t.frameTime(t.pending.index) > t.pos {
+		if t.pending.pts > t.pos {
 			break
 		}
 		if show.frame != nil {
@@ -57,10 +52,17 @@ func (t *timeline) advance(dt time.Duration, next func() (item, bool)) (show ite
 			skipped++
 		}
 		show = t.pending
-		t.lastIndex = t.pending.index
 		t.hasPending = false
 	}
 	return show, skipped
+}
+
+// reset moves the clock to pos and stops it until the next frame arrives,
+// which is what a seek needs.
+func (t *timeline) reset(pos time.Duration) {
+	t.release()
+	t.pos = pos
+	t.started = false
 }
 
 // position returns the playback position within the current iteration.
@@ -75,7 +77,7 @@ func (t *timeline) position() time.Duration {
 // release drops the frame held for the future, if any.
 func (t *timeline) release() {
 	if t.hasPending {
-		t.pending.release()
+		t.pending.doRelease()
 		t.hasPending = false
 	}
 }

@@ -363,8 +363,16 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 Elementary streams carry no timestamps, so the frame rate is a parameter.
 Frames are skipped when decoding or the game loop falls behind
-(`Player.Skipped` counts them). A runnable example plays a file in a
-window:
+(`Player.Skipped` counts them). `NewPlayerFromSource` takes a `Source`
+instead of a reader: anything that hands out access units with
+presentation times, such as the MP4 demuxer in `examples/container`
+(`VideoTrack.PacketSource()`). A source that also implements `Seeker`
+(a keyframe index) gives the player `Seek`, `Length` and looping; an
+`io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
+once for keyframes on the first seek. `Seek(t)` restarts decoding at the
+keyframe before `t` and drops the frames up to it, so the next picture
+shown is the one at `t`; `Position` reports `t` meanwhile. A runnable
+example plays a file in a window (space pauses, the arrow keys seek):
 
 ```sh
 cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264

@@ -35,7 +35,7 @@ capabilities:
       input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - &id004
       path: annexb/annexb.go
-      input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
+      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
     - &id005
       path: hwmediacodec.go
       input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
