@@ -260,18 +260,12 @@ func TestTranscodeRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decoder Receive: %v", err)
 			}
-			buf := make([]byte, 0, testutil.NV12FrameSize(f.Width, f.Height))
-			rows := []int{f.Height, (f.Height + 1) / 2}
-			rowBytes := []int{f.Width, (f.Width + 1) / 2 * 2}
-			for i, p := range f.Planes {
-				for r := 0; r < rows[i]; r++ {
-					buf = append(buf, p[r*f.Strides[i]:r*f.Strides[i]+rowBytes[i]]...)
-				}
-			}
+			decoded = append(decoded, testutil.FrameBytes(f))
 			f.Release()
-			decoded = append(decoded, buf)
 		}
 	}
+	// The hardware encoder writes no VUI reorder bound, so the display-order
+	// decoder holds the DPB depth back until Flush.
 	if err := dec.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -283,6 +277,7 @@ func TestTranscodeRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		decoded = append(decoded, testutil.FrameBytes(f))
 		f.Release()
 	}
 	if len(decoded) != len(src) {
@@ -297,6 +292,73 @@ func TestTranscodeRoundTrip(t *testing.T) {
 	t.Logf("worst luma PSNR %.2f dB", worst)
 	if worst < minPSNR {
 		t.Fatalf("worst luma PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+	}
+}
+
+// TestEncodeRGBAInput feeds packed RGB frames (what ebiten.Image.ReadPixels
+// produces) and compares ffmpeg's RGB decode of the result with the source.
+// The stream must declare the BT.709 matrix the hardware used for the
+// conversion; decoding with the wrong matrix scores about 28 dB here, the
+// right one about 39 dB (8x8-block PSNR, see TestDecodeRGBA).
+func TestEncodeRGBAInput(t *testing.T) {
+	const minRGBPSNR = 35.0
+	for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
+		t.Run(f.String(), func(t *testing.T) {
+			src := testutil.GenerateRawFrames(t, f, encodeWidth, encodeHeight, 30)
+			enc := newTestEncoder(t, hwmediacodec.H264, hwmediacodec.WithBitrate(1_500_000), hwmediacodec.WithInputFormat(f))
+			ctx := context.Background()
+			var pkts []hwmediacodec.Packet
+			for i, raw := range src {
+				fr := testutil.RawFrame(raw, f, encodeWidth, encodeHeight, int64(i)*testPTSStep)
+				if err := enc.Send(ctx, fr); err != nil {
+					t.Fatalf("Send frame %d: %v", i, err)
+				}
+				for {
+					p, err := enc.Receive(ctx)
+					if errors.Is(err, hwmediacodec.ErrAgain) {
+						break
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					pkts = append(pkts, p)
+				}
+			}
+			if err := enc.Flush(ctx); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				p, err := enc.Receive(ctx)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkts = append(pkts, p)
+			}
+			if len(pkts) != len(src) {
+				t.Fatalf("got %d packets for %d frames", len(pkts), len(src))
+			}
+			path := writeStream(t, "rgb.h264", pkts)
+			if cs := testutil.ProbeStreamField(t, path, hwmediacodec.H264, "color_space"); cs != "bt709" {
+				t.Errorf("stream declares colour matrix %q, want bt709", cs)
+			}
+			got := testutil.ReferenceFrames(t, path, hwmediacodec.H264, f, encodeWidth, encodeHeight)
+			if len(got) != len(src) {
+				t.Fatalf("ffmpeg decoded %d frames, want %d", len(got), len(src))
+			}
+			worst := 1e9
+			for i := range src {
+				if psnr := testutil.BlockPSNR(src[i], got[i], encodeWidth, encodeHeight, 8); psnr < worst {
+					worst = psnr
+				}
+			}
+			t.Logf("worst %s 8x8-block PSNR %.2f dB over %d frames", f, worst, len(src))
+			if worst < minRGBPSNR {
+				t.Fatalf("worst PSNR %.2f dB is below %.0f dB", worst, minRGBPSNR)
+			}
+		})
 	}
 }
 
