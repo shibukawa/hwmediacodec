@@ -55,7 +55,8 @@ Known limitations:
   `WithDecodeOrder` has no effect there.
 - Input and output are Annex-B, one access unit per `Packet`; use
   `annexb.Reader` to split a raw elementary stream. Containers (MP4, MKV, TS)
-  are not parsed. AVCC/HVCC output is not offered yet.
+  are not parsed by the library; the `examples/container` package shows how
+  to bridge MP4 files with mp4ff. AVCC/HVCC output is not offered yet.
 - On an M3, 1080p H.264 with B-frames decodes at roughly 780 frames per
   second to NV12 in display order, 350 to BGRA and 250 to RGBA, including
   the copy; 1080p H.264 encodes at roughly 200 frames per second from NV12
@@ -251,6 +252,20 @@ layout of each format. `WithDecodeOrder()` returns frames as the hardware
 produces them, which is what a transcoder that keeps the original
 timestamps wants.
 
+## Examples
+
+The [`examples/`](examples/) directory is a third Go module with complete
+programs built on the library: an MP4 demuxer/muxer bridge
+(`examples/container`, on top of mp4ff), a video file converter that keeps
+timestamps and copies audio (`examples/convert`), and a keyframe thumbnail
+extractor (`examples/thumbnails`). See [examples/README.md](examples/README.md).
+
+```sh
+cd examples
+go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
+go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
+```
+
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
@@ -379,6 +394,7 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
+(cd examples && go test ./...)      # separate module: MP4 container tests (ffmpeg only) and sample end-to-end tests (hardware)
 ```
 
 Project knowledge (requirements, decisions, backend notes) lives in
