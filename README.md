@@ -3,18 +3,19 @@
 Hardware video decoding and encoding from Go, without cgo.
 
 The library loads the operating system's codec engines at run time
-(VideoToolbox on macOS today; Media Foundation, Intel VPL, VA-API and
-NVENC/NVDEC are planned for Windows and Linux) through
+(VideoToolbox on macOS and VA-API on Linux today; Media Foundation, Intel
+VPL and NVENC/NVDEC are planned) through
 [purego](https://github.com/ebitengine/purego), so `CGO_ENABLED=0 go build`
 works and the module cross-compiles from one machine.
 
-## Status (milestone 3)
+## Status
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
+| Linux | Intel VPL / NVDEC | planned | planned |
 | Windows | Media Foundation / NVENC | planned | planned |
-| Linux | Intel VPL / VA-API / NVDEC | planned | planned |
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -29,7 +30,7 @@ Encoder controls: target bitrate with VBR or CBR, constant quality, keyframe
 interval, forced keyframes, B-frames on/off, low-latency mode, profile, and
 in-band VPS/SPS/PPS in front of every keyframe.
 
-Known limitations of this milestone:
+Known limitations:
 
 - The reorder bound comes from the stream. H.264 streams whose SPS has no
   VUI `bitstream_restriction` (VideoToolbox's own encoder writes none) are
@@ -37,14 +38,14 @@ Known limitations of this milestone:
   7 at 320x240), as the standard requires, unless they signal that they
   cannot reorder (`pic_order_cnt_type` 2, intra-only, constrained
   profiles). Latency-sensitive callers decoding such streams should use
-  `WithDecodeOrder`. H.264 `memory_management_control_operation` 5 and
-  HEVC `pic_output_flag` 0 are not interpreted.
+  `WithDecodeOrder`. HEVC `pic_output_flag` 0 is not interpreted.
 - RGBA and BGRA conversion is done by VideoToolbox: RGBA output is BGRA
   swapped in Go (about 1 ms per 1080p frame), since VideoToolbox rejects
   RGBA as a destination. Untagged streams are converted with the matrix
   VideoToolbox assumes (BT.601 for standard definition in our tests).
   RGB input is converted with BT.709 and the stream is tagged accordingly.
-  Alpha is 255 on output and ignored on input.
+  Alpha is 255 on output and ignored on input. The VA-API backend offers
+  NV12 only for now; requesting RGBA or BGRA there reports `ErrUnsupported`.
 - Input and output are Annex-B, one access unit per `Packet`; use
   `annexb.Reader` to split a raw elementary stream. Containers (MP4, MKV, TS)
   are not parsed. AVCC/HVCC output is not offered yet.
@@ -58,6 +59,23 @@ Known limitations of this milestone:
   it does not observe context cancellation once the call has started.
 - Intel Macs are out of scope; the VideoToolbox backend requires hardware
   engines unless `WithSoftwareFallback` is given.
+- VA-API decoding: H.264 only for now (HEVC is next); progressive frames
+  only (interlaced field pictures are rejected with `ErrUnsupported`); 8-bit
+  4:2:0 only. VA-API is a slice-level API, so the bitstream parsing,
+  picture order count, reference marking and reference list construction
+  run in Go (`internal/h264`), and the driver only accelerates the slice
+  data. `Send` returns `ErrAgain` when more than a few decoded frames are
+  waiting for `Receive`; drain and resend.
+- VA-API encoding: H.264 only, I and P frames with one reference;
+  `WithBFrames` is accepted but no B-frames are produced yet. Pictures must
+  have even width and height. `WithQuality` maps to a constant quantiser
+  (CQP), `WithBitrate` to the driver's VBR or CBR rate control (the HRD
+  buffer is one second of the peak rate), and without either a constant
+  quantiser of 26 is used. The SPS, PPS and slice headers are written in Go
+  and handed to the driver as packed headers when it accepts them (Intel
+  requires this; Mesa generates its own otherwise), so every keyframe
+  carries in-band SPS/PPS. Each picture is encoded synchronously inside
+  `Send`.
 
 ## Usage
 
@@ -75,7 +93,7 @@ for {
 		break
 	}
 	if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
-		return err
+		return err // errors.Is(err, hwmediacodec.ErrAgain): Receive first, then resend
 	}
 	for {
 		f, err := dec.Receive(ctx)
@@ -191,19 +209,32 @@ go run ./cmd/hwmediacodec encode -size 1920x1080 -format rgba -o out.h264 input.
 go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc input.h264
 ```
 
+### Linux notes
+
+The VA-API backend opens the first DRM render node (`/dev/dri/renderD128`
+and up) that libva can initialise. Set `HWMEDIACODEC_VAAPI_DEVICE` to a
+render node path to pick a GPU on multi-GPU machines. The user needs read
+and write access to the node (usually the `render` or `video` group), and
+`libva2`, `libva-drm2` and the GPU's VA driver (`mesa-va-drivers` for AMD,
+`intel-media-va-driver` for Intel) must be installed. `Probe` reports no
+VA-API capability, rather than an error, when any of these is missing.
+
 ## Testing
 
-Unit tests run everywhere. The decode and encode conformance tests run on
-Apple Silicon and use the `ffmpeg` and `ffprobe` commands as the reference
-(they are skipped when ffmpeg is not installed). Decoded B-frame streams
-must match ffmpeg's output frame for frame in display order; the reorder
-logic is also checked without hardware, against the presentation
-timestamps ffmpeg writes into an MP4 of the same stream. RGB output and
-input are compared to ffmpeg's conversion by block-averaged PSNR (the two
-converters interpolate chroma differently) and RGBA must be the exact
-mirror of BGRA. Encoded streams are decoded by ffmpeg and compared to the
-source by PSNR, and their keyframe and B-frame structure is checked with
-ffprobe.
+Unit tests run everywhere. The H.264 parser, decoded-picture-buffer logic
+and header writer are checked against ffmpeg's own view of the stream
+(`trace_headers`, `-debug mmco`, `-debug pict`), so they run on any machine
+with ffmpeg; the reorder logic is also checked without hardware, against
+the presentation timestamps ffmpeg writes into an MP4 of the same stream.
+The decode and encode conformance tests run where `Probe` reports a
+hardware engine (Apple Silicon, or Linux with a VA-API driver) and use
+`ffmpeg` and `ffprobe` as the reference. Decoded B-frame streams must match
+ffmpeg's output frame for frame in display order. RGB output and input are
+compared to ffmpeg's conversion by block-averaged PSNR (the two converters
+interpolate chroma differently) and RGBA must be the exact mirror of BGRA.
+Encoded streams are decoded by ffmpeg and compared to the source by PSNR,
+and their keyframe and B-frame structure is checked with ffprobe. All of
+them are skipped when ffmpeg is not installed.
 
 ```sh
 go test ./...

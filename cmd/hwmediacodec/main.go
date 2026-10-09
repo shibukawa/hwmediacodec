@@ -48,7 +48,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hwmediacodec:", err)
+		fmt.Fprintln(os.Stderr, "hwmediacodec:", strings.TrimPrefix(err.Error(), "hwmediacodec: "))
 		os.Exit(1)
 	}
 }
@@ -584,8 +584,20 @@ func decode(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
-			return fmt.Errorf("send: %w", err)
+		for {
+			err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts})
+			if errors.Is(err, hwmediacodec.ErrAgain) {
+				// The decoder needs its output drained before it can take
+				// more input.
+				if err := drain(); err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("send: %w", err)
+			}
+			break
 		}
 		pts += 3000
 		if err := drain(); err != nil {

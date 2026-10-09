@@ -1,5 +1,3 @@
-//go:build darwin
-
 package hwmediacodec_test
 
 import (
@@ -19,11 +17,66 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
-func requireAppleSilicon(t *testing.T) {
+// requireHardware skips the test unless Probe reports a hardware engine for
+// c in the given direction on this machine. Intel Macs are out of scope.
+func requireHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) {
 	t.Helper()
-	if runtime.GOARCH != "arm64" {
-		t.Skip("hardware decode tests target Apple Silicon (Intel Macs are out of scope)")
+	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
+		t.Skip("hardware tests target Apple Silicon (Intel Macs are out of scope)")
 	}
+	caps, err := hwmediacodec.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	for _, cap := range caps {
+		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
+			return
+		}
+	}
+	t.Skipf("no hardware %s %s on this machine (%s/%s)", c, dir, runtime.GOOS, runtime.GOARCH)
+}
+
+// hasHardware reports whether Probe lists a hardware engine for c.
+func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) bool {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
+		return false
+	}
+	caps, err := hwmediacodec.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	for _, cap := range caps {
+		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
+			return true
+		}
+	}
+	return false
+}
+
+func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {
+	t.Helper()
+	requireHardware(t, c, hwmediacodec.Decode)
+}
+
+func requireHardwareEncode(t *testing.T, c hwmediacodec.Codec) {
+	t.Helper()
+	requireHardware(t, c, hwmediacodec.Encode)
+}
+
+// newDecoderOrSkip opens a decoder and skips the test when the backend on
+// this machine does not offer the requested configuration (for example an
+// output format a backend does not convert to).
+func newDecoderOrSkip(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.DecoderOption) hwmediacodec.Decoder {
+	t.Helper()
+	dec, err := hwmediacodec.NewDecoder(context.Background(), c, opts...)
+	if errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Skipf("configuration not available on this backend: %v", err)
+	}
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+	return dec
 }
 
 // decodeAll feeds every access unit of an Annex-B stream and returns the
@@ -125,7 +178,7 @@ func compareChecksums(t *testing.T, got, want [][32]byte) {
 }
 
 func TestDecodeH264MatchesReference(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.H264)
 	s := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 60)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 
@@ -147,7 +200,6 @@ func TestDecodeH264MatchesReference(t *testing.T) {
 // back in display order: the frame sequence must equal ffmpeg's output
 // frame for frame.
 func TestDecodeBFramesMatchesReference(t *testing.T) {
-	requireAppleSilicon(t)
 	cases := []struct {
 		codec   hwmediacodec.Codec
 		bframes int
@@ -157,6 +209,7 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%s-bf%d", c.codec, c.bframes), func(t *testing.T) {
+			requireHardwareDecode(t, c.codec)
 			s := testutil.GenerateStreamBFrames(t, c.codec, 320, 240, 60, c.bframes)
 			want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 			dec, err := hwmediacodec.NewDecoder(context.Background(), c.codec)
@@ -173,7 +226,7 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 // TestDecodeOrderOption checks that WithDecodeOrder returns the frames as
 // the hardware produces them: the same set of frames, not in display order.
 func TestDecodeOrderOption(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.H264)
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264, hwmediacodec.WithDecodeOrder())
@@ -206,19 +259,18 @@ func TestDecodeOrderOption(t *testing.T) {
 // channel order still fails by a wide margin (BT.709 scores 25 dB, swapped
 // channels 4 dB). RGBA and BGRA must be exact mirrors of each other.
 func TestDecodeRGBA(t *testing.T) {
-	requireAppleSilicon(t)
 	const minPSNR = 30.0
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		if !hasHardware(t, c, hwmediacodec.Decode) {
+			continue
+		}
 		s := testutil.GenerateStreamBFrames(t, c, 320, 240, 20, 2)
 		stream := testutil.ReadFile(t, s.Path)
 		decoded := map[hwmediacodec.PixelFormat][]decodedFrame{}
 		for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
 			t.Run(c.String()+"-"+f.String(), func(t *testing.T) {
 				want := testutil.ReferenceFrames(t, s.Path, c, f, s.Width, s.Height)
-				dec, err := hwmediacodec.NewDecoder(context.Background(), c, hwmediacodec.WithOutputFormat(f))
-				if err != nil {
-					t.Fatalf("NewDecoder: %v", err)
-				}
+				dec := newDecoderOrSkip(t, c, hwmediacodec.WithOutputFormat(f))
 				defer dec.Close()
 				got := decodeFrames(t, dec, c, stream, f)
 				if len(got) != len(want) {
@@ -265,7 +317,7 @@ func sortChecksums(s [][32]byte) {
 }
 
 func TestDecodeHEVCMatchesReference(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.HEVC)
 	s := testutil.GenerateStream(t, hwmediacodec.HEVC, 320, 240, 60)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 
@@ -279,7 +331,7 @@ func TestDecodeHEVCMatchesReference(t *testing.T) {
 }
 
 func TestDecodeParameterSetChange(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.H264)
 	s1 := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 30)
 	s2 := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 30)
 	want := append(testutil.ReferenceNV12(t, s1.Path, s1.Codec, s1.Width, s1.Height),
@@ -308,7 +360,7 @@ func TestDecodeParameterSetChange(t *testing.T) {
 }
 
 func TestFlushResumesAtKeyframe(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.H264)
 	s := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 20)
 	data := testutil.ReadFile(t, s.Path)
 	r := annexb.NewReader(bytes.NewReader(data), hwmediacodec.H264)
@@ -382,7 +434,7 @@ func TestFlushResumesAtKeyframe(t *testing.T) {
 }
 
 func TestInvalidData(t *testing.T) {
-	requireAppleSilicon(t)
+	requireHardwareDecode(t, hwmediacodec.H264)
 	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264)
 	if err != nil {
 		t.Fatal(err)

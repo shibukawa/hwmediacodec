@@ -40,6 +40,14 @@ func TestProbe(t *testing.T) {
 				t.Errorf("expected videotoolbox hardware %s for %s on Apple Silicon", k.dir, k.codec)
 			}
 		}
+	} else if runtime.GOOS == "linux" {
+		// With no GPU or no libva the list is empty; with one, every entry
+		// comes from the VA-API backend.
+		for _, c := range caps {
+			if c.Backend != "vaapi" || !c.Hardware {
+				t.Errorf("unexpected capability on linux: %+v", c)
+			}
+		}
 	} else if runtime.GOOS != "darwin" && len(caps) != 0 {
 		t.Errorf("no backend exists for %s yet, but Probe returned %d capabilities", runtime.GOOS, len(caps))
 	}

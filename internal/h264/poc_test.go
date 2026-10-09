@@ -31,7 +31,7 @@ func mustHex(s string) []byte {
 	return b
 }
 
-func TestParseSPS(t *testing.T) {
+func TestParseX264SPS(t *testing.T) {
 	s, err := ParseSPS(x264SPS)
 	if err != nil {
 		t.Fatal(err)
@@ -39,8 +39,8 @@ func TestParseSPS(t *testing.T) {
 	if s.ID != 0 || s.ProfileIDC != 100 || s.LevelIDC != 13 || s.ChromaFormatIDC != 1 {
 		t.Errorf("id/profile/level/chroma = %d/%d/%d/%d", s.ID, s.ProfileIDC, s.LevelIDC, s.ChromaFormatIDC)
 	}
-	if s.POCType != 0 || s.Log2MaxPOCLsb < 4 {
-		t.Errorf("poc type %d, log2 max lsb %d", s.POCType, s.Log2MaxPOCLsb)
+	if s.PicOrderCntType != 0 || s.Log2MaxPicOrderCntLsb < 4 {
+		t.Errorf("poc type %d, log2 max lsb %d", s.PicOrderCntType, s.Log2MaxPicOrderCntLsb)
 	}
 	if s.Width() != 320 || s.Height() != 240 || !s.FrameMbsOnly {
 		t.Errorf("size %dx%d frame_mbs_only=%v", s.Width(), s.Height(), s.FrameMbsOnly)
@@ -48,46 +48,29 @@ func TestParseSPS(t *testing.T) {
 	if s.MaxNumRefFrames != 4 {
 		t.Errorf("max_num_ref_frames = %d", s.MaxNumRefFrames)
 	}
-	if !s.HasBitstreamRestriction || s.MaxNumReorderFrames != 2 || s.MaxDecFrameBuffering != 4 {
-		t.Errorf("bitstream restriction %v reorder=%d dpb=%d", s.HasBitstreamRestriction, s.MaxNumReorderFrames, s.MaxDecFrameBuffering)
+	if !s.VUI.BitstreamRestriction || s.VUI.MaxNumReorderFrames != 2 || s.VUI.MaxDecFrameBuffering != 4 {
+		t.Errorf("bitstream restriction %v reorder=%d dpb=%d", s.VUI.BitstreamRestriction, s.VUI.MaxNumReorderFrames, s.VUI.MaxDecFrameBuffering)
 	}
-	if !s.HasTiming || s.NumUnitsInTick != 1 || s.TimeScale != 60 {
-		t.Errorf("timing %v %d/%d", s.HasTiming, s.NumUnitsInTick, s.TimeScale)
+	if !s.VUI.TimingInfoPresent || s.VUI.NumUnitsInTick != 1 || s.VUI.TimeScale != 60 {
+		t.Errorf("timing %v %d/%d", s.VUI.TimingInfoPresent, s.VUI.NumUnitsInTick, s.VUI.TimeScale)
 	}
 	if got := s.MaxReorderFrames(); got != 2 {
 		t.Errorf("MaxReorderFrames = %d, want 2", got)
 	}
 }
 
-func TestParsePPS(t *testing.T) {
-	p, err := ParsePPS(x264PPS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.ID != 0 || p.SPSID != 0 || p.BottomFieldPicOrderInFramePresent {
-		t.Errorf("pps = %+v", p)
-	}
-}
-
 func TestSliceHeadersAndPOC(t *testing.T) {
-	sps, err := ParseSPS(x264SPS)
-	if err != nil {
+	ps := NewParameterSets()
+	if _, err := ps.AddSPS(x264SPS); err != nil {
 		t.Fatal(err)
 	}
-	pps, err := ParsePPS(x264PPS)
-	if err != nil {
+	if err := ps.AddPPS(x264PPS); err != nil {
 		t.Fatal(err)
-	}
-	lookup := func(id uint32) (*PPS, *SPS) {
-		if id != 0 {
-			return nil, nil
-		}
-		return pps, sps
 	}
 	var st POCState
 	var pocs []int32
 	for i, hx := range x264Slices {
-		h, err := ParseSliceHeader(mustHex(hx), lookup)
+		h, sps, _, err := ParseSliceHeader(mustHex(hx), ps)
 		if err != nil {
 			t.Fatalf("slice %d: %v", i, err)
 		}
@@ -110,12 +93,12 @@ func TestSliceHeadersAndPOC(t *testing.T) {
 }
 
 func TestSliceHeaderErrors(t *testing.T) {
-	if _, err := ParseSliceHeader(mustHex("6764000d"), nil); err != ErrNotSlice {
-		t.Errorf("SPS as slice: %v", err)
+	ps := NewParameterSets()
+	if _, _, _, err := ParseSliceHeader(mustHex("6764000d"), ps); err == nil {
+		t.Error("SPS was accepted as a slice")
 	}
-	none := func(uint32) (*PPS, *SPS) { return nil, nil }
-	if _, err := ParseSliceHeader(mustHex(x264Slices[0]), none); err == nil {
-		t.Error("unknown PPS was accepted")
+	if _, _, _, err := ParseSliceHeader(mustHex(x264Slices[0]), ps); err != ErrMissingPPS {
+		t.Errorf("unknown PPS: %v", err)
 	}
 	if _, err := ParseSPS([]byte{0x67, 0x64}); err == nil {
 		t.Error("truncated SPS was accepted")
@@ -123,7 +106,7 @@ func TestSliceHeaderErrors(t *testing.T) {
 }
 
 func TestMaxReorderFramesWithoutVUI(t *testing.T) {
-	base := SPS{ProfileIDC: 100, LevelIDC: 13, POCType: 0, MaxNumRefFrames: 1, PicWidthInMbs: 20, PicHeightInMapUnits: 15, FrameMbsOnly: true}
+	base := SPS{ProfileIDC: 100, LevelIDC: 13, PicOrderCntType: 0, MaxNumRefFrames: 1, PicWidthInMbs: 20, PicHeightInMapUnits: 15, FrameMbsOnly: true}
 	cases := []struct {
 		name string
 		mod  func(*SPS)
@@ -132,12 +115,18 @@ func TestMaxReorderFramesWithoutVUI(t *testing.T) {
 		{"level 1.3 at 320x240", func(*SPS) {}, 7},
 		{"level 4.0 at 1080p", func(s *SPS) { s.LevelIDC = 40; s.PicWidthInMbs, s.PicHeightInMapUnits = 120, 68 }, 4},
 		{"level 5.1 at 320x240 caps at 16", func(s *SPS) { s.LevelIDC = 51 }, 16},
-		{"poc type 2", func(s *SPS) { s.POCType = 2 }, 0},
+		{"poc type 2", func(s *SPS) { s.PicOrderCntType = 2 }, 0},
 		{"intra only", func(s *SPS) { s.MaxNumRefFrames = 0 }, 0},
 		{"constrained high", func(s *SPS) { s.ConstraintFlags = 0x10 }, 0},
 		{"baseline keeps dpb", func(s *SPS) { s.ProfileIDC = 66; s.ConstraintFlags = 0x10 }, 7},
-		{"vui wins", func(s *SPS) { s.HasBitstreamRestriction = true; s.MaxNumReorderFrames = 1; s.MaxDecFrameBuffering = 3 }, 1},
-		{"vui capped by dpb", func(s *SPS) { s.HasBitstreamRestriction = true; s.MaxNumReorderFrames = 5; s.MaxDecFrameBuffering = 3 }, 3},
+		{"vui wins", func(s *SPS) {
+			s.VUIPresent, s.VUI.BitstreamRestriction = true, true
+			s.VUI.MaxNumReorderFrames, s.VUI.MaxDecFrameBuffering = 1, 3
+		}, 1},
+		{"vui capped by dpb", func(s *SPS) {
+			s.VUIPresent, s.VUI.BitstreamRestriction = true, true
+			s.VUI.MaxNumReorderFrames, s.VUI.MaxDecFrameBuffering = 5, 3
+		}, 3},
 	}
 	for _, c := range cases {
 		s := base
@@ -149,11 +138,11 @@ func TestMaxReorderFramesWithoutVUI(t *testing.T) {
 }
 
 func TestPOCType2AndWrap(t *testing.T) {
-	sps := &SPS{Log2MaxFrameNum: 4, POCType: 2}
+	sps := &SPS{Log2MaxFrameNum: 4, PicOrderCntType: 2}
 	var st POCState
 	var pocs []int32
 	for i := 0; i < 20; i++ {
-		h := &SliceHeader{NalRefIDC: 1, FrameNum: uint32(i % 16), IDR: i == 0}
+		h := &SliceHeader{NALRefIdc: 1, FrameNum: uint32(i % 16), IDR: i == 0}
 		if i == 0 {
 			h.NALType = NALSliceIDR
 		}
@@ -166,16 +155,66 @@ func TestPOCType2AndWrap(t *testing.T) {
 	}
 
 	// POC type 0: the lsb wraps and the msb must follow.
-	sps = &SPS{Log2MaxFrameNum: 4, POCType: 0, Log2MaxPOCLsb: 4}
+	sps = &SPS{Log2MaxFrameNum: 4, PicOrderCntType: 0, Log2MaxPicOrderCntLsb: 4}
 	st.Reset()
 	pocs = nil
 	for i := 0; i < 12; i++ {
-		h := &SliceHeader{NalRefIDC: 1, POCLsb: uint32((2 * i) % 16), IDR: i == 0}
+		h := &SliceHeader{NALRefIdc: 1, PicOrderCntLsb: uint32((2 * i) % 16), IDR: i == 0}
 		pocs = append(pocs, st.Next(sps, h))
 	}
 	for i := 1; i < len(pocs); i++ {
 		if pocs[i] != pocs[i-1]+2 {
 			t.Fatalf("POC type 0 sequence %v is not monotonic across the lsb wrap", pocs)
+		}
+	}
+}
+
+// TestPOCStateMatchesDPB checks the lightweight POC state against the full
+// DPB implementation on synthetic sequences, including an MMCO 5 reset.
+func TestPOCStateMatchesDPB(t *testing.T) {
+	for _, pocType := range []uint32{0, 1, 2} {
+		sps := &SPS{Log2MaxFrameNum: 4, PicOrderCntType: pocType, Log2MaxPicOrderCntLsb: 5, MaxNumRefFrames: 4,
+			OffsetForRefFrame: []int32{2}, OffsetForNonRefPic: -1}
+		seq := []struct {
+			idr, ref bool
+			fn, lsb  uint32
+			mmco5    bool
+		}{
+			{idr: true, ref: true},
+			{ref: true, fn: 1, lsb: 4},
+			{ref: false, fn: 2, lsb: 2},
+			{ref: true, fn: 2, lsb: 8},
+			{ref: true, fn: 3, lsb: 12, mmco5: true},
+			{ref: true, fn: 1, lsb: 2},
+			{ref: false, fn: 2, lsb: 1},
+			{ref: true, fn: 2, lsb: 4},
+		}
+		d := NewDPB(nil)
+		var st POCState
+		for i, p := range seq {
+			h := &SliceHeader{IDR: p.idr, FrameNum: p.fn, PicOrderCntLsb: p.lsb, SliceType: SliceP, NumRefIdxL0Active: 1}
+			if p.idr {
+				h.NALType, h.SliceType = NALSliceIDR, SliceI
+			} else {
+				h.NALType = NALSlice
+			}
+			if p.ref {
+				h.NALRefIdc = 1
+			}
+			if p.mmco5 {
+				h.AdaptiveRefPicMarking = true
+				h.MMCOs = []MMCO{{Op: 5}}
+			}
+			pic, err := d.Start(sps, h, nil)
+			if err != nil {
+				t.Fatalf("poc type %d picture %d: %v", pocType, i, err)
+			}
+			if err := d.Finish(h); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := st.Next(sps, h), int32(pic.POC()); got != want {
+				t.Fatalf("poc type %d picture %d: POCState %d, DPB %d", pocType, i, got, want)
+			}
 		}
 	}
 }

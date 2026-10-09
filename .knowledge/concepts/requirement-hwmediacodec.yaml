@@ -169,13 +169,17 @@ capabilities:
       - qualcomm
     about: capability:hwmediacodec/backend-media-foundation
   backend/vaapi:
-    state: planned
+    state: partial
     scope:
       platform: linux
       gpu:
       - intel
       - amd
     about: capability:hwmediacodec/backend-vaapi
+    authority: inferred
+    evidence:
+      path: internal/vaapi/backend.go
+      note: H.264 decode and encode implemented 2026-10-09; hardware conformance pending (see milestone:linux-vaapi-h264-decode).
   backend/intel-vpl:
     state: planned
     scope:
@@ -613,9 +617,10 @@ open_questions:
     text: Tier 1 Linux covers Intel, AMD and NVIDIA. Intel (Gen12+, VPL) and NVIDIA (NVDEC/NVENC) have
       full-codec APIs; AMD only has slice-level VA-API, so the Go-side H.264/HEVC parser and DPB component
       is required for Tier 1. In which order are the Linux backends and the parser built?
-    state: deferred
-    resolution: Deferred until the Windows backend is done. Provisional order - Intel VPL and NVIDIA first
-      (no parser), then the Go parser/DPB plus VA-API for AMD and older Intel.
+    state: answered
+    resolution: Answered 2026-10-09 by the author - Linux AMD first, decoder first. The Go H.264 parser/DPB
+      and the VA-API backend were built right after M1 (before Windows, Intel VPL and NVIDIA); HEVC on VA-API
+      is the next Linux step.
   hls-packaging:
     text: HLS needs MPEG-TS or fMP4 segments and playlists. Companion package in this module, a separate
       module, or leave to existing Go libraries?
@@ -690,6 +695,10 @@ history:
     summary: 'M2 implemented and verified: VideoToolbox H.264/HEVC encode via purego with the streaming
       controls; ffmpeg-decodable output at ~50 dB PSNR; batch transcode end to end; cross-builds with
       CGO_ENABLED=0.'
+  linux-decode-implemented-2026-10-09:
+    summary: 'Linux AMD decoder slice (out of roadmap order, requested by the author) implemented: Go H.264 parser + DPB (internal/h264) and the
+      VA-API backend (internal/vaapi) via purego; host oracle tests and a libva container smoke test
+      pass; AMD hardware conformance pending.'
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
@@ -856,17 +865,21 @@ facts:
   support_tiers: See policy:support-tiers; Tier 1 hardware must pass acceptance before release, Tier 2
     is best effort.
   capability_notes:
-    decode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
-      bit-exact against ffmpeg on 320x240 and 1080p test streams.
+    decode/h264: implemented on darwin/apple-silicon (bit-exact against ffmpeg on 320x240 and 1080p
+      test streams) and on linux via VA-API (code complete 2026-10-09, parser/DPB verified against ffmpeg,
+      hardware conformance pending); other Tier 1 platforms pending.
     decode/hevc: implemented on darwin/apple-silicon only; bit-exact against ffmpeg (libx265 source).
     backend/videotoolbox: decode and encode for H.264/HEVC in NV12/RGBA/BGRA; AV1 pending.
-    api/display-order: implemented in Go for every decode-order backend (VideoToolbox today); verified
-      against ffmpeg frame for frame and against MP4 timestamps without hardware.
-    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); other backends
-      pending.
+    api/display-order: implemented in Go for every decode-order backend (VideoToolbox and VA-API); verified
+      against ffmpeg frame for frame and against MP4 timestamps without hardware. The reorder tracker uses
+      the full H.264 parser (internal/h264) and so also honours memory_management_control_operation 5.
+    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); VA-API and other
+      backends pending (NV12 only there).
     ebitengine/player: separate module ebitenvideo; verified headless on darwin/apple-silicon.
-    encode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
-      VBR/CBR/quality, GOP, forced keyframes, B-frames, low latency, profiles; verified against ffmpeg/ffprobe.
+    encode/h264: implemented on darwin/apple-silicon (VBR/CBR/quality, GOP, forced keyframes, B-frames,
+      low latency, profiles; verified against ffmpeg/ffprobe) and on linux via VA-API (code complete
+      2026-10-09, I/P only, header writer verified against ffmpeg, hardware verification pending); other
+      Tier 1 platforms pending.
     encode/hevc: implemented on darwin/apple-silicon only; Main profile; same control set and verification
       as H.264.
 relations:
@@ -918,3 +931,5 @@ relations:
   to: milestone:m2-darwin-encode
 - relation: delivered_milestone
   to: milestone:display-order-rgba
+- relation: active_milestone
+  to: milestone:linux-vaapi-h264-decode

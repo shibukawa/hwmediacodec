@@ -1,5 +1,3 @@
-//go:build darwin
-
 package hwmediacodec_test
 
 import (
@@ -180,7 +178,7 @@ func checkQuality(t *testing.T, path string, c hwmediacodec.Codec, src [][]byte,
 
 func newTestEncoder(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.EncoderOption) hwmediacodec.Encoder {
 	t.Helper()
-	requireAppleSilicon(t)
+	requireHardwareEncode(t, c)
 	opts = append([]hwmediacodec.EncoderOption{hwmediacodec.WithFrameRate(testFPS)}, opts...)
 	enc, err := hwmediacodec.NewEncoder(context.Background(), c, encodeWidth, encodeHeight, opts...)
 	if err != nil {
@@ -305,8 +303,17 @@ func TestEncodeRGBAInput(t *testing.T) {
 	for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
 		t.Run(f.String(), func(t *testing.T) {
 			src := testutil.GenerateRawFrames(t, f, encodeWidth, encodeHeight, 30)
-			enc := newTestEncoder(t, hwmediacodec.H264, hwmediacodec.WithBitrate(1_500_000), hwmediacodec.WithInputFormat(f))
+			requireHardwareEncode(t, hwmediacodec.H264)
 			ctx := context.Background()
+			enc, err := hwmediacodec.NewEncoder(ctx, hwmediacodec.H264, encodeWidth, encodeHeight,
+				hwmediacodec.WithFrameRate(testFPS), hwmediacodec.WithBitrate(1_500_000), hwmediacodec.WithInputFormat(f))
+			if errors.Is(err, hwmediacodec.ErrUnsupported) {
+				t.Skipf("%s input not available on this backend: %v", f, err)
+			}
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			defer enc.Close()
 			var pkts []hwmediacodec.Packet
 			for i, raw := range src {
 				fr := testutil.RawFrame(raw, f, encodeWidth, encodeHeight, int64(i)*testPTSStep)
@@ -517,7 +524,6 @@ func TestEncodeProfiles(t *testing.T) {
 			}
 		})
 	}
-	requireAppleSilicon(t)
 	_, err := hwmediacodec.NewEncoder(context.Background(), hwmediacodec.HEVC, encodeWidth, encodeHeight, hwmediacodec.WithProfile(hwmediacodec.ProfileBaseline))
 	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 		t.Errorf("HEVC baseline: got %v, want ErrUnsupported", err)
