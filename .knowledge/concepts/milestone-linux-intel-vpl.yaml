@@ -184,9 +184,9 @@ verification:
     - path: internal/vpl/pixels.go
       input_hash: 2608790206cbeae5fb7f099df41646ae2e1b10c597f9687864f121f6d7f4dd84
     - path: internal/vpl/paramsets.go
-      input_hash: ee448189026b57087f98dc147b2a9728d0cd12a60344e52253c1a71dc74c47a5
+      input_hash: 30de04f52b14b8e5d122572a85661a554384a15b88dbb6337feaed4bb6e41261
     - path: internal/vpl/vpl_test.go
-      input_hash: 13304f510d7b7f36ce6b413a11d83fdaf0a9cd4e5e09b57f40e3d2f5082f2199
+      input_hash: 7433d1e91cf1ad5f35b0f33f2aa77528e1ebc731fc674c0cb1627606d9280edd
     - path: backends_test.go
       input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
     - path: hwmediacodec.go
@@ -220,9 +220,9 @@ verification:
     - path: internal/vpl/pixels.go
       input_hash: 2608790206cbeae5fb7f099df41646ae2e1b10c597f9687864f121f6d7f4dd84
     - path: internal/vpl/paramsets.go
-      input_hash: ee448189026b57087f98dc147b2a9728d0cd12a60344e52253c1a71dc74c47a5
+      input_hash: 30de04f52b14b8e5d122572a85661a554384a15b88dbb6337feaed4bb6e41261
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
   hardware-encode:
     state: not_run
     method: integration
@@ -243,7 +243,7 @@ verification:
         order; the CBR/VBR thresholds came from VideoToolbox.'
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 34f1349f1c675135c8870295ab067fa3384eb19c85dba66501e0962c7caa4a42
+      input_hash: 0d0d615d40bd92a3d979eddc3d0e26ba83e862efb68c068d0c4c8f935dc2b855
     - path: internal/vpl/encparam.go
       input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
     - path: internal/vpl/session.go
@@ -251,7 +251,7 @@ verification:
     - path: internal/vpl/backend.go
       input_hash: a67e205ed2332fa2b958527c327240f864bbaf4cb785754c2e05d14680af5367
     - path: encode_test.go
-      input_hash: 48e5161518774573e80e0754703f6de8b8625b1bee269ceb9a5a63158c336763
+      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   cross-build-check:
     state: passed
     method: static
@@ -282,7 +282,7 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
     - path: hwmediacodec.go
       input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
 facts:

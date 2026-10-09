@@ -18,7 +18,7 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media/samplebuilder"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )

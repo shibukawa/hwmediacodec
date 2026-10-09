@@ -279,7 +279,7 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 4acde3cfb471da98db052951ad8c595d34b09b7460953aa0d4380552267b8bc9
+      input_hash: c49a37cc127ca8eec5c1b7f807e0570a601d5e7c2bf4d906da7739d3e0753e8b
     - path: internal/nvidia/backend.go
       input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
     - path: internal/nvidia/device.go
@@ -297,7 +297,7 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 83816d15527726c908f9944e74e309c150838c9e488d22995b73cf1b892325cd
+      input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
     - path: internal/nvidia/backend.go
       input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
 history:

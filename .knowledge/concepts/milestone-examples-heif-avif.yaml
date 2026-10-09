@@ -93,7 +93,7 @@ verification:
       note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
     basis:
     - path: image/heif/encode.go
-      input_hash: cc60f37566ff86df9b0adedb78ddc6ebef50b0a5762b65c8badbe5c3902ee51e
+      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
     - path: image/heif/decode.go
       input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
     - path: image/heif/transform.go
@@ -155,7 +155,7 @@ verification:
       note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
     basis:
     - path: image/heif/encode.go
-      input_hash: cc60f37566ff86df9b0adedb78ddc6ebef50b0a5762b65c8badbe5c3902ee51e
+      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
     - path: image/heif/heif_test.go
       input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
 open_questions:

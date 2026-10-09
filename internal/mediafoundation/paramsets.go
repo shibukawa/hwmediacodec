@@ -3,7 +3,7 @@ package mediafoundation
 import (
 	"sort"
 
-	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 

@@ -274,7 +274,7 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 34f1349f1c675135c8870295ab067fa3384eb19c85dba66501e0962c7caa4a42
+      input_hash: 0d0d615d40bd92a3d979eddc3d0e26ba83e862efb68c068d0c4c8f935dc2b855
     - path: internal/vpl/encparam.go
       input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
     - path: internal/vpl/backend.go

@@ -198,7 +198,7 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
     - path: hwmediacodec.go
       input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
   windows-loader-run:
@@ -239,13 +239,13 @@ verification:
         runs on the Go thread''s system stack (2 MB reserve in a non-cgo Windows binary).'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 4acde3cfb471da98db052951ad8c595d34b09b7460953aa0d4380552267b8bc9
+      input_hash: c49a37cc127ca8eec5c1b7f807e0570a601d5e7c2bf4d906da7739d3e0753e8b
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
   hardware-encode-windows:
     state: not_run
     method: integration
@@ -262,11 +262,11 @@ verification:
         not Direct3D.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 83816d15527726c908f9944e74e309c150838c9e488d22995b73cf1b892325cd
+      input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
     - path: internal/nvidia/sys/nvenc.go
       input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
     - path: encode_test.go
-      input_hash: 48e5161518774573e80e0754703f6de8b8625b1bee269ceb9a5a63158c336763
+      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
 open_questions:
   hardware-verification:
     text: Does the backend work on a Windows machine with an NVIDIA GPU? Nothing above the compile-time

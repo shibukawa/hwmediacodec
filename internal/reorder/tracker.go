@@ -6,7 +6,7 @@
 package reorder
 
 import (
-	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/hevc"

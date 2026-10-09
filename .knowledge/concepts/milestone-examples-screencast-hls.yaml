@@ -122,7 +122,7 @@ verification:
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
     - path: mediacontainer/mp4/sample.go
-      input_hash: d9f3d899ad1483f07ba7e5190d86d0b06ff5e6dee5181b145a329d5616021f09
+      input_hash: 40b542631e95d2687f944532c0156206bb1d600801c5d0ee385f078515503ac4
     - path: mediacontainer/mp4/segmenter_test.go
       input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
   hls-server-test:

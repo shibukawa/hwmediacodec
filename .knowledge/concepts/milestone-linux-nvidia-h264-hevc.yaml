@@ -196,13 +196,13 @@ verification:
         min_num_decode_surfaces + 2 as the surface count.'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 4acde3cfb471da98db052951ad8c595d34b09b7460953aa0d4380552267b8bc9
+      input_hash: c49a37cc127ca8eec5c1b7f807e0570a601d5e7c2bf4d906da7739d3e0753e8b
     - path: internal/nvidia/backend.go
       input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
   hardware-encode:
     state: not_run
     method: integration
@@ -220,11 +220,11 @@ verification:
         conversion.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 83816d15527726c908f9944e74e309c150838c9e488d22995b73cf1b892325cd
+      input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
     - path: internal/nvidia/backend.go
       input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
     - path: encode_test.go
-      input_hash: 48e5161518774573e80e0754703f6de8b8625b1bee269ceb9a5a63158c336763
+      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   cross-build-check:
     state: passed
     method: static
@@ -258,9 +258,9 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: b844244e87c13871e9cc01a1b43a771e33aeebf815136916543681fd9cc0d93f
+      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
     - path: encode_test.go
-      input_hash: 48e5161518774573e80e0754703f6de8b8625b1bee269ceb9a5a63158c336763
+      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
 facts:
   steps:
   - internal/nvidia/sys - constants, GUIDs and struct mirrors of the SDK 11.1 headers with the struct

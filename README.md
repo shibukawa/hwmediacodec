@@ -14,7 +14,7 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | Import path | What it is |
 | --- | --- |
 | `github.com/shibukawa/hwmediacodec` | The codec API: `Probe`, `NewDecoder`, `NewEncoder`, packets and frames |
-| `.../bitstream/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
+| `.../encoding/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
 | `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets, fMP4 segmenter |
 | `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
 | `.../mediacontainer/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |

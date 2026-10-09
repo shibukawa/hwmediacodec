@@ -85,7 +85,7 @@ verification:
     - path: image/heif/decode.go
       input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
     - path: image/heif/encode.go
-      input_hash: cc60f37566ff86df9b0adedb78ddc6ebef50b0a5762b65c8badbe5c3902ee51e
+      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
     - path: image/heif/box.go
       input_hash: db3aeb6f678435445566b1e6afb3723357bd56883b62efb05ea9b692bd9c59a2
     - path: image/heif/transform.go

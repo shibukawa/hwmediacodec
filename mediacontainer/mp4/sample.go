@@ -9,7 +9,7 @@ import (
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 )
 
 // paramSets collects the VPS/SPS/PPS seen in Annex-B packets and turns
