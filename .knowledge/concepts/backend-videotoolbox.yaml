@@ -38,7 +38,7 @@ capabilities:
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id005
       path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
   decode/hevc:
     state: implemented
     about: capability:hwmediacodec/decode-hevc
@@ -79,7 +79,7 @@ capabilities:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
   encode/hevc:
     state: implemented
     about: capability:hwmediacodec/encode-hevc
@@ -103,7 +103,7 @@ capabilities:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -257,7 +257,7 @@ verification:
     authority: observed
     test: TestDecodeH264MatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeH264MatchesReference
     basis:
     - *id002
@@ -265,11 +265,11 @@ verification:
     - *id004
     - *id005
     - &id006
-      path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - &id007
       path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
     - &id008
       path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
@@ -279,7 +279,7 @@ verification:
     authority: observed
     test: TestDecodeHEVCMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeHEVCMatchesReference
     basis:
     - *id002
@@ -295,7 +295,7 @@ verification:
     authority: observed
     test: TestEncodeMatchesSource/h264
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeMatchesSource
       note: ffmpeg-decodable, ~50 dB luma PSNR, keyframes carry parameter sets
     basis:
@@ -308,11 +308,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   hevc-encode-reference:
@@ -321,7 +321,7 @@ verification:
     authority: observed
     test: TestEncodeMatchesSource/hevc
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeMatchesSource
       note: ffmpeg-decodable, ~50 dB luma PSNR, keyframes carry parameter sets
     basis:
@@ -334,11 +334,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
 history:

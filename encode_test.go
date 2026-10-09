@@ -176,11 +176,18 @@ func checkQuality(t *testing.T, path string, c hwmediacodec.Codec, src [][]byte,
 	}
 }
 
+// newTestEncoder opens a hardware encoder. A control the backend on this
+// machine does not offer (constant quality, CBR, B-frames, low latency, a
+// profile) makes the test skip rather than fail, so a run reports what the
+// driver supports.
 func newTestEncoder(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.EncoderOption) hwmediacodec.Encoder {
 	t.Helper()
 	requireHardwareEncode(t, c)
 	opts = append([]hwmediacodec.EncoderOption{hwmediacodec.WithFrameRate(testFPS)}, opts...)
 	enc, err := hwmediacodec.NewEncoder(context.Background(), c, encodeWidth, encodeHeight, opts...)
+	if errors.Is(err, hwmediacodec.ErrUnsupported) && len(opts) > 1 {
+		t.Skipf("encoder control not supported on this backend: %v", err)
+	}
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}

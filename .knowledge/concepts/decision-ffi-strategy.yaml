@@ -109,9 +109,26 @@ facts:
     - The slice-level nature of VA-API cost a Go H.264 parser and DPB (about 1.5k lines plus tests), as
       predicted; it is reusable for other slice-level APIs and for display-order output.
     - Hardware execution still unverified at the time of writing.
+  evidence_from_m3:
+    date: '2026-10-09'
+    summary: 'Option B applied to Windows without cgo: golang.org/x/sys/windows lazy DLLs for mfplat.dll
+      and d3d11.dll, COM interfaces (IMFTransform, IMFAttributes, IMFSample, IMFDXGIBuffer,
+      IMFDXGIDeviceManager, ID3D11Device/Context/Texture2D/VideoDevice, ID3D10Multithread) called
+      through hand-written vtable structs with syscall.SyscallN. Cross-compiles and vets from macOS.'
+    blockers_hit: none at compile time; runtime unverified
+    notes:
+    - By-value GUID arguments (MFTEnumEx) differ per architecture (pointer to copy on x64, two
+      registers on ARM64) and need per-GOARCH wrappers.
+    - Struct sizes are asserted at compile time with unsafe.Sizeof array-length tricks; GUIDs, vtable
+      orders and HRESULTs were extracted from the mingw-w64 headers rather than typed from memory.
+    - "No Go-implemented COM object was needed: the synchronous decoder MFTs avoid IMFAsyncCallback and
+      the asynchronous encoder MFTs are driven with IMFMediaEventGenerator::GetEvent instead of
+      BeginGetEvent callbacks, so no syscall.NewCallback-backed vtable exists yet."
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
+- relation: tested_by
+  to: milestone:windows-media-foundation
 - relation: informed_by
   to: analysis:go-hw-codec-feasibility
 - relation: informed_by
@@ -127,3 +144,6 @@ history:
   validated-linux-2026-10-09:
     summary: The Linux decoder slice confirmed purego dlopen/callbacks against libva on Linux without cgo (container smoke
       test; hardware pending).
+  applied-windows-2026-10-09:
+    summary: M3 applied the decision to Windows (x/sys/windows + raw COM vtables); no cgo escape hatch
+      was needed.
