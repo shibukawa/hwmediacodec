@@ -185,7 +185,8 @@ facts:
       GetVideoParam when a keyframe lacks them, DTS = input PTS of the k-th frame minus
       (GopRefDist - 1) frame durations.
     limitations:
-    - 8-bit 4:2:0 NV12 only in both directions (no RGBA/BGRA, no 10-bit); no AV1.
+    - 8-bit 4:2:0 NV12 only in both directions (RGBA/BGRA through the conversion in Go, no 10-bit);
+      no AV1.
     - WithDecodeOrder has no effect; the runtime's own reorder delay applies.
     - Even picture dimensions for encoding; one synchronous operation per frame.
     - Needs libvpl (the legacy libmfx.so.1 dispatcher alone is not used); Linux only.

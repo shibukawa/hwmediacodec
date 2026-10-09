@@ -1,0 +1,210 @@
+id: milestone:decoder-rgb-conversion
+type: milestone
+title: RGBA/BGRA decoder output on the NV12-only backends (conversion in Go)
+summary: 'WithOutputFormat(RGBA|BGRA) works on every backend: where the backend decoder returns NV12
+  only (VA-API, NVDEC, Intel VPL, Media Foundation) NewDecoder opens it for NV12 and puts pixconv.Decoder
+  on top, which converts every frame in Go with the matrix and range the stream declares. This is the
+  mirror of milestone:encoder-rgb-conversion and what ebitenvideo and the player, texture, thumbnails
+  and heif samples need outside macOS.'
+lifecycle: active
+authority: authored
+aliases:
+- pixconv decoder
+- NV12 to RGB conversion
+- output format rgba is not supported; use NV12
+- RGBA出力のソフトウェア変換
+scope:
+  milestone: decoder-rgb-conversion
+constraints:
+- 'Selection (hwmediacodec.newDecoder): every backend is asked with the caller''s format first; one
+  that answers ErrUnsupported for RGBA/BGRA is asked again for NV12. The stack is backend decoder,
+  then internal/reorder (unless the backend reorders itself or WithDecodeOrder was given), then
+  pixconv.Decoder outermost, so only frames that leave are converted. Backend order is kept;
+  VideoToolbox converts itself and is never wrapped.'
+- 'Colour (pixconv.ColorFor): the wrapper parses every new SPS it is sent (H.264 and HEVC, byte-compared
+  with the previous one) and takes matrix_coeffs and video_full_range_flag from the VUI: 1 and 7 are
+  BT.709, 4/5/6 BT.601, 9/10 BT.2020. A stream that names no matrix gets BT.709 when the picture is
+  wider than 704 or taller than 576 pixels and BT.601 otherwise - the rule VideoToolbox applies, so
+  that every backend shows the same colours.'
+- 'VideoToolbox rule, measured on an M3 on 2026-10-10 by comparing its RGBA output with all six
+  matrix/range conversions of its NV12 output: untagged 704x576, 704x480, 640x480 and 320x576 are BT.601;
+  708x480, 720x240, 720x480, 320x600, 320x720 and everything larger are BT.709; a named matrix (bt709,
+  smpte170m, bt2020nc) is followed at any size. VideoToolbox hands out video-range NV12 even for
+  full-range streams (it rescales), so its NV12 never needs the full-range path; the other backends
+  return the decoded samples as they are.'
+- 'Conversion (pixconv.NV12ToRGB): five 256-entry tables per matrix and range in 16.16 fixed point,
+  a clamp table instead of branches, every chroma sample colours its 2x2 block (nearest neighbour,
+  the dual of the encoder side''s 2x2 average), alpha 255, rows split into bands across GOMAXPROCS
+  goroutines for pictures of 256 rows or more.'
+- Converted frames live in Go memory taken from a sync.Pool inside the wrapper; Release returns the
+  buffer, also after Close and from any goroutine. The backend frame is released as soon as it is
+  converted.
+- Frames still inside the decoder when the stream switches to parameter sets with another colour description
+  are converted with the new one (the description is not tracked per picture).
+non_goals:
+- Bilinear chroma interpolation, SIMD or GPU conversion, a public option to override the matrix.
+- AV1 (only VideoToolbox decodes it and converts itself), 10-bit output.
+- Per-picture tracking of the colour description across a mid-stream change.
+acceptance:
+  conversion-exact:
+    text: The table conversion is within 1 of the floating-point equations for BT.601, BT.709 and BT.2020
+      in video and full range, for even and odd sizes, padded rows and pictures split across goroutines;
+      range ends and primaries map as expected; RGB to NV12 and back agrees within 2 for flat colours.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - pixconv-unit-test
+  stream-colour:
+    text: The wrapper follows the colour description of H.264 and HEVC parameter sets as they arrive,
+      falls back to the size rule without one, ignores broken parameter sets and other codecs, releases
+      the backend frame, and returns independent frames that outlive Close.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - pixconv-unit-test
+  selection:
+    text: An NV12-only backend gets the conversion outside the reorder layer (directly on the backend
+      for WithDecodeOrder or a backend that reorders itself); a backend with RGB output and NV12 requests
+      are passed through; backend order wins; an unavailable backend is skipped; a backend failure
+      is returned as is.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - selection-test
+  hardware-comparison:
+    text: Frames decoded by the hardware decoder to NV12 and converted in Go match the backend's own
+      RGBA output and ffmpeg's conversion within 30 dB 8x8-block PSNR, in the same display order,
+      for a stream that names its matrix and for untagged small and large pictures; RGBA is the exact
+      mirror of BGRA with alpha 255.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - videotoolbox-comparison-test
+  vaapi-path:
+    text: Through the real VA-API backend RGBA and BGRA frames are the BT.601 conversion of the NV12 frame
+      at the same place in display order, including a cropped HEVC stream.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - vaapi-fake-driver-test
+  windows-samples:
+    text: examples/player, texture and thumbnails run on Windows (Media Foundation or NVDEC) and on
+      Linux hardware with correct colours.
+    scope:
+      milestone: decoder-rgb-conversion
+    verified_by:
+    - hardware-run
+verification:
+  pixconv-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: decoder-rgb-conversion
+    test: TestNV12ToRGBMatchesReference, TestNV12ToRGBRange, TestRoundTrip, TestNV12ToRGBLeavesPaddingAlone,
+      TestColorFor, TestDecoderFollowsStreamColor, TestDecoderConvertsFrames
+    evidence:
+      path: internal/pixconv/yuv_test.go
+      locator: TestNV12ToRGBMatchesReference
+      note: go test -race; BenchmarkNV12ToRGB_1080p 0.76 ms per frame on an Apple M3 (8 threads), 2.9
+        ms on one; run 2026-10-10
+    basis:
+    - path: internal/pixconv/yuv.go
+      input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
+    - path: internal/pixconv/decoder.go
+      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+    - path: internal/pixconv/yuv_test.go
+      input_hash: d007b8a4d18c2d60082eec854cd1d6bd8e0aa59a3ee4c8c723c8af6cfdad4dcf
+  selection-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: decoder-rgb-conversion
+    test: TestNewDecoderConvertsRGB
+    evidence:
+      path: convert_test.go
+      locator: TestNewDecoderConvertsRGB
+      note: fake backends; run 2026-10-10
+    basis:
+    - path: hwmediacodec.go
+      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+    - path: convert_test.go
+      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+  videotoolbox-comparison-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: decoder-rgb-conversion
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeConvertedRGB
+    evidence:
+      path: convert_test.go
+      locator: TestDecodeConvertedRGB
+      note: 'VideoToolbox behind a wrapper that refuses RGB output, H.264 and HEVC with B-frames: worst
+        8x8-block PSNR 34.4-34.9 dB (320x240) and 39.2-39.8 dB (1280x720) against VideoToolbox''s own
+        RGBA, 41.1-45.8 dB against ffmpeg; a wrong matrix scores about 24 dB. Apple M3, ffmpeg with libx264
+        and libx265; run 2026-10-10'
+    basis:
+    - path: convert_test.go
+      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+    - path: internal/pixconv/yuv.go
+      input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
+    - path: internal/pixconv/decoder.go
+      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+  vaapi-fake-driver-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: decoder-rgb-conversion
+      platform: linux
+    test: TestFakeVAAPIDecodeRGB
+    evidence:
+      path: fakevaapi_linux_test.go
+      locator: TestFakeVAAPIDecodeRGB
+      note: scripts/vaapi_fake_driver_test.sh, all four driver personalities, linux/arm64 container; no
+        GPU involved; run 2026-10-10
+    basis:
+    - path: fakevaapi_linux_test.go
+      input_hash: 751c4b373ed8f6fc1400e22df3369b1e0eb60baa45f8784906c0ef1641a571bd
+    - path: hwmediacodec.go
+      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+  hardware-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: decoder-rgb-conversion
+    evidence:
+      note: 'Not run: no Windows machine and no Linux machine with a GPU was available. The conversion
+        and the selection are backend-independent Go and build for every target (scripts/crossbuild.sh);
+        what a hardware run adds is the NV12 frame layout each backend hands over and, for full-range
+        streams, that the backend returns the samples unscaled.'
+    basis:
+    - path: internal/pixconv/decoder.go
+      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+open_questions:
+- Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range NV12?
+  The wrapper assumes so; VideoToolbox is the one backend known to rescale.
+history:
+  delivered-2026-10-10:
+    summary: Delivered the day after the encoder side; conversion, colour selection and the VA-API path
+      are tested, the Windows and Linux hardware paths wait for a run.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:media-foundation
+- relation: uses_backend
+  to: backend:vaapi
+- relation: uses_backend
+  to: backend:intel-vpl
+- relation: uses_backend
+  to: backend:nvenc-nvdec
+- relation: depends_on
+  to: milestone:display-order-rgba
+- relation: follows
+  to: milestone:encoder-rgb-conversion

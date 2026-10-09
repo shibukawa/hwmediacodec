@@ -24,6 +24,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/hevc"
+	"github.com/shibukawa/hwmediacodec/internal/pixconv"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
@@ -253,6 +254,56 @@ func TestFakeVAAPIDecode(t *testing.T) {
 			}
 			t.Logf("up to %d reference pictures per picture", maxRefs)
 		})
+	}
+}
+
+// TestFakeVAAPIDecodeRGB asks for packed RGB frames, which the public API
+// converts from this backend's NV12: every frame must be the BT.601 video
+// range conversion (the streams name no matrix and are small) of the NV12
+// frame at the same place in display order.
+func TestFakeVAAPIDecodeRGB(t *testing.T) {
+	requireFakeVAAPI(t)
+	for _, s := range []struct {
+		codec        hwmediacodec.Codec
+		w, h, frames int
+	}{
+		{hwmediacodec.H264, 320, 240, 30},
+		{hwmediacodec.HEVC, 322, 242, 30},
+	} {
+		data := testutil.ReadFile(t, testutil.GenerateStreamBFrames(t, s.codec, s.w, s.h, s.frames, 2).Path)
+		decode := func(t *testing.T, f hwmediacodec.PixelFormat) []decodedFrame {
+			t.Helper()
+			dec, err := hwmediacodec.NewDecoder(context.Background(), s.codec, hwmediacodec.WithOutputFormat(f))
+			if err != nil {
+				t.Fatalf("NewDecoder: %v", err)
+			}
+			defer dec.Close()
+			frames := decodeFrames(t, dec, s.codec, data, f)
+			if len(frames) != s.frames {
+				t.Fatalf("decoded %d %s frames, want %d", len(frames), f, s.frames)
+			}
+			return frames
+		}
+		for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
+			t.Run(s.codec.String()+"/"+f.String(), func(t *testing.T) {
+				requireFakeVAAPI(t)
+				nv12 := decode(t, hwmediacodec.NV12)
+				rgb := decode(t, f)
+				want := make([]byte, 4*s.w*s.h)
+				for i := range rgb {
+					if rgb[i].width != s.w || rgb[i].height != s.h || rgb[i].pts != nv12[i].pts {
+						t.Fatalf("frame %d is %dx%d with PTS %d, the NV12 frame has PTS %d", i, rgb[i].width, rgb[i].height, rgb[i].pts, nv12[i].pts)
+					}
+					checkFakeFrame(t, i, nv12[i], s.w, s.h)
+					pix := nv12[i].pix
+					pixconv.NV12ToRGB(want, 4*s.w, pix[:s.w*s.h], s.w, pix[s.w*s.h:], (s.w+1)/2*2, s.w, s.h,
+						pixconv.Color{Matrix: pixconv.BT601}, f == hwmediacodec.BGRA)
+					if !bytes.Equal(rgb[i].pix, want) {
+						t.Fatalf("frame %d is not the BT.601 conversion of the NV12 frame", i)
+					}
+				}
+			})
+		}
 	}
 }
 

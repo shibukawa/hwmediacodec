@@ -15,10 +15,10 @@
 // Intel drivers), and on Windows (amd64 and arm64) through Media Foundation
 // (decoding with the Microsoft decoder transforms accelerated by Direct3D 11,
 // encoding with the vendor's hardware encoder transforms). Where the NVIDIA
-// driver is installed its backend is tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
-// return NV12 only on VA-API, NVDEC, Intel VPL and Media Foundation for now;
-// the VA-API, Intel VPL and Media Foundation encoders take NV12, so RGBA
-// and BGRA input is converted to it in Go on those backends).
+// driver is installed its backend is tried first. Raw frames are NV12, RGBA
+// or BGRA in CPU memory. VideoToolbox converts to and from the RGB formats
+// itself and NVENC takes them as input; everywhere else the library converts
+// in Go, so both formats work for decoding and encoding on every backend.
 // Decoded frames are returned in display order (see NewDecoder and
 // WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
 // natively, so WithDecodeOrder has no effect on those backends).
@@ -205,14 +205,33 @@ func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, e
 	if cfg.TimeScale <= 0 {
 		return nil, fmt.Errorf("hwmediacodec: time scale must be positive, got %d", cfg.TimeScale)
 	}
+	return newDecoder(ctx, backends(), cfg)
+}
+
+// newDecoder opens the decoder on the first candidate that supports cfg. A
+// backend that rejects packed RGB output is asked again for NV12 and, when
+// it accepts, gets the conversion in Go behind it.
+func newDecoder(ctx context.Context, candidates []codec.Backend, cfg codec.DecoderConfig) (Decoder, error) {
+	rgb := cfg.OutputFormat == RGBA || cfg.OutputFormat == BGRA
 	var unsupported error
-	for _, b := range backends() {
+	for _, b := range candidates {
 		d, err := b.NewDecoder(ctx, cfg)
+		convert := false
+		if rgb && errors.Is(err, ErrUnsupported) {
+			nv12 := cfg
+			nv12.OutputFormat = NV12
+			d, err = b.NewDecoder(ctx, nv12)
+			convert = err == nil
+		}
 		if err == nil {
 			if cfg.DisplayOrder {
 				if o, ok := d.(codec.DisplayOrderer); !ok || !o.OutputsDisplayOrder() {
-					return reorder.Wrap(d, c), nil
+					d = reorder.Wrap(d, cfg.Codec)
 				}
+			}
+			if convert {
+				// Outermost, so that only frames that leave are converted.
+				d = pixconv.WrapDecoder(d, cfg.Codec, cfg.OutputFormat)
 			}
 			return d, nil
 		}
@@ -225,7 +244,7 @@ func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, e
 	if unsupported != nil {
 		return nil, unsupported
 	}
-	return nil, &UnsupportedError{Codec: c, Direction: Decode, Reason: "no backend is available on this platform"}
+	return nil, &UnsupportedError{Codec: cfg.Codec, Direction: Decode, Reason: "no backend is available on this platform"}
 }
 
 // NewEncoder opens a hardware encoder for c at the given picture size on the
@@ -339,8 +358,10 @@ func WithTimeScale(unitsPerSecond int32) Option {
 // WithOutputFormat requests a pixel format for decoded frames: NV12 (the
 // default), RGBA or BGRA. RGBA and BGRA frames have one plane with rows of
 // exactly 4*Width bytes, ready for ebiten.Image.WritePixels or image.RGBA.
-// The backend converts; a backend without the conversion reports
-// ErrUnsupported.
+// The backend converts where it can; for a backend that returns NV12 only
+// the frames are converted in Go, with the colour matrix and range the
+// stream declares (for a stream that declares none, BT.709 for pictures
+// larger than 704x576 and BT.601 otherwise).
 func WithOutputFormat(f PixelFormat) DecoderOption {
 	return decoderOption(func(c *codec.DecoderConfig) { c.OutputFormat = f })
 }

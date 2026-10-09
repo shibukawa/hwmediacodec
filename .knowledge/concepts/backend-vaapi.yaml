@@ -388,7 +388,7 @@ verification:
       note: debian trixie container, libva 2.22, linux/arm64 and (emulated) linux/amd64, 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 3e9bd8fa8cb3ebbc2f29e6bd6b4043a03ffe1cd9e39587ab6e37783ad42332cd
+      input_hash: 751c4b373ed8f6fc1400e22df3369b1e0eb60baa45f8784906c0ef1641a571bd
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 1a7944caf1b0fb5a07b684811049bb2dd612bff6403453ae41875031398b6486
     - path: internal/vaapi/decoder.go

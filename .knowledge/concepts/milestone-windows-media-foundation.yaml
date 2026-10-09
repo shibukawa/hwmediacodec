@@ -392,8 +392,8 @@ facts:
       fromHNS rounds to nearest otherwise.
     display_order: the Microsoft decoders reorder natively; the decoder implements codec.DisplayOrderer
       so the public API does not wrap it in internal/reorder (milestone:display-order-rgba). Decode order
-      cannot be requested, so WithDecodeOrder has no effect on Windows. Output is NV12 only; the
-      RGBA/BGRA option of that milestone is not available on Windows yet.
+      cannot be requested, so WithDecodeOrder has no effect on Windows. The backend's output is NV12
+      only; RGBA/BGRA frames come from the conversion in Go (milestone:decoder-rgb-conversion).
     flush: MFT_MESSAGE_COMMAND_DRAIN, drain every frame into a pending queue, then
       NOTIFY_START_OF_STREAM before the next input, which is prefixed with stored VPS/SPS/PPS when
       it lacks them (annexb.ParameterSetID, shared with the VideoToolbox store).

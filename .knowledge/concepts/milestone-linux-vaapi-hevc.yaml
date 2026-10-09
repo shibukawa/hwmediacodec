@@ -241,7 +241,7 @@ verification:
         surface. The first run of the pre-existing H.264 backend code through libva.
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 3e9bd8fa8cb3ebbc2f29e6bd6b4043a03ffe1cd9e39587ab6e37783ad42332cd
+      input_hash: 751c4b373ed8f6fc1400e22df3369b1e0eb60baa45f8784906c0ef1641a571bd
     - path: scripts/vaapi_fake_driver_test.sh
       input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c

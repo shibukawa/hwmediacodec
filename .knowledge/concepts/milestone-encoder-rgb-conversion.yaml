@@ -37,8 +37,7 @@ constraints:
 - pixconv.Encoder converts into one reused NV12 buffer; that is safe because Encoder.Send copies the
   frame before it returns.
 non_goals:
-- NV12 to RGBA/BGRA for decoders (WithOutputFormat on VA-API, NVDEC, Intel VPL and Media Foundation still
-  reports ErrUnsupported; ebitenvideo and the player/texture/thumbnails samples need it there).
+- NV12 to RGBA/BGRA for decoders - delivered separately as milestone:decoder-rgb-conversion.
 - SIMD or GPU conversion, BT.601 or full-range variants, a public option to choose the matrix.
 - Rewriting the SPS of an encoder that ignores the colour description.
 acceptance:
@@ -114,9 +113,9 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
+      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
     - path: convert_test.go
-      input_hash: e3d73837d368b6e0ebea00945ab0c62a7346ebc05ab4c136a637e9993c075f6a
+      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
   videotoolbox-roundtrip-test:
     state: passed
     method: integration
@@ -134,7 +133,7 @@ verification:
         own RGB input; color_space bt709. Apple M3, ffmpeg; run 2026-10-09'
     basis:
     - path: convert_test.go
-      input_hash: e3d73837d368b6e0ebea00945ab0c62a7346ebc05ab4c136a637e9993c075f6a
+      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
@@ -154,7 +153,7 @@ verification:
         GPU involved; run 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 3e9bd8fa8cb3ebbc2f29e6bd6b4043a03ffe1cd9e39587ab6e37783ad42332cd
+      input_hash: 751c4b373ed8f6fc1400e22df3369b1e0eb60baa45f8784906c0ef1641a571bd
     - path: internal/vaapi/encoder.go
       input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
     - path: internal/vaapi/hevcenc.go
@@ -182,7 +181,6 @@ verification:
 open_questions:
 - Do the Intel, AMD and NVIDIA encoder MFTs copy MF_MT_YUV_MATRIX and friends into the VUI? If not, streams
   from Windows stay untagged and players guess (BT.709 for HD in browsers, BT.601 in ffmpeg).
-- NV12 to RGBA for the decoders of the same backends is the mirror of this milestone and still missing.
 history:
   delivered-2026-10-09:
     summary: Delivered after the webrtc sample failed on Windows; conversion, selection and the VA-API path
@@ -200,3 +198,5 @@ relations:
   to: milestone:display-order-rgba
 - relation: follows
   to: milestone:examples-webrtc
+- relation: followed_by
+  to: milestone:decoder-rgb-conversion

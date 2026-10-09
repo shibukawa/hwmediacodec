@@ -14,11 +14,11 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
-| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
-| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
+| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
+| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
+| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -47,7 +47,8 @@ Known limitations:
 - RGBA and BGRA conversion is done by VideoToolbox: RGBA output is BGRA
   swapped in Go (about 1 ms per 1080p frame), since VideoToolbox rejects
   RGBA as a destination. Untagged streams are converted with the matrix
-  VideoToolbox assumes (BT.601 for standard definition in our tests).
+  VideoToolbox assumes (BT.601 up to 704x576, BT.709 for larger pictures,
+  measured on an M3).
   RGB input is converted with BT.709 and the stream is tagged accordingly.
   Alpha is 255 on output and ignored on input.
 - The VA-API, Intel VPL and Media Foundation encoders take NV12 only, so
@@ -59,9 +60,16 @@ Known limitations:
   an `mfxExtVideoSignalInfo`, and Media Foundation gets the colour attributes
   on its media types; an encoder MFT that ignores them leaves the stream
   untagged, and players then guess the matrix from the picture size.
-- Decoders on the VA-API, NVDEC, Intel VPL and Media Foundation backends
-  return NV12 only for now; requesting RGBA or BGRA output there reports
-  `ErrUnsupported`.
+- The VA-API, NVDEC, Intel VPL and Media Foundation decoders return NV12
+  only, so for RGBA or BGRA output the library converts each frame in Go
+  after the backend (and after the reordering) has delivered it
+  (`internal/pixconv`, about 0.8 ms per 1080p frame on an Apple M3). The
+  matrix and the range follow the stream's VUI (BT.601, BT.709 or BT.2020,
+  video or full range); a stream that names no matrix gets BT.709 when the
+  picture is wider than 704 or taller than 576 pixels and BT.601 otherwise,
+  which is where VideoToolbox draws the line, so the colours are the same
+  on every backend. Every chroma sample colours its 2x2 block of pixels
+  (no chroma interpolation), and the frames live in Go memory.
 - On Windows the display order comes from the Media Foundation decoder
   itself, and on Linux with Intel VPL from the VPL runtime, so
   `WithDecodeOrder` has no effect there.
