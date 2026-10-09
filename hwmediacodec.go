@@ -9,19 +9,25 @@
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
-// Silicon) through VideoToolbox and on Windows (amd64 and arm64) through
-// Media Foundation (decoding with the Microsoft decoder transforms
-// accelerated by Direct3D 11, encoding with the vendor's hardware encoder
-// transforms); H.264 decoding and encoding on Linux through VA-API (AMD Mesa
-// and Intel drivers). Raw frames are NV12, RGBA or BGRA in CPU memory (NV12
-// only on VA-API and Media Foundation for now). Decoded frames are returned
-// in display order (see NewDecoder and WithDecodeOrder; the Media Foundation
-// decoders reorder natively, so WithDecodeOrder has no effect on Windows).
-// The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
-// streams in Ebitengine.
+// Silicon) through VideoToolbox, on Windows (amd64 and arm64) through Media
+// Foundation (decoding with the Microsoft decoder transforms accelerated by
+// Direct3D 11, encoding with the vendor's hardware encoder transforms), and
+// on Linux through NVDEC/NVENC (NVIDIA) and Intel VPL (Intel GPUs with a VPL
+// or Media SDK runtime); VA-API on Linux (AMD Mesa and Intel drivers) covers
+// H.264 decoding and encoding. Raw frames are NV12, RGBA or BGRA in CPU
+// memory (NV12 only on VA-API, Intel VPL and Media Foundation for now).
+// Decoded frames are returned in display order (see NewDecoder and
+// WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
+// natively, so WithDecodeOrder has no effect on them). The separate module
+// github.com/shibukawa/hwmediacodec/ebitenvideo plays streams in Ebitengine.
 //
-// On Linux the VA-API backend opens the first usable DRM render node; set
-// HWMEDIACODEC_VAAPI_DEVICE to a /dev/dri/renderD* path to choose a GPU.
+// On Linux the VA-API backend opens the first usable DRM render node and the
+// Intel VPL backend the first Intel one; set HWMEDIACODEC_VAAPI_DEVICE or
+// HWMEDIACODEC_VPL_DEVICE to a /dev/dri/renderD* path to choose a GPU. When
+// several backends can serve a request the first registered one wins (on
+// Linux: nvidia, vpl, vaapi); set HWMEDIACODEC_BACKENDS to a comma-separated
+// list of backend names, for example "vaapi" or "vaapi,vpl", to restrict and
+// reorder them.
 //
 // # Decoding
 //
@@ -64,6 +70,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/reorder"
@@ -119,12 +127,47 @@ var (
 // DefaultTimeScale is the PTS unit used when WithTimeScale is not given.
 const DefaultTimeScale int32 = 90000
 
+// backendsEnv names the environment variable that restricts the backends
+// Probe, NewDecoder and NewEncoder consider and sets their order: a
+// comma-separated list of backend names as reported in Capability.Backend
+// (for example "vaapi" to bypass Intel VPL on an Intel GPU). Unset or empty
+// means every backend in its built-in order.
+const backendsEnv = "HWMEDIACODEC_BACKENDS"
+
+// backends returns the backends to consult, honouring backendsEnv.
+func backends() []codec.Backend {
+	return selectBackends(codec.Backends(), os.Getenv(backendsEnv))
+}
+
+// selectBackends picks the backends named in list, in the order given
+// there. Names that match no backend are ignored.
+func selectBackends(all []codec.Backend, list string) []codec.Backend {
+	if strings.TrimSpace(list) == "" {
+		return all
+	}
+	out := []codec.Backend{}
+	seen := map[string]bool{}
+	for _, name := range strings.Split(list, ",") {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		for _, b := range all {
+			if b.Name() == name {
+				out = append(out, b)
+			}
+		}
+	}
+	return out
+}
+
 // Probe reports every codec/direction pair the registered backends can serve
 // on this machine. It returns an empty (non-nil) slice, not an error, when no
 // hardware engine is present.
 func Probe(ctx context.Context) ([]Capability, error) {
 	out := []Capability{}
-	for _, b := range codec.Backends() {
+	for _, b := range backends() {
 		caps, err := b.Probe(ctx)
 		if err != nil {
 			return out, fmt.Errorf("hwmediacodec: probe %s: %w", b.Name(), err)
@@ -152,7 +195,7 @@ func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, e
 		return nil, fmt.Errorf("hwmediacodec: time scale must be positive, got %d", cfg.TimeScale)
 	}
 	var unsupported error
-	for _, b := range codec.Backends() {
+	for _, b := range backends() {
 		d, err := b.NewDecoder(ctx, cfg)
 		if err == nil {
 			if cfg.DisplayOrder {
@@ -213,7 +256,7 @@ func NewEncoder(ctx context.Context, c Codec, width, height int, opts ...Encoder
 		return nil, fmt.Errorf("hwmediacodec: unknown rate control %s", cfg.RateControl)
 	}
 	var unsupported error
-	for _, b := range codec.Backends() {
+	for _, b := range backends() {
 		e, err := b.NewEncoder(ctx, cfg)
 		if err == nil {
 			return e, nil
