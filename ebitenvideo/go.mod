@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
-	github.com/shibukawa/hwmediacodec v0.0.0-20261009132643-b6692122ef4b
+	github.com/shibukawa/hwmediacodec v0.1.0
 )
 
 require (
