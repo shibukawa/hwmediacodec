@@ -138,6 +138,8 @@ open_questions:
       library only, depends on mp4.Segment), the HEIC/AVIF codec (examples/heif, mp4ff) or the WebRTC broadcaster
       (pion)?
     state: open
+    resolution: The HLS playlist followed on 2026-10-10 (milestone:mediacontainer-hls); heif is discussed
+      as image/heif, pending a standard-library-style API.
   ivf-annexb-placement:
     text: annexb and ivf sit at the module root while MP4 is under mediacontainer; should ivf move or
       be aliased there for consistency?

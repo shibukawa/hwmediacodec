@@ -28,6 +28,7 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -83,7 +84,7 @@ func main() {
 	if strings.EqualFold(*codecName, "hevc") {
 		codec = hwmediacodec.HEVC
 	}
-	playlist := NewPlaylist(*window, *segment)
+	playlist := hls.NewPlaylist(*window, *segment)
 	seg, err := mp4.NewSegmenter(codec, capture.TimeScale, *segment, playlist.SetInit, playlist.Add)
 	if err != nil {
 		log.Fatal(err)
@@ -99,7 +100,7 @@ func main() {
 		log.Fatal(err)
 	}
 	go func() {
-		if err := http.ListenAndServe(*addr, playlist); err != nil {
+		if err := http.ListenAndServe(*addr, withPage(playlist)); err != nil {
 			log.Fatal(err)
 		}
 	}()

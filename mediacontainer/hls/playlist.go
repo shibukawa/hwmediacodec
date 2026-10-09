@@ -1,9 +1,23 @@
-package main
+// Package hls serves encoder output as a live HLS stream. A Playlist keeps
+// a sliding window of the fMP4 segments an mp4.Segmenter cuts and is an
+// http.Handler for the media playlist, the init segment and the media
+// segments:
+//
+//	playlist := hls.NewPlaylist(6, 2*time.Second)
+//	seg, _ := mp4.NewSegmenter(codec, timeScale, 2*time.Second, playlist.SetInit, playlist.Add)
+//	// feed seg with encoder packets (it is a capture.Sink), then:
+//	http.Handle("/live/", playlist) // players open /live/index.m3u8
+//
+// Everything stays in memory; nothing is written to disk. Safari plays
+// the stream natively, other browsers through hls.js or another MSE
+// player.
+package hls
 
 import (
 	"fmt"
 	"math"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,8 +27,8 @@ import (
 )
 
 // Playlist keeps a sliding window of fMP4 segments in memory and serves
-// them as a live HLS stream: /index.m3u8, /init.mp4, /seg_N.m4s and a
-// player page at /.
+// them as a live HLS stream: index.m3u8, init.mp4 and seg_N.m4s. It is
+// safe for concurrent use.
 type Playlist struct {
 	window int
 	target time.Duration
@@ -25,7 +39,10 @@ type Playlist struct {
 	ended bool
 }
 
-// NewPlaylist keeps the last window segments.
+// NewPlaylist keeps the last window segments (at least three, the minimum
+// a live playlist should list). target is the nominal segment length, the
+// same as the Segmenter's; EXT-X-TARGETDURATION grows with the longest
+// segment in the window.
 func NewPlaylist(window int, target time.Duration) *Playlist {
 	if window < 3 {
 		window = 3
@@ -86,14 +103,17 @@ func (p *Playlist) M3U8() string {
 	return b.String()
 }
 
-// ServeHTTP implements http.Handler.
+// ServeHTTP implements http.Handler. It answers by the last element of
+// the request path (index.m3u8, init.mp4, seg_N.m4s), so the playlist can
+// be mounted under any prefix; the URIs inside the playlist are relative.
+// The playlist answers 503 until the first segment exists. Responses
+// carry Access-Control-Allow-Origin: * so that a player page on another
+// origin can fetch them.
 func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	name := path.Base(r.URL.Path)
 	switch {
-	case r.URL.Path == "/" || r.URL.Path == "/index.html":
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(indexHTML))
-	case r.URL.Path == "/index.m3u8":
+	case name == "index.m3u8":
 		p.mu.RLock()
 		ready := p.init != nil && len(p.segs) > 0
 		p.mu.RUnlock()
@@ -104,7 +124,7 @@ func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write([]byte(p.M3U8()))
-	case r.URL.Path == "/init.mp4":
+	case name == "init.mp4":
 		p.mu.RLock()
 		data := p.init
 		p.mu.RUnlock()
@@ -114,8 +134,8 @@ func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "video/mp4")
 		w.Write(data)
-	case strings.HasPrefix(r.URL.Path, "/seg_") && strings.HasSuffix(r.URL.Path, ".m4s"):
-		n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/seg_"), ".m4s"))
+	case strings.HasPrefix(name, "seg_") && strings.HasSuffix(name, ".m4s"):
+		n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, "seg_"), ".m4s"))
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -140,27 +160,3 @@ func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
-
-const indexHTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>hwmediacodec HLS</title>
-<style>body{margin:0;background:#111;color:#ddd;font:14px system-ui}video{width:100vw;max-height:90vh;background:#000}p{margin:8px}</style>
-</head><body>
-<video id="v" controls autoplay muted playsinline></video>
-<p id="s">loading…</p>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
-<script>
-const v = document.getElementById('v'), s = document.getElementById('s'), src = 'index.m3u8';
-const forceHlsjs = location.search.includes('hlsjs');      // ?hlsjs forces the MSE path
-let player = '';
-if (!forceHlsjs && v.canPlayType('application/vnd.apple.mpegurl')) { // Safari: native HLS
-  v.src = src; player = 'native HLS';
-} else if (window.Hls && Hls.isSupported()) {                 // everyone else: hls.js over MSE
-  const h = new Hls({liveSyncDurationCount: 2, maxBufferLength: 4});
-  h.loadSource(src); h.attachMedia(v); player = 'hls.js';
-  h.on(Hls.Events.ERROR, (e, d) => { player = 'hls.js error: ' + d.details; });
-} else {
-  player = 'this browser can play neither native HLS nor MSE';
-}
-setInterval(() => { s.textContent = player + '  position ' + v.currentTime.toFixed(1) + ' s' + (v.paused ? '  (paused)' : ''); }, 500);
-</script></body></html>
-`

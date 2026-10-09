@@ -32,6 +32,8 @@ RENAMES = {
     "examples/container/segmenter_test.go": "mediacontainer/mp4/segmenter_test.go",
     "examples/container/videofile_test.go": "mediacontainer/mp4/videofile_test.go",
     "examples/container/assets_test.go": "examples/assets/assets_test.go",
+    "examples/hls/server.go": "mediacontainer/hls/playlist.go",
+    "examples/hls/server_test.go": "mediacontainer/hls/playlist_test.go",
 }
 root = sys.argv[1]
 apply = "--apply" in sys.argv

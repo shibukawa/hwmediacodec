@@ -366,6 +366,33 @@ What the package takes care of:
   segment, each starting at a keyframe. It needs PTS == DTS, so encode
   without B-frames.
 
+## Live HLS
+
+`github.com/shibukawa/hwmediacodec/mediacontainer/hls` serves those
+segments as a live HLS stream. A `Playlist` keeps a sliding window of them
+in memory (nothing is written to disk) and is an `http.Handler` for the
+media playlist, the init segment and the media segments:
+
+```go
+playlist := hls.NewPlaylist(6, 2*time.Second)             // six segments of two seconds
+seg, _ := mp4.NewSegmenter(hwmediacodec.H264, timeScale, 2*time.Second, playlist.SetInit, playlist.Add)
+// seg.WritePacket(p) for every encoder packet; seg is a capture.Sink too
+http.Handle("/live/", playlist)                            // players open /live/index.m3u8
+// at the end
+seg.Close()
+playlist.End()                                             // EXT-X-ENDLIST
+```
+
+- Set the encoder's keyframe interval to the segment length (segments are
+  cut at keyframes) and encode without B-frames (`WithLowLatency`).
+- The handler answers by the last path element (`index.m3u8`, `init.mp4`,
+  `seg_N.m4s`), so it can be mounted under any prefix; it answers 503 until
+  the first segment exists and sends `Access-Control-Allow-Origin: *`.
+- Safari plays the stream natively; other browsers need hls.js or another
+  MSE player (`examples/hls` has such a page). HEVC plays in Safari only.
+  Latency is a few seconds, which is what plain HLS gives;
+  `examples/webrtc` is the low-latency path.
+
 ## Screen recording
 
 `github.com/shibukawa/hwmediacodec/capture` is a package of the core
@@ -605,8 +632,9 @@ them.
 The `mediacontainer/mp4` tests need only ffmpeg and ffprobe: they compare
 sample tables, presentation times and decoded frame checksums with
 ffprobe's view of the same files and feed ffmpeg-made streams through the
-segmenter. The `capture` tests and the recorder-to-MP4 test need a hardware
-encoder and skip otherwise.
+segmenter, and the `mediacontainer/hls` test lets ffprobe play the served
+playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
+hardware encoder and skip otherwise.
 
 ```sh
 go test ./...

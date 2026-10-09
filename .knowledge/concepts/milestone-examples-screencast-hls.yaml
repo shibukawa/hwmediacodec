@@ -133,15 +133,15 @@ verification:
       milestone: examples-screencast-hls
     test: TestPlaylistServesLiveHLS, TestPlaylistSlidingWindow
     evidence:
-      path: examples/hls/server_test.go
+      path: mediacontainer/hls/playlist_test.go
       locator: TestPlaylistServesLiveHLS
       note: httptest server fed through the segmenter; ffprobe over HTTP sees h264 160x120 150 frames;
         run 2026-10-09
     basis:
-    - path: examples/hls/server.go
-      input_hash: 920b97e192bd30d37071aa7e9802f69133675cfc3adbe090bea3e6d47277b63a
-    - path: examples/hls/server_test.go
-      input_hash: 78c2f156242e32ab1a9cc19b3af2df160db1cffc023bd4e7f5068e043219e53d
+    - path: mediacontainer/hls/playlist.go
+      input_hash: 9fded29e107a4cfc436dc2bcfe868c465ae2a33e2bbcbca80cbeb29566bcb40f
+    - path: mediacontainer/hls/playlist_test.go
+      input_hash: 21c8493bf65b16d84abd3b3d3a43ef4d8f545b9949430f6de61d5fd5236116e4
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
   hls-live-run:
@@ -162,9 +162,9 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 9e939ea512216fb1dbf996612e7f12ed95f0f0cfd630a567d7792c4b27e61c71
-    - path: examples/hls/server.go
-      input_hash: 920b97e192bd30d37071aa7e9802f69133675cfc3adbe090bea3e6d47277b63a
+      input_hash: 7cf7a75316c6164297b61b5dc59c535afaf7910fde8d3e7bfecb1d3d4a47a572
+    - path: mediacontainer/hls/playlist.go
+      input_hash: 9fded29e107a4cfc436dc2bcfe868c465ae2a33e2bbcbca80cbeb29566bcb40f
   record-run:
     state: passed
     method: manual
@@ -216,7 +216,8 @@ history:
     summary: screencast.Recorder left the examples module for the core module as capture.Recorder (milestone:capture-package);
       NewMP4File became CreateVideoFile of the MP4 package and the MP4 acceptance test moved there; the
       package itself (container, with the Segmenter) became mediacontainer/mp4 in the core module on 2026-10-10
-      (milestone:mediacontainer-mp4).
+      (milestone:mediacontainer-mp4), and the Playlist of examples/hls/server.go became mediacontainer/hls
+      (milestone:mediacontainer-hls); the sample keeps the player page (examples/hls/page.go).
 relations:
 - relation: implements_part_of
   to: requirement:hwmediacodec

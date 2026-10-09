@@ -40,7 +40,7 @@ have no program of their own.
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
-| [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server); opens the player page |
+| [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (`mp4.Segmenter` + `hls.Playlist` from the core module); opens the player page |
 | [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream in a window of the video's aspect ratio, with pause, seeking and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
@@ -106,8 +106,8 @@ rec.Close()                  // flushes the encoder, finishes the file
 
 - `mp4.CreateVideoFile` (`mediacontainer/mp4`) is an MP4 file with one video track
   (`record`, and `-record` of `texture`).
-- `mp4.Segmenter` cuts the packets into fMP4 segments for the HLS
-  playlist server (`hls`).
+- `mp4.Segmenter` cuts the packets into fMP4 segments for
+  `hls.Playlist` (`hls`).
 - The broadcaster in `webrtc` hands each access unit to a pion track.
 
 ## The fireworks scene
@@ -163,9 +163,11 @@ go run ./hls -segment 1s -bitrate 2M -open=false
 The fireworks show, encoded with a keyframe interval equal to the segment
 length and `WithLowLatency`, cut by `mp4.Segmenter` into CMAF/fMP4
 segments (init segment with the parameter sets, then one `moof`+`mdat` per
-segment, each starting at a keyframe) and served from memory with a
-sliding-window playlist (`#EXT-X-MAP`, `#EXT-X-MEDIA-SEQUENCE`). The page
-at `/` plays natively in Safari and through hls.js (MSE) elsewhere;
+segment, each starting at a keyframe) and served from memory by
+`hls.Playlist` (`mediacontainer/hls` in the core module, a sliding-window
+playlist with `#EXT-X-MAP` and `#EXT-X-MEDIA-SEQUENCE`). The sample itself
+only adds the player page at `/`, which plays natively in Safari and
+through hls.js (MSE) elsewhere;
 `/?hlsjs` forces hls.js. Latency is a few seconds, which is what plain HLS
 gives; the WebRTC sample is the low-latency path. HEVC (`-codec hevc`)
 plays in Safari only.
@@ -314,9 +316,9 @@ cd examples
 go test ./...
 ```
 
-The HLS server and WebRTC broadcaster tests need only ffmpeg and ffprobe:
-they feed ffmpeg-made streams through the segmenter and the WebRTC track
-and let ffprobe play the served playlist over HTTP.
+The WebRTC broadcaster test needs only ffmpeg and ffprobe: it feeds an
+ffmpeg-made stream through the WebRTC track. (The HLS playlist test moved
+to the core module with the package.)
 The convert, thumbnails and heif tests also need a hardware codec and skip
 otherwise; they check codec, frame count, PSNR against the source, copied
 audio and identical presentation times. (The MP4 demuxer, muxer and

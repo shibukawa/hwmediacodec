@@ -1,4 +1,4 @@
-package main
+package hls_test
 
 import (
 	"io"
@@ -10,15 +10,16 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // feed runs the access units of an ffmpeg-made file through a Segmenter
 // into the playlist, so the server is tested without a hardware encoder.
-func feed(t *testing.T, p *Playlist, target time.Duration) string {
+func feed(t *testing.T, p *hls.Playlist, target time.Duration) string {
 	t.Helper()
-	src := testutil.GenerateMP4(t, t.TempDir(), testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 150, BFrames: 0, GOP: 15})
+	src := mp4test.GenerateMP4(t, t.TempDir(), mp4test.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 150, BFrames: 0, GOP: 15})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -56,8 +57,8 @@ func get(t *testing.T, url string) (int, string, []byte) {
 }
 
 func TestPlaylistServesLiveHLS(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	p := NewPlaylist(10, time.Second)
+	mp4test.RequireFFmpeg(t)
+	p := hls.NewPlaylist(10, time.Second)
 	srv := httptest.NewServer(p)
 	defer srv.Close()
 
@@ -87,8 +88,8 @@ func TestPlaylistServesLiveHLS(t *testing.T) {
 	if code, _, _ := get(t, srv.URL+"/seg_42.m4s"); code != 404 {
 		t.Errorf("missing segment answered %d", code)
 	}
-	if code, ctype, body := get(t, srv.URL+"/"); code != 200 || !strings.HasPrefix(ctype, "text/html") || !strings.Contains(string(body), "hls.js") {
-		t.Errorf("player page: %d %s", code, ctype)
+	if code, _, _ := get(t, srv.URL+"/"); code != 404 {
+		t.Errorf("unknown path answered %d", code)
 	}
 
 	// ffmpeg plays the finished stream end to end over HTTP.
@@ -107,11 +108,33 @@ func TestPlaylistServesLiveHLS(t *testing.T) {
 }
 
 func TestPlaylistSlidingWindow(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	p := NewPlaylist(3, time.Second)
+	mp4test.RequireFFmpeg(t)
+	p := hls.NewPlaylist(3, time.Second)
 	feed(t, p, time.Second)
 	m3u8 := p.M3U8()
 	if !strings.Contains(m3u8, "#EXT-X-MEDIA-SEQUENCE:3") || strings.Contains(m3u8, "seg_2.m4s") || !strings.Contains(m3u8, "seg_5.m4s") {
 		t.Errorf("window of 3 after 5 segments:\n%s", m3u8)
+	}
+}
+
+// TestPlaylistMountedUnderPrefix serves the playlist below a path prefix:
+// the handler goes by the last path element and the playlist's URIs are
+// relative.
+func TestPlaylistMountedUnderPrefix(t *testing.T) {
+	mp4test.RequireFFmpeg(t)
+	p := hls.NewPlaylist(10, time.Second)
+	mux := http.NewServeMux()
+	mux.Handle("/live/cam1/", p)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	feed(t, p, time.Second)
+	if code, ctype, _ := get(t, srv.URL+"/live/cam1/index.m3u8"); code != 200 || ctype != "application/vnd.apple.mpegurl" {
+		t.Errorf("playlist: %d %s", code, ctype)
+	}
+	if code, _, _ := get(t, srv.URL+"/live/cam1/init.mp4"); code != 200 {
+		t.Errorf("init: %d", code)
+	}
+	if code, _, _ := get(t, srv.URL+"/live/cam1/seg_2.m4s"); code != 200 {
+		t.Errorf("segment: %d", code)
 	}
 }
