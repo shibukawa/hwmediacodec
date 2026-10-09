@@ -98,6 +98,17 @@ facts:
     - Callbacks with struct-by-value parameters are avoided by truncating the parameter list.
     - Struct-by-pointer (CMSampleTimingInfo, callback record) works as plain Go structs with matching
       layout.
+  evidence_from_linux_decode:
+    date: '2026-10-09'
+    summary: 'Option B holds on Linux: libva and libva-drm dlopen through purego with CGO_ENABLED=0
+      (purego fakecgo runtime), 30 entry points bind on Debian bookworm libva 2.17 (arm64 container),
+      purego.NewCallback supplies the vaSetErrorCallback/vaSetInfoCallback handlers, and struct-by-pointer
+      VA buffers are plain Go structs whose layout is asserted against clang offsetof values.'
+    blockers_hit: none
+    notes:
+    - The slice-level nature of VA-API cost a Go H.264 parser and DPB (about 1.5k lines plus tests), as
+      predicted; it is reusable for other slice-level APIs and for display-order output.
+    - Hardware execution still unverified at the time of writing.
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
@@ -113,3 +124,6 @@ history:
       on windows); FFmpeg stays a test oracle and a possible optional module.
   validated-2026-10-09:
     summary: M1 implementation confirmed the purego approach on the first platform.
+  validated-linux-2026-10-09:
+    summary: The Linux decoder slice confirmed purego dlopen/callbacks against libva on Linux without cgo (container smoke
+      test; hardware pending).

@@ -3,32 +3,41 @@
 Hardware video decoding and encoding from Go, without cgo.
 
 The library loads the operating system's codec engines at run time
-(VideoToolbox on macOS today; Media Foundation, Intel VPL, VA-API and
-NVENC/NVDEC are planned for Windows and Linux) through
+(VideoToolbox on macOS and VA-API on Linux today; Media Foundation, Intel
+VPL and NVENC/NVDEC are planned) through
 [purego](https://github.com/ebitengine/purego), so `CGO_ENABLED=0 go build`
 works and the module cross-compiles from one machine.
 
-## Status (milestone 1)
+## Status
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC (NV12, CPU memory) | not yet |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264 (NV12, CPU memory) | not yet |
+| Linux | Intel VPL / NVDEC | planned | planned |
 | Windows | Media Foundation / NVENC | planned | planned |
-| Linux | Intel VPL / VA-API / NVDEC | planned | planned |
 
-Known limitations of this milestone:
+Known limitations:
 
-- Frames are returned in decode order. Streams with B-frames decode
-  correctly (every frame matches the reference) but arrive out of display
-  order; the caller must reorder by PTS until the planned Go-side reorder
-  buffer lands. VideoToolbox's temporal-processing flag did not reorder in
-  our tests, so this cannot be delegated to the OS.
+- Frames are returned in decode order on every backend. Streams with
+  B-frames decode correctly (every frame matches the reference) but arrive
+  out of display order; the caller must reorder by PTS until the planned
+  Go-side reorder buffer lands. (The H.264 picture order count is now
+  computed in Go for the VA-API backend, so the reorder buffer is the next
+  step.)
 - Input is Annex-B, one access unit per `Packet`; use `annexb.Reader` to
   split a raw elementary stream. Containers (MP4, MKV, TS) are not parsed.
 - Output is NV12 in CPU memory. On an M3, 1080p H.264 decodes at roughly
   800 frames per second including the copy.
-- Intel Macs are out of scope; the VideoToolbox backend requires a hardware
+- VideoToolbox: Intel Macs are out of scope; the backend requires a hardware
   decoder unless `WithSoftwareFallback` is given.
+- VA-API: H.264 only for now (HEVC is next); progressive frames only
+  (interlaced field pictures are rejected with `ErrUnsupported`); 8-bit
+  4:2:0 only. VA-API is a slice-level API, so the bitstream parsing,
+  picture order count, reference marking and reference list construction
+  run in Go (`internal/h264`), and the driver only accelerates the slice
+  data. `Send` returns `ErrAgain` when more than a few decoded frames are
+  waiting for `Receive`; drain and resend.
 
 ## Usage
 
@@ -44,7 +53,7 @@ for {
 		break
 	}
 	if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
-		return err
+		return err // errors.Is(err, hwmediacodec.ErrAgain): Receive first, then resend
 	}
 	for {
 		f, err := dec.Receive(ctx)
@@ -65,11 +74,24 @@ go run ./cmd/hwmediacodec probe
 go run ./cmd/hwmediacodec decode -hash input.h264
 ```
 
+### Linux notes
+
+The VA-API backend opens the first DRM render node (`/dev/dri/renderD128`
+and up) that libva can initialise. Set `HWMEDIACODEC_VAAPI_DEVICE` to a
+render node path to pick a GPU on multi-GPU machines. The user needs read
+and write access to the node (usually the `render` or `video` group), and
+`libva2`, `libva-drm2` and the GPU's VA driver (`mesa-va-drivers` for AMD,
+`intel-media-va-driver` for Intel) must be installed. `Probe` reports no
+VA-API capability, rather than an error, when any of these is missing.
+
 ## Testing
 
-Unit tests run everywhere. The decode conformance tests run on Apple Silicon
-and use the `ffmpeg` command as a reference decoder (they are skipped when it
-is not installed):
+Unit tests run everywhere. The H.264 parser and decoded-picture-buffer
+logic are checked against ffmpeg's own view of the stream (`trace_headers`,
+`-debug mmco`, `-debug pict`), so they run on any machine with ffmpeg. The
+decode conformance tests run where `Probe` reports a hardware decoder
+(Apple Silicon, or Linux with a VA-API driver) and compare every frame with
+ffmpeg's software decoder; they are skipped when ffmpeg is not installed:
 
 ```sh
 go test ./...

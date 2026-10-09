@@ -8,10 +8,13 @@
 //
 // # Status
 //
-// Milestone 1 implements H.264 and HEVC decoding on macOS (Apple Silicon)
-// through VideoToolbox. Decoded frames are returned in NV12 in CPU memory, in
-// decode order. Encoding and the Windows and Linux backends are not
-// implemented yet.
+// H.264 and HEVC decoding on macOS (Apple Silicon) through VideoToolbox, and
+// H.264 decoding on Linux through VA-API (AMD Mesa and Intel drivers).
+// Decoded frames are returned in NV12 in CPU memory, in decode order.
+// Encoding and the Windows backends are not implemented yet.
+//
+// On Linux the VA-API backend opens the first usable DRM render node; set
+// HWMEDIACODEC_VAAPI_DEVICE to a /dev/dri/renderD* path to choose a GPU.
 //
 // # Usage
 //

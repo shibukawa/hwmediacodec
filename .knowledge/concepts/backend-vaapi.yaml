@@ -4,7 +4,7 @@ title: VA-API / libva (Linux, Intel and AMD)
 summary: 'The Linux hardware video acceleration API for Intel (iHD) and AMD (Mesa radeonsi) drivers. Slice-level:
   the application parses the bitstream and manages reference frames; the driver accelerates decoding/encoding
   of slices.'
-lifecycle: proposed
+lifecycle: active
 authority: inferred
 aliases:
 - VA-API
@@ -17,8 +17,25 @@ scope:
   - amd
 capabilities:
   decode/h264:
-    state: planned
+    state: implemented
     about: capability:hwmediacodec/decode-h264
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/decoder.go
+      note: Code complete (2026-10-09) and verified against ffmpeg oracles on the host; the hardware
+        conformance test has not yet run on an AMD machine, hence authority inferred.
+    verified_by:
+    - h264-parser-oracle
+    - dpb-oracle
+    - linux-symbol-binding
+    - h264-reference-linux
   decode/hevc:
     state: planned
     about: capability:hwmediacodec/decode-hevc
@@ -89,8 +106,124 @@ facts:
     claim: AMF will no longer be included in the Radeon Software for Linux release; AMF users are advised
       to transition to VA-API / Mesa Multimedia.
   support_tier: tier1 (Linux AMD, and Intel generations below Gen12)
+  implementation:
+    package: internal/vaapi (backend.go, display.go, decoder.go, h264fill.go) over internal/vaapi/sys
+      (purego bindings, struct layouts checked by layout_test.go against clang offsetof output) and
+      internal/h264 (SPS/PPS/slice-header parser, POC, frame_num gaps, reference marking, reference
+      list construction).
+    device: opens /dev/dri/renderD128..143 (or HWMEDIACODEC_VAAPI_DEVICE) with syscall.Open, vaGetDisplayDRM,
+      vaInitialize; one VADisplay per decoder; libva info/error callbacks installed so nothing is printed
+      to stderr.
+    sequence: vaCreateConfig(profile, VLD, RT_FORMAT_YUV420) + vaCreateSurfaces(NV12) + vaCreateContext(VA_PROGRESSIVE)
+      per SPS; pool = max_num_ref_frames + 1 + 4 output slack + 1 shared dummy surface for non-existing
+      (frame_num gap) frames; recreated when size, profile or reference count changes (at an IDR).
+    per_picture: VAPictureParameterBufferH264 + VAIQMatrixBufferH264 (raster-order lists with fall-back
+      rules A/B resolved in Go) + one VASliceParameterBufferH264/VASliceDataBufferH264 pair per slice
+      (raw NAL incl. header, slice_data_bit_offset in the unescaped domain, as ffmpeg does); vaBeginPicture/vaRenderPicture/vaEndPicture;
+      buffers destroyed after vaEndPicture.
+    output: decode order; Receive does vaSyncSurface, then vaDeriveImage (if it yields NV12) or vaCreateImage+vaGetImage,
+      vaMapBuffer, crop per SPS frame_cropping, copy into pooled Go buffers.
+    backpressure: Send returns ErrAgain when no free surface or when a sequence change finds frames still
+      pending Receive.
+    profile_mapping: profile_idc 66 -> ConstrainedBaseline/Main/High, 77 -> Main/High, else High; first
+      profile with a VLD entrypoint wins.
+    limitations:
+    - H.264 only (HEVC parser/RPS and VA HEVC buffers are the next step).
+    - Progressive frames only; field_pic_flag=1 is rejected with ErrUnsupported (MBAFF frames are fine).
+    - 8-bit 4:2:0 only (NV12); no FMO, no data partitioning, redundant slices are dropped.
+  host_verification_2026-10-09:
+    parser: every SPS/PPS/slice-header syntax element equals ffmpeg trace_headers on six x264 streams
+      (CAVLC/CABAC, POC types 0 and 2, B-pyramid, 16 refs, weighted prediction, cqm=jvt, 3 slices,
+      ref list modification, MMCO 1, short GOPs, open GOP); slice_data_bit_offset equals ffmpeg's header
+      end.
+    dpb: reference sets after every reference picture equal ffmpeg -debug mmco; POC equals ffmpeg -debug
+      pict (up to ffmpeg's constant 65536 offset).
+    linux: CGO_ENABLED=0 linux/arm64 test binaries run in a Debian bookworm container; with libva2 2.17
+      installed every symbol binds (TestLoad) and Probe returns an empty list without a render node;
+      without libva Probe returns an empty list and NewDecoder returns ErrUnsupported.
+    pending: conformance (checksum) test on real AMD hardware; Intel iHD is expected to work but is
+      also unverified.
 relations:
 - relation: candidate_for
   to: requirement:hwmediacodec
 - relation: ranked_by
   to: policy:support-tiers
+- relation: implemented_in
+  to: milestone:linux-vaapi-h264-decode
+verification:
+  h264-parser-oracle:
+    state: passed
+    method: integration
+    authority: observed
+    test: TestHeadersMatchFFmpegTrace, TestScalingListsJVT
+    evidence:
+      path: internal/h264/oracle_test.go
+      note: ffmpeg 9.0.1 trace_headers as oracle; runs on any machine with ffmpeg+libx264 (observed on
+        the author's M3, 2026-10-09)
+    basis:
+    - path: internal/h264/dpb.go
+      input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
+    - path: internal/h264/paramsets.go
+      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+    - path: internal/h264/pps.go
+      input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
+    - path: internal/h264/scaling.go
+      input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
+    - path: internal/h264/slice.go
+      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+    - path: internal/h264/sps.go
+      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+    - path: internal/h264/oracle_test.go
+      input_hash: ad9a84ac7e548d485023c1487e3b1b55ebae7bb0cff73227508dcadcf511e977
+    - path: internal/testutil/h264.go
+      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+  dpb-oracle:
+    state: passed
+    method: integration
+    authority: observed
+    test: TestDPBMatchesFFmpeg, TestPOCMatchesFFmpeg, internal/h264 unit tests
+    evidence:
+      path: internal/h264/dpb_oracle_test.go
+    basis:
+    - path: internal/h264/dpb.go
+      input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
+    - path: internal/h264/paramsets.go
+      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+    - path: internal/h264/pps.go
+      input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
+    - path: internal/h264/scaling.go
+      input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
+    - path: internal/h264/slice.go
+      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+    - path: internal/h264/sps.go
+      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+    - path: internal/h264/dpb_oracle_test.go
+      input_hash: dece36a264453fd347dd35d835c9fb81995fe6cffb5d6c221ea30f459cbc87ac
+    - path: internal/h264/dpb_test.go
+      input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
+  linux-symbol-binding:
+    state: passed
+    method: integration
+    authority: observed
+    test: internal/vaapi/sys TestLoad and TestProbe in a Debian bookworm (libva 2.17) linux/arm64 container
+    evidence:
+      path: internal/vaapi/sys/sys_linux_test.go
+    basis:
+    - path: internal/vaapi/sys/sys_linux.go
+      input_hash: cbb385b426ed2fda9c4d29d65b9fa91312976ba395caf4f96b9f3dd723918552
+    - path: internal/vaapi/sys/sys_linux_test.go
+      input_hash: 5f56789e1e8cfcd0d16577dd85bed09bffffdaa4e8d13f04fd5e9e9164c3010b
+    - path: internal/vaapi/display.go
+      input_hash: 696dc4ddd5f656ec82d8691b8243cb57024b875b9f184667574e38128cd974af
+  h264-reference-linux:
+    state: not_run
+    method: integration
+    authority: inferred
+    test: TestDecodeH264MatchesReference on Linux with a VA-API driver (skips when Probe reports no hardware)
+    evidence:
+      path: decode_test.go
+      note: Needs an AMD (or Intel) Linux machine with ffmpeg+libx264; run go test -count=1 -v . there.
+history:
+  decode-implemented-2026-10-09:
+    summary: H.264 decode implemented (Go parser/DPB + purego libva bindings) at the author's request
+      ("Linux AMD, decoder first"); host-side oracle tests pass, hardware conformance pending.
