@@ -29,16 +29,16 @@ capabilities:
     basis: &id001
     - &id002
       path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - &id003
       path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - &id004
       path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id005
       path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
   decode/hevc:
     state: implemented
     about: capability:hwmediacodec/decode-hevc
@@ -54,8 +54,39 @@ capabilities:
     - hevc-reference
     basis: *id001
   decode/av1:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/decode-av1
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/videotoolbox/av1.go
+      note: Apple M3 and newer only (VTIsHardwareDecodeSupported('av01')); M1 and M2 report ErrUnsupported,
+        also with WithSoftwareFallback
+    verified_by:
+    - av1-reference
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/videotoolbox/decoder.go
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+    - path: internal/videotoolbox/backend.go
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+    - path: internal/av1/obu.go
+      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+    - path: internal/av1/seqhdr.go
+      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: hwmediacodec.go
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
   encode/h264:
     state: implemented
     about: capability:hwmediacodec/encode-h264
@@ -75,11 +106,11 @@ capabilities:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/videotoolbox/backend.go
-      input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
   encode/hevc:
     state: implemented
     about: capability:hwmediacodec/encode-hevc
@@ -99,14 +130,22 @@ capabilities:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/videotoolbox/backend.go
-      input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
   encode/av1:
-    state: unknown
+    state: absent
     about: capability:hwmediacodec/encode-av1
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    evidence:
+      path: internal/videotoolbox/backend.go
+      note: No Apple Silicon chip has an AV1 encoder; NewEncoder(AV1) reports ErrUnsupported without asking
+        VideoToolbox (2026-10-09)
 facts:
   libraries:
   - /System/Library/Frameworks/VideoToolbox.framework/VideoToolbox
@@ -118,6 +157,7 @@ facts:
     decode:
     - CMVideoFormatDescriptionCreateFromH264ParameterSets
     - CMVideoFormatDescriptionCreateFromHEVCParameterSets
+    - CMVideoFormatDescriptionCreate ('av01' for AV1, with the av1C record under the SampleDescriptionExtensionAtoms extension)
     - VTDecompressionSessionCreate
     - VTDecompressionSessionDecodeFrame
     - VTDecompressionSessionWaitForAsynchronousFrames
@@ -172,6 +212,19 @@ facts:
   - The hardware H.264 encoder writes no VUI bitstream_restriction (pic_order_cnt_type 0), so a spec-exact
     reorder buffer holds its streams back by the DPB size; the HEVC encoder writes sps_max_num_reorder_pics.
   - The hardware decoder rejects 64x48 pictures with kVTVideoDecoderMalfunctionErr (-12911); 96x64 works.
+  - AV1 needs a format description built with CMVideoFormatDescriptionCreate('av01', w, h, extensions),
+    where extensions maps kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms to a dictionary
+    whose "av1C" entry is the ISOBMFF AV1CodecConfigurationRecord (CFData) with the sequence header OBU
+    as configOBUs. A whole temporal unit is one sample; temporal delimiter OBUs may stay in or be stripped
+    (same output, M3, 2026-10-09).
+  - VTIsHardwareDecodeSupported('av01') is 1 on the M3 without VTRegisterSupplementalVideoDecoderIfAvailable,
+    and that call changes nothing for AV1 (VP9 stays 0 even after registering it).
+  - macOS 26 lists "SW AV1 Decoder" (com.apple.videotoolbox.videodecoder.av1.sw) in VTCopyVideoDecoderList
+    but a session with EnableHardwareAcceleratedVideoDecoder=false fails with -12906, as does naming the
+    DecoderID, so WithSoftwareFallback cannot deliver AV1 on M1/M2.
+  - The AV1 decoder converts Main profile 10-bit pictures to '420v' (8-bit) itself, within 53.5 dB of ffmpeg's
+    conversion; 8-bit AV1 output is bit-exact with libdav1d, and one temporal unit yields exactly one frame
+    in presentation order (show_existing_frame units output the hidden frame).
   evidence:
   - url: https://pkg.go.dev/github.com/go-macos/videotoolbox
     claim: Pure Go purego-based H.264/HEVC hardware decoding on macOS.
@@ -200,8 +253,8 @@ facts:
       decode_hw:
       - h264
       - hevc
-      - vp9 (same registration call)
-      - av1
+      - vp9 (same registration call; VTIsHardwareDecodeSupported('vp09') stayed 0 on the author's M3 even after it)
+      - av1 (verified 2026-10-09 on the author's M3, milestone:darwin-av1-decode)
       - prores
       encode_hw:
       - h264
@@ -245,6 +298,14 @@ facts:
     encode_performance: ~207 fps H.264 and ~186 fps HEVC at 1080p on M3 including the input copy; low-latency
       rate control ~25-40% slower
     encode_probe: VTCopySupportedPropertyDictionaryForEncoder with RequireHardwareAcceleratedVideoEncoder
+    av1_decode: internal/videotoolbox/av1.go - sendAV1 parses the temporal unit with internal/av1, builds
+      av1C and the format description on a new sequence header, waits for a shown key frame after creation
+      and Flush, passes the unit unchanged to decodePacket; OutputsDisplayOrder() is true for AV1 so the
+      public API skips the reorder layer; Probe uses VTIsHardwareDecodeSupported('av01'); NewDecoder with
+      WithSoftwareFallback probes a session (av1SessionAvailable) and reports ErrUnsupported when none can
+      be made
+    av1_performance: ~820 fps for 1080p AV1 to NV12, ~310 to BGRA, ~220 to RGBA on an M3 (SVT-AV1 preset
+      10 stream, 300 frames, 2026-10-09)
 relations:
 - relation: candidate_for
   to: requirement:hwmediacodec
@@ -266,13 +327,13 @@ verification:
     - *id005
     - &id006
       path: decode_test.go
-      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - &id007
       path: probe_test.go
-      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
+      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - &id008
       path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   hevc-reference:
     state: passed
     method: integration
@@ -304,17 +365,17 @@ verification:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/videotoolbox/backend.go
-      input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - path: internal/codec/codec.go
-      input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
+      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   hevc-encode-reference:
     state: passed
     method: integration
@@ -330,17 +391,50 @@ verification:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/videotoolbox/backend.go
-      input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - path: internal/codec/codec.go
-      input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
+      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+  av1-reference:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1MatchesReference (plus TestDecodeAV1WithoutTemporalDelimiters, TestDecodeAV1TenBit,
+      TestDecodeRGBA/av1-*, TestDecodeParameterSetChange/av1, TestFlushResumesAtKeyframe/av1)
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1MatchesReference
+      note: 2026-10-09, Apple M3, macOS 26; 60 frames bit-exact with libdav1d, 28 hidden frames and 28 show_existing_frame
+        units; 10-bit input converted by VideoToolbox within 53.5 dB of ffmpeg
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/videotoolbox/decoder.go
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+    - path: internal/videotoolbox/backend.go
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+    - path: internal/av1/seqhdr.go
+      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+    - path: decode_test.go
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+    - path: internal/testutil/av1.go
+      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
 history:
   decode-implemented-2026-10-09:
     summary: H.264 and HEVC decoding implemented and verified bit-exact against ffmpeg.
@@ -349,3 +443,7 @@ history:
   pixel-formats-and-display-order-2026-10-09:
     summary: BGRA/RGBA decode output and encode input added; display order supplied by the Go reorder
       layer on top of the backend's decode-order output (milestone:display-order-rgba).
+  av1-decode-2026-10-09:
+    summary: AV1 decoding added for Apple M3 and newer (av1C format description, temporal units as packets,
+      native display order); verified bit-exact against libdav1d (milestone:darwin-av1-decode). No AV1
+      encoder exists on Apple Silicon.
