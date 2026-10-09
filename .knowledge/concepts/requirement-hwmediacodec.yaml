@@ -194,13 +194,18 @@ capabilities:
       gpu: intel
     about: capability:hwmediacodec/backend-intel-vpl
   backend/nvenc-nvdec:
-    state: planned
+    state: partial
     scope:
       platform:
       - linux
       - windows
       gpu: nvidia
     about: capability:hwmediacodec/backend-nvidia
+    authority: inferred
+    evidence:
+      path: internal/nvidia/backend.go
+      note: Linux NVDEC/NVENC H.264 and HEVC decode and encode implemented 2026-10-09; the Windows DLL
+        loader is not written; hardware conformance pending (see milestone:linux-nvidia-h264-hevc).
   backend/v4l2-m2m:
     state: planned
     scope:
@@ -305,9 +310,9 @@ verification:
     - path: decode_test.go
       input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
     - path: probe_test.go
-      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
     - path: internal/videotoolbox/backend.go
@@ -337,7 +342,7 @@ verification:
     - path: decode_test.go
       input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - path: probe_test.go
-      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   unsupported-test:
@@ -354,7 +359,7 @@ verification:
         direction and reason
     basis:
     - path: probe_test.go
-      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
     - path: hwmediacodec.go
       input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
   cross-build-check:
@@ -402,7 +407,7 @@ verification:
     - path: decode_test.go
       input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - path: probe_test.go
-      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   encode-reference-test:
@@ -433,7 +438,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   encoder-controls-test:
@@ -464,7 +469,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   transcode-test:
@@ -494,7 +499,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
     - path: internal/videotoolbox/decoder.go
@@ -550,7 +555,7 @@ verification:
     - path: internal/videotoolbox/encoder.go
       input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
   ebitenvideo-test:
     state: passed
     method: integration
@@ -625,7 +630,8 @@ open_questions:
     state: answered
     resolution: Answered 2026-10-09 by the author - Linux AMD first, decoder first. The Go H.264 parser/DPB
       and the VA-API backend were built right after M1 (before Windows, Intel VPL and NVIDIA); HEVC on VA-API
-      is the next Linux step.
+      is the next VA-API step. NVIDIA NVDEC/NVENC followed on 2026-10-09 through the driver's own parser,
+      so no Go DPB was needed for it (milestone:linux-nvidia-h264-hevc).
   hls-packaging:
     text: HLS needs MPEG-TS or fMP4 segments and playlists. Companion package in this module, a separate
       module, or leave to existing Go libraries?
@@ -709,6 +715,10 @@ history:
     summary: Windows backend (Media Foundation + D3D11 decode, vendor hardware MFT encode) written for
       Intel/AMD/NVIDIA on windows/amd64 and arm64; 32-bit excluded by the author; hardware verification
       pending; PR shibukawa/hwmediacodec#4.
+  linux-nvidia-implemented-2026-10-09:
+    summary: 'Linux NVIDIA slice (requested by the author) implemented: internal/nvidia drives NVDEC through
+      the cuvid parser and NVENC through libnvidia-encode via purego, H.264 and HEVC both ways, RGBA/BGRA
+      encoder input; layouts and symbol binding verified without a GPU, hardware conformance pending.'
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
@@ -763,7 +773,8 @@ facts:
     later:
     - 'Windows backend: Media Foundation for Intel/AMD, NVENC/NVDEC for NVIDIA (in progress on a parallel
       branch).'
-    - 'Linux full-API backends: Intel VPL and NVIDIA NVDEC/NVENC (in progress on a parallel branch).'
+    - 'Linux full-API backends: NVIDIA NVDEC/NVENC delivered 2026-10-09 (milestone:linux-nvidia-h264-hevc,
+      hardware verification pending); Intel VPL still planned.'
     - Go H.264/HEVC DPB on top of the existing parsers and VA-API backend for Linux AMD (and older Intel).
     - Then AVCC output, HLS prototype, AV1 where hardware exists, pure-Go NV12<->RGBA fallback when a
       backend needs it, Tier 2 backends.
@@ -890,25 +901,31 @@ facts:
   capability_notes:
     decode/h264: implemented on darwin/apple-silicon (bit-exact against ffmpeg on 320x240 and 1080p
       test streams), on linux via VA-API (code complete 2026-10-09, parser/DPB verified against ffmpeg,
-      hardware conformance pending) and on windows/amd64+arm64 via Media Foundation (unverified on hardware).
-    decode/hevc: implemented on darwin/apple-silicon (bit-exact against ffmpeg, libx265 source) and on
-      windows via Media Foundation when the HEVC Video Extensions are installed (unverified).
+      hardware conformance pending), on linux via NVDEC (code complete 2026-10-09, driver parser, hardware
+      conformance pending) and on windows/amd64+arm64 via Media Foundation (unverified on hardware).
+    decode/hevc: implemented on darwin/apple-silicon (bit-exact against ffmpeg, libx265 source), on linux
+      via NVDEC (code complete 2026-10-09, hardware conformance pending) and on windows via Media Foundation
+      when the HEVC Video Extensions are installed (unverified); VA-API HEVC still planned.
     backend/videotoolbox: decode and encode for H.264/HEVC in NV12/RGBA/BGRA; AV1 pending.
     api/display-order: implemented in Go for every decode-order backend (VideoToolbox and VA-API); verified
       against ffmpeg frame for frame and against MP4 timestamps without hardware. The reorder tracker uses
       the full H.264 parser (internal/h264) and so also honours memory_management_control_operation 5.
       The Media Foundation decoder reorders natively and reports it through codec.DisplayOrderer, so it
       is not wrapped; WithDecodeOrder has no effect on Windows.
-    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); VA-API and Media
-      Foundation are NV12 only, so they are the candidates for a Go NV12<->RGBA converter.
+    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); on linux NVENC
+      accepts RGBA/BGRA input (converted by the hardware with BT.601 and tagged so), while NVDEC, VA-API
+      and Media Foundation output NV12 only (RGBA/BGRA decode reports ErrUnsupported there), so they are
+      the candidates for a Go NV12<->RGBA converter.
     ebitengine/player: separate module ebitenvideo; verified headless on darwin/apple-silicon.
     encode/h264: implemented on darwin/apple-silicon (VBR/CBR/quality, GOP, forced keyframes, B-frames,
       low latency, profiles; verified against ffmpeg/ffprobe), on linux via VA-API (code complete
       2026-10-09, I/P only, header writer verified against ffmpeg, hardware verification pending) and on
-      windows via vendor hardware encoder MFTs with the same control set (unverified on hardware; controls
-      a driver rejects are ErrUnsupported).
-    encode/hevc: implemented on darwin/apple-silicon (Main profile) and on windows via vendor hardware
-      HEVC encoder MFTs (unverified).
+      linux via NVENC (code complete 2026-10-09, full control set incl. B-frames and RGB input, hardware
+      verification pending) and on windows via vendor hardware encoder MFTs with the same control set
+      (unverified on hardware; controls a driver rejects are ErrUnsupported).
+    encode/hevc: implemented on darwin/apple-silicon (Main profile; same control set and verification as
+      H.264), on linux via NVENC (code complete 2026-10-09, hardware verification pending) and on windows
+      via vendor hardware HEVC encoder MFTs (unverified).
 relations:
 - relation: governed_by
   to: policy:support-tiers
@@ -962,3 +979,5 @@ relations:
   to: milestone:display-order-rgba
 - relation: active_milestone
   to: milestone:linux-vaapi-h264-decode
+- relation: active_milestone
+  to: milestone:linux-nvidia-h264-hevc

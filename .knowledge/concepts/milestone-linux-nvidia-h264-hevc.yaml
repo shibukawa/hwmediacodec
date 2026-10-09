@@ -1,0 +1,330 @@
+id: milestone:linux-nvidia-h264-hevc
+type: milestone
+title: Linux NVIDIA - H.264/HEVC decode via NVDEC (cuvid parser) and encode via NVENC, without cgo
+summary: 'Linux slice requested by the author on 2026-10-09 ("Linux nvidiaの対応をお願いします"): the NVIDIA
+  backend (internal/nvidia) loads libcuda, libnvcuvid and libnvidia-encode through purego. Decoding hands
+  whole access units to the driver''s cuvid parser and NVDEC decoder and copies every picture to NV12
+  host memory; encoding drives an NVENC session started from the P4 preset. H.264 and HEVC in both
+  directions. Written on a Mac: struct layouts and symbol binding are verified on the host and in a
+  container, hardware conformance is the open step.'
+lifecycle: active
+authority: authored
+aliases:
+- Linux NVIDIA
+- NVDEC backend
+- NVENC backend
+- nvidia backend
+scope:
+  platform: linux
+  gpu: nvidia
+  milestone: linux-nvidia
+constraints:
+- CGO_ENABLED=0; libcuda.so.1, libnvcuvid.so.1 and libnvidia-encode.so.1 are dlopened with purego and
+  no module dependency is added. The structs mirror Video Codec SDK 11.1 (FFmpeg nv-codec-headers
+  n11.1.5.3), the floor supported by driver 470.57 and newer; newer drivers accept the older struct
+  version tags.
+- Same public API and Send/Receive/Flush contract as the other backends; frames in decode order (the
+  reorder layer provides display order), NV12 in CPU memory, 8-bit 4:2:0 progressive only.
+- CUDA contexts are per thread and goroutines migrate, so every sequence of driver, NVDEC or NVENC calls
+  runs on a locked OS thread between cuCtxPushCurrent and cuCtxPopCurrent of the device's primary
+  context, which is retained per decoder or encoder and shared with other CUDA users of the process.
+- Registered before the VA-API backend in backends_linux.go, so a discrete NVIDIA GPU wins over an
+  integrated GPU's VA-API driver and HEVC is available on Linux.
+non_goals:
+- RGBA/BGRA decode output (NVDEC emits NV12, P016 or YUV444; the Go NV12-to-RGBA converter is still not
+  written), 10-bit and 4:4:4 streams, interlaced field pictures, AV1, zero-copy (CUDA device pointers as
+  Frame.Native), lookahead and other NVENC extras outside the common API.
+- 'Windows (nvcuvid.dll, nvEncodeAPI64.dll): the sys package keeps its loaders in *_linux.go so a
+  Windows loader can be added without touching the backend.'
+acceptance:
+  nv-struct-layout:
+    text: Go mirrors of CUDA_MEMCPY2D, CUVIDEOFORMAT, CUVIDPARSERPARAMS, CUVIDDECODECAPS, CUVIDDECODECREATEINFO,
+      CUVIDPICPARAMS, CUVIDPROCPARAMS, NV_ENC_CONFIG (with the H.264/HEVC and rate-control members),
+      NV_ENC_INITIALIZE_PARAMS, NV_ENC_PRESET_CONFIG, NV_ENC_PIC_PARAMS, NV_ENC_LOCK_BITSTREAM,
+      NV_ENC_LOCK_INPUT_BUFFER, NV_ENC_SEQUENCE_PARAM_PAYLOAD, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS and
+      NV_ENCODE_API_FUNCTION_LIST have the sizes and field offsets a C compiler measures for linux/amd64
+      and linux/arm64, and the struct version tags computed in Go equal the header macros.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - layout-test
+  symbols-bind:
+    text: Every libcuda, libnvcuvid and libnvidia-encode entry point the backend uses binds against a
+      real driver build, NvEncodeAPIGetMaxSupportedVersion reports at least 11.1 and
+      NvEncodeAPICreateInstance fills the function table.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - symbol-binding-container
+  graceful-without-hardware:
+    text: Without the driver libraries, or with them but without a GPU, Probe returns an empty list and
+      NewDecoder/NewEncoder return ErrUnsupported; nothing crashes and nothing is printed.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - container-smoke-test
+    - symbol-binding-container
+  decode-reference-linux:
+    text: On a Linux machine with an NVIDIA GPU, TestDecodeH264MatchesReference, TestDecodeHEVCMatchesReference,
+      the B-frame display-order tests, TestDecodeOrderOption, TestDecodeParameterSetChange and
+      TestFlushResumesAtKeyframe pass (per-frame NV12 checksums equal ffmpeg's software decoder).
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - hardware-decode
+  encode-reference-linux:
+    text: On the same machine the encode conformance tests (PSNR against the source, keyframe interval,
+      forced keyframes, B-frames with monotonic DTS, CBR/VBR sizes, quality ordering, low latency,
+      profiles, flush/reuse, RGBA/BGRA input tagged BT.601) and the transcode round trip pass.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - hardware-encode
+  cross-build:
+    text: CGO_ENABLED=0 builds succeed for all six targets with the new packages.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - cross-build-check
+  host-suite-unaffected:
+    text: The full macOS test suite still passes with the backend wired in; the test changes (the Linux
+      probe list accepts the nvidia backend, the RGB encode test accepts a BT.601 colour matrix next to
+      BT.709) keep the VideoToolbox expectations.
+    scope:
+      milestone: linux-nvidia
+    verified_by:
+    - host-suite
+verification:
+  layout-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: linux-nvidia
+    test: TestStructLayouts, TestVersionConstants
+    evidence:
+      path: internal/nvidia/sys/layout_test.go
+      note: expected values printed by a C program compiled against nv-codec-headers n11.1.5.3 on the
+        author's M3 (2026-10-09) and cross-checked as clang -fsyntax-only static assertions for
+        x86_64-unknown-linux-gnu and aarch64-unknown-linux-gnu (482 assertions, both targets agree)
+    basis:
+    - path: internal/nvidia/sys/types_cuda.go
+      input_hash: 86ef9a87d3600b8c13407e0f1a941ad2eebb026e19e28087c5a78ac6ef539575
+    - path: internal/nvidia/sys/types_cuvid.go
+      input_hash: 3198584c34bec348e132e486f3eb877dda44c6b328cc5c4ecea4d84b71d718c2
+    - path: internal/nvidia/sys/types_nvenc.go
+      input_hash: 3e4503c8c0f33953c2fbeb8c400b3eb1a0ed67db6a57ced6757eda869da208c7
+    - path: internal/nvidia/sys/layout_test.go
+      input_hash: 23c83f4699817d241020047ed7867c66569f5e13ad3cdff5054db59ca6f509f4
+  symbol-binding-container:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-nvidia
+      platform: linux
+    test: internal/nvidia/sys TestLoadCUDA, TestLoadCuvid, TestLoadNVENC and the root TestProbe as
+      CGO_ENABLED=0 linux/amd64 test binaries in a debian:bookworm-slim container with libcuda1,
+      libnvcuvid1 and libnvidia-encode1 535.309.01 from Debian non-free and no GPU
+    evidence:
+      path: internal/nvidia/sys/sys_linux_test.go
+      note: every symbol bound, cuGetErrorString(100) = "CUDA_ERROR_NO_DEVICE", NvEncodeAPIGetMaxSupportedVersion
+        reports 12.1, the function table is complete; Probe returns an empty list because cuInit reports
+        no device (2026-10-09)
+    basis:
+    - path: internal/nvidia/sys/cuda_linux.go
+      input_hash: e5e9de53e593feba32b2ffdc72594bccd12963927f61364f8df35d8a04b63603
+    - path: internal/nvidia/sys/cuvid_linux.go
+      input_hash: 1b6c2fc93a1b6f3e327439f3fb6f9282f6dd02b8319c9956e5f749f3b4816e65
+    - path: internal/nvidia/sys/nvenc_linux.go
+      input_hash: 6ae9e3ec17be17fdbf22f42546040ecb804fea3d87e4796f00d5a57b42b59507
+    - path: internal/nvidia/sys/sys_linux_test.go
+      input_hash: 6bbe93a666d2f6eb3f9902bcbcaf2600a36a115ad13af400440ddfab198aa46d
+    - path: internal/nvidia/device.go
+      input_hash: 7b248f20a22c2a5c5823ae4280f77ad579176a1f8e0b321353ef6e37f0783276
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+  container-smoke-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-nvidia
+      platform: linux
+    test: linux/arm64 test binaries and the CLI in debian:bookworm-slim without any NVIDIA or VA-API
+      library
+    evidence:
+      path: probe_test.go
+      note: the sys tests skip with ErrNotAvailable, TestProbe passes with an empty list, the
+        TestUnsupported* tests pass, and "hwmediacodec probe" prints that no backend is available
+        (2026-10-09)
+    basis:
+    - path: backends_linux.go
+      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
+    - path: probe_test.go
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+    - path: internal/nvidia/device.go
+      input_hash: 7b248f20a22c2a5c5823ae4280f77ad579176a1f8e0b321353ef6e37f0783276
+  hardware-decode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: linux-nvidia
+    test: go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on Linux with an NVIDIA GPU (driver
+      470.57+) and ffmpeg with libx264/libx265
+    evidence:
+      path: decode_test.go
+      note: 'Not yet run. Points to watch: CUVID_PKT_ENDOFPICTURE must make the parser emit the picture
+        inside the same cuvidParseVideoData call (TestFlushResumesAtKeyframe expects a frame right after
+        an IDR is sent); the NV12 chroma plane is read at pitch * coded height after cuvidMapVideoFrame;
+        the purego callbacks run on the parser thread under CGO_ENABLED=0; the sequence callback returns
+        min_num_decode_surfaces + 2 as the surface count.'
+    basis:
+    - path: internal/nvidia/decoder.go
+      input_hash: 79a80fbcec1b94fa8eb92999933e6f767a9c690be9d5379390e1d15cc56482db
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+    - path: internal/nvidia/device.go
+      input_hash: 7b248f20a22c2a5c5823ae4280f77ad579176a1f8e0b321353ef6e37f0783276
+    - path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
+  hardware-encode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: linux-nvidia
+    test: go test -count=1 -v -run 'Encode|Transcode' . on the same machine
+    evidence:
+      path: encode_test.go
+      note: 'Not yet run. Points to watch: the 16-byte GUID is passed by value through purego''s struct
+        support in nvEncGetEncodeCaps and nvEncGetEncodePresetConfigEx; the NV12 chroma plane of the
+        locked input buffer starts at pitch * height; NVENC must keep accepting pictures after the EOS
+        flush (ffmpeg''s avcodec_flush_buffers path relies on it); B-frame DTS is the input PTS minus
+        bframes * frame duration; TestEncodeRGBAInput expects the BT.601 tag to match NVENC''s RGB
+        conversion.'
+    basis:
+    - path: internal/nvidia/encoder.go
+      input_hash: 3aaed75e93591292e848bdb2e31e83a2e0578d371a8c522500b64acc23afd0b2
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+    - path: encode_test.go
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+  cross-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: linux-nvidia
+    test: scripts/crossbuild.sh
+    evidence:
+      path: scripts/crossbuild.sh
+      note: all six targets ok on 2026-10-09 with internal/nvidia; go vet passes for darwin and for
+        GOOS=linux
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: backends_linux.go
+      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
+    - path: backends_other.go
+      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+  host-suite:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-nvidia
+    test: go test -count=1 ./... on the author's M3 (darwin/arm64, 2026-10-09), VideoToolbox conformance
+      included; it exercises the host-side parts of this slice (layout tests, option validation, the
+      reorder layer) and proves the wiring did not regress the other backend
+    evidence:
+      path: probe_test.go
+    basis:
+    - path: probe_test.go
+      input_hash: 22ad08776ef790e0c832abec6840cf90b02dccdf0dc5c1c91663dd877f9f6acc
+    - path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
+    - path: encode_test.go
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+facts:
+  steps:
+  - internal/nvidia/sys - constants, GUIDs and struct mirrors of the SDK 11.1 headers with the struct
+    version tags computed in Go; one purego loader per library (LoadCUDA, LoadCuvid, LoadNVENC, the last
+    one binding the NV_ENCODE_API_FUNCTION_LIST instance); layout and loader tests.
+  - internal/nvidia/device.go - cuInit once, device by HWMEDIACODEC_NVIDIA_DEVICE ordinal, primary
+    context retain/release, run() = LockOSThread + cuCtxPushCurrent/cuCtxPopCurrent, cuMemcpy2D helper.
+  - internal/nvidia/decoder.go - cuvid parser with three purego callbacks created once and dispatched
+    through a registry keyed by the user-data value; the sequence callback checks NVDEC caps and creates
+    or recreates the decoder for the coded size (PreferCUVID, NV12, Weave, min_num_decode_surfaces + 2);
+    the decode callback submits the picture, maps it and copies the display area with two cuMemcpy2D
+    calls into pooled buffers tagged with the packet's PTS and reorder key; a keyframe gate in Go still
+    feeds the parameter sets of skipped access units; Flush sends CUVID_PKT_ENDOFSTREAM and drops the
+    parser so the next Send starts clean.
+  - internal/nvidia/encoder.go - session on the primary context; codec GUID and caps checks (max/min
+    size, max B-frames); P4 preset for HIGH_QUALITY or LOW_LATENCY tuning; GOP and IDR period;
+    frameIntervalP 1, or 3 with WithBFrames; rate control CONSTQP (quality, or 26 by default), VBR with
+    2x peak, or CBR; codec config with repeatSPSPPS, 4:2:0, CAVLC for Baseline and a BT.601 VUI tag for
+    RGB input; input/bitstream buffer pairs created on demand and filled through nvEncLockInputBuffer;
+    all in-flight pictures drained on NV_ENC_SUCCESS; DTS from the input PTS queue; SPS/PPS prepended
+    from nvEncGetSequenceParams when a keyframe lacks them.
+  - Root wiring (nvidia registered before vaapi), probe and RGB encode test adjustments, README status
+    row and Linux notes.
+  oracle_recipes:
+    layout: a C program including dynlink_cuda.h, dynlink_nvcuvid.h and nvEncodeAPI.h prints sizeof and
+      offsetof for every mirrored struct; the printed values become _Static_asserts compiled with clang
+      -target x86_64-unknown-linux-gnu and -target aarch64-unknown-linux-gnu -fsyntax-only -ffreestanding
+      (stub stdlib.h/stdio.h), then the Go layout test.
+    symbols: docker build --platform linux/amd64 from debian:bookworm-slim with Components non-free and
+      apt-get install libcuda1 libnvcuvid1 libnvidia-encode1, then run the CGO_ENABLED=0 linux/amd64
+      test binaries; no kernel driver is needed for binding, cuInit then reports no device.
+  design_choices:
+  - The cuvid parser instead of the Go H.264 parser/DPB (internal/h264) - it gives HEVC immediately and
+    keeps reference management in the driver, as ffmpeg's h264_cuvid does; the Go parser stays the
+    VA-API path and the reorder tracker still derives POC for display order.
+  - Synchronous host copy inside the decode callback - the parser recycles picture indexes on its own
+    schedule, so copying at once is the only way to never read an overwritten surface without a second
+    surface pool; throughput is bounded by per-picture decode latency.
+  - SDK 11.1 as the struct version floor (driver 470+) rather than 12.x (520+ or 550+) so that the
+    Debian 11 and Ubuntu 22.04 driver packages are covered.
+  - NVIDIA registered before VA-API so that NVDEC/NVENC wins on mixed machines and so that
+    nvidia-vaapi-driver (decode only) is never preferred over the native path.
+  learned:
+  - The NVDEC and NVENC headers can be validated without a GPU - a C program for sizes and offsets plus
+    cross-target static assertions, and a Debian container with the non-free user-space libraries for
+    symbol binding.
+  - purego passes 16-byte structs by value on linux/amd64 and linux/arm64, which the NVENC calls that
+    take a GUID need; purego callbacks are limited in number, so parser callbacks are created once per
+    process and dispatched by key.
+  - NVENC converts RGB input with the BT.601 matrix (ffmpeg tags such streams BT.470BG), unlike
+    VideoToolbox which uses BT.709, so the RGB encode test accepts either tag and relies on the PSNR
+    check against the reference decode with the declared matrix.
+  next_candidates:
+  - Run the decode and encode conformance tests on an NVIDIA Linux machine; record driver version, GPU
+    and fps here and flip the verification states.
+  - Cache the parameter-set NAL units in Go and replay them into the fresh parser after Flush, so that
+    seeking to an IDR without in-band SPS/PPS works as on VA-API.
+  - Linux-only unit tests for configureGOP, configureRateControl, configureCodec and packet (runnable in
+    the container without a GPU).
+  - A Windows loader for the same sys package (nvcuvid.dll, nvEncodeAPI64.dll) so NVIDIA on Windows can
+    bypass Media Foundation.
+  - Asynchronous decode (keep pictures on the device until Receive) with a second surface pool, pinned
+    host memory for the copy, and RGBA output through a Go NV12-to-RGBA converter or a CUDA kernel.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:nvenc-nvdec
+- relation: tests_decision
+  to: decision:ffi-strategy
+- relation: follows
+  to: milestone:linux-vaapi-h264-decode
+history:
+  requested-2026-10-09:
+    summary: Author asked for Linux NVIDIA support.
+  implemented-2026-10-09:
+    summary: 'Code complete (commit 803a0ca on claude/linux-nvidia-support-59cccc): layouts verified
+      against the SDK headers, symbols bound against driver 535 in a container, host suite and cross
+      builds pass; hardware conformance pending.'

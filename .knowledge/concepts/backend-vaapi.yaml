@@ -293,7 +293,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
   h264-reference-linux:
     state: not_run
     method: integration

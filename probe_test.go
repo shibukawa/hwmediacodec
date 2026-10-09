@@ -42,10 +42,10 @@ func TestProbe(t *testing.T) {
 			}
 		}
 	case runtime.GOOS == "linux":
-		// With no GPU or no libva the list is empty; with one, every entry
-		// comes from the VA-API backend.
+		// With no GPU, no libva and no NVIDIA driver the list is empty;
+		// with one, every entry comes from the VA-API or NVIDIA backend.
 		for _, c := range caps {
-			if c.Backend != "vaapi" || !c.Hardware {
+			if (c.Backend != "vaapi" && c.Backend != "nvidia") || !c.Hardware {
 				t.Errorf("unexpected capability on linux: %+v", c)
 			}
 		}

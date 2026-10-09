@@ -302,9 +302,11 @@ func TestTranscodeRoundTrip(t *testing.T) {
 
 // TestEncodeRGBAInput feeds packed RGB frames (what ebiten.Image.ReadPixels
 // produces) and compares ffmpeg's RGB decode of the result with the source.
-// The stream must declare the BT.709 matrix the hardware used for the
-// conversion; decoding with the wrong matrix scores about 28 dB here, the
-// right one about 39 dB (8x8-block PSNR, see TestDecodeRGBA).
+// The stream must declare the matrix the hardware used for the conversion
+// (BT.709 on VideoToolbox, BT.601 on NVENC), since the reference decode
+// converts back with the declared one; decoding with the wrong matrix
+// scores about 28 dB here, the right one about 39 dB (8x8-block PSNR, see
+// TestDecodeRGBA).
 func TestEncodeRGBAInput(t *testing.T) {
 	const minRGBPSNR = 35.0
 	for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
@@ -355,8 +357,10 @@ func TestEncodeRGBAInput(t *testing.T) {
 				t.Fatalf("got %d packets for %d frames", len(pkts), len(src))
 			}
 			path := writeStream(t, "rgb.h264", pkts)
-			if cs := testutil.ProbeStreamField(t, path, hwmediacodec.H264, "color_space"); cs != "bt709" {
-				t.Errorf("stream declares colour matrix %q, want bt709", cs)
+			switch cs := testutil.ProbeStreamField(t, path, hwmediacodec.H264, "color_space"); cs {
+			case "bt709", "bt470bg", "smpte170m":
+			default:
+				t.Errorf("stream declares colour matrix %q, want bt709 or a BT.601 matrix", cs)
 			}
 			got := testutil.ReferenceFrames(t, path, hwmediacodec.H264, f, encodeWidth, encodeHeight)
 			if len(got) != len(src) {
