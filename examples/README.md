@@ -18,6 +18,7 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`screencast/`](screencast/) | Captures an Ebitengine screen into the hardware encoder on a background goroutine; sinks for MP4 files and anything else |
 | [`record/`](record/) | Ebitengine game whose screen is recorded to an MP4 file |
 | [`hls/`](hls/) | Ebitengine game streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server) |
+| [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning cube with `DrawTriangles`, and through a Kage shader; plays MP4 files directly |
 
 ## container
 
@@ -154,6 +155,36 @@ at `/` plays natively in Safari and through hls.js (MSE) elsewhere;
 gives; the WebRTC sample is the low-latency path. HEVC (`-codec hevc`)
 plays in Safari only.
 
+## texture
+
+```sh
+cd examples
+go run ./texture movie.mp4                      # keys: 1 flat, 2 cube, 3 shader, space pause
+go run ./texture -codec hevc -fps 30 stream.hevc
+go run ./texture -seconds 12 -record demo.mp4 movie.mp4
+```
+
+`ebitenvideo.Player.Image()` is an ordinary `*ebiten.Image` that the player
+updates in place, so the video goes wherever an image goes:
+
+- **flat**: `DrawImage`, scaled to fit.
+- **cube**: `DrawTriangles` with the video as the texture of all six faces.
+  Ebitengine interpolates texture coordinates affinely, so each face is a
+  grid of 8x8 cells whose corners are projected separately (the usual trick
+  for perspective without a perspective divide); faces are culled by their
+  projected winding and shaded by a directional light through the vertex
+  colours.
+- **shader**: `DrawRectShader` with the video in `Images[0]`; the Kage shader
+  bends the picture, ripples it and adds scanlines and a vignette with
+  `imageSrc0At`.
+
+MP4 input is demuxed by the container package: `VideoTrack.ElementaryStream()`
+is an `io.ReadSeeker` of the Annex-B stream (rewindable, which is what
+`WithLoop` needs) and `FrameRate()` comes from the sample table, so the
+player needs no `-fps`. `-record` turns the screencast recorder on the
+window itself, which is how the demo recording in the repository's history
+was made.
+
 ## Testing
 
 ```sh
@@ -167,4 +198,6 @@ checksums with ffprobe's view of the same files, feed ffmpeg-made streams
 through the segmenter and let ffprobe play the served playlist over HTTP.
 The convert, thumbnails and screencast tests also need a hardware codec and
 skip otherwise; they check codec, frame count, PSNR against the source,
-copied audio, identical presentation times and the recorder's timing.
+copied audio, identical presentation times and the recorder's timing. The
+texture sample's mesh (projection, culling, texture coordinates) has a unit
+test; its rendering was checked by recording the window.
