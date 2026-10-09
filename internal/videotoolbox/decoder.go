@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"io"
 	"sync"
-	"unsafe"
 
 	"github.com/ebitengine/purego"
 
@@ -50,11 +49,8 @@ func onDecodedFrame(refCon, sourceRefCon uintptr, status int32, infoFlags uint32
 	}
 	d.outMu.Lock()
 	defer d.outMu.Unlock()
-	pts, ok := d.inflight[sourceRefCon]
+	in := d.inflight[sourceRefCon]
 	delete(d.inflight, sourceRefCon)
-	if !ok {
-		pts = 0
-	}
 	if status != 0 {
 		d.cbErr = &codec.BackendError{Backend: Name, Op: "decode callback", Status: int64(status), Message: sys.StatusString(status)}
 		return 0
@@ -64,13 +60,19 @@ func onDecodedFrame(refCon, sourceRefCon uintptr, status int32, infoFlags uint32
 		return 0
 	}
 	sys.CFRetain(imageBuffer)
-	d.pending = append(d.pending, pendingFrame{buf: imageBuffer, pts: pts})
+	d.pending = append(d.pending, pendingFrame{buf: imageBuffer, inflightFrame: in})
 	return 0
+}
+
+// inflightFrame is what a decode call records about its input packet.
+type inflightFrame struct {
+	pts   int64
+	order codec.Order
 }
 
 type pendingFrame struct {
 	buf uintptr
-	pts int64
+	inflightFrame
 }
 
 type decoder struct {
@@ -87,10 +89,13 @@ type decoder struct {
 	flushed      bool
 	closed       bool
 	seq          uintptr
+	// swizzle is set when the session emits BGRA although RGBA was
+	// requested; the copy then exchanges the R and B bytes.
+	swizzle bool
 
 	// outMu guards state shared with the output callback.
 	outMu    sync.Mutex
-	inflight map[uintptr]int64
+	inflight map[uintptr]inflightFrame
 	pending  []pendingFrame
 	cbErr    error
 
@@ -103,7 +108,7 @@ func newDecoder(cfg codec.DecoderConfig, vtCodec uint32) *decoder {
 		vtCodec:      vtCodec,
 		params:       newParamSetStore(cfg.Codec),
 		waitKeyframe: true,
-		inflight:     map[uintptr]int64{},
+		inflight:     map[uintptr]inflightFrame{},
 	}
 	registryMu.Lock()
 	d.handle = nextHandle
@@ -170,10 +175,10 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		}
 		d.waitKeyframe = false
 	}
-	return d.decode(payload, p.PTS)
+	return d.decode(payload, inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)})
 }
 
-func (d *decoder) decode(nals [][]byte, pts int64) error {
+func (d *decoder) decode(nals [][]byte, in inflightFrame) error {
 	size := 0
 	for _, n := range nals {
 		size += 4 + len(n)
@@ -194,7 +199,7 @@ func (d *decoder) decode(nals [][]byte, pts int64) error {
 	}
 
 	timing := sys.CMSampleTimingInfo{
-		PresentationTimeStamp: sys.CMTime{Value: pts, Timescale: d.cfg.TimeScale, Flags: sys.CMTimeFlagsValid},
+		PresentationTimeStamp: sys.CMTime{Value: in.pts, Timescale: d.cfg.TimeScale, Flags: sys.CMTimeFlagsValid},
 	}
 	sampleSize := uintptr(size)
 	var sample uintptr
@@ -206,7 +211,7 @@ func (d *decoder) decode(nals [][]byte, pts int64) error {
 	d.seq++
 	seq := d.seq
 	d.outMu.Lock()
-	d.inflight[seq] = pts
+	d.inflight[seq] = in
 	d.outMu.Unlock()
 
 	var info uint32
@@ -242,24 +247,17 @@ func (d *decoder) recreateSession() error {
 	sys.Release(d.formatDesc)
 	d.formatDesc = fd
 
-	spec := sys.NewDictionary()
-	if d.cfg.AllowSoftware {
-		sys.CFDictionarySetValue(spec, sys.KVTEnableHardwareDecoder, sys.KCFBooleanTrue)
-	} else {
-		sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareDecoder, sys.KCFBooleanTrue)
+	bufFormat := d.cfg.OutputFormat
+	if bufFormat == codec.RGBA {
+		// VideoToolbox accepts 'RGBA' as a destination format but the
+		// decode then fails with kCVReturnInvalidPixelFormat (verified on
+		// an M3, 2026-10-09); BGRA is always available and is swapped into
+		// RGBA during the copy.
+		bufFormat = codec.BGRA
+		d.swizzle = true
 	}
-	attrs := sys.NewDictionary()
-	pixfmt := sys.CFNumberInt32(int32(sys.PixelFormat420YpCbCr8BiPlanarVideoRange))
-	sys.CFDictionarySetValue(attrs, sys.KCVPixelBufferPixelFormatTypeKey, pixfmt)
-
-	record := sys.VTDecompressionOutputCallbackRecord{Callback: outputCallback(), RefCon: d.handle}
-	var session uintptr
-	sessionMu.Lock()
-	st = sys.VTDecompressionSessionCreate(0, fd, spec, attrs, &record, &session)
-	sessionMu.Unlock()
-	sys.Release(pixfmt)
-	sys.Release(attrs)
-	sys.Release(spec)
+	pixfmt, _ := vtPixelFormat(bufFormat)
+	session, st := d.createSession(fd, pixfmt)
 	if st != 0 {
 		switch st {
 		case sys.StatusVTCouldNotFindVideoDecoder, sys.StatusVTVideoDecoderUnsupportedDataFmt, sys.StatusVTVideoDecoderNotAvailableNow:
@@ -270,6 +268,33 @@ func (d *decoder) recreateSession() error {
 	d.session = session
 	d.waitKeyframe = true
 	return nil
+}
+
+// createSession creates a decompression session for the format description
+// that emits pixel buffers of the given Core Video pixel format.
+func (d *decoder) createSession(fd uintptr, pixfmt uint32) (uintptr, int32) {
+	spec := sys.NewDictionary()
+	if d.cfg.AllowSoftware {
+		sys.CFDictionarySetValue(spec, sys.KVTEnableHardwareDecoder, sys.KCFBooleanTrue)
+	} else {
+		sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareDecoder, sys.KCFBooleanTrue)
+	}
+	attrs := sys.NewDictionary()
+	n := sys.CFNumberInt32(int32(pixfmt))
+	sys.CFDictionarySetValue(attrs, sys.KCVPixelBufferPixelFormatTypeKey, n)
+
+	record := sys.VTDecompressionOutputCallbackRecord{Callback: outputCallback(), RefCon: d.handle}
+	var session uintptr
+	sessionMu.Lock()
+	st := sys.VTDecompressionSessionCreate(0, fd, spec, attrs, &record, &session)
+	sessionMu.Unlock()
+	sys.Release(n)
+	sys.Release(attrs)
+	sys.Release(spec)
+	if st != 0 {
+		return 0, st
+	}
+	return session, 0
 }
 
 func (d *decoder) drainSession() {
@@ -313,59 +338,47 @@ func (d *decoder) Receive(ctx context.Context) (*codec.Frame, error) {
 	d.pending = d.pending[:len(d.pending)-1]
 	d.outMu.Unlock()
 
-	frame, err := d.copyFrame(pf.buf, pf.pts)
+	frame, err := d.copyFrame(pf.buf, pf.inflightFrame)
 	sys.Release(pf.buf)
 	return frame, err
 }
 
-func (d *decoder) copyFrame(pb uintptr, pts int64) (*codec.Frame, error) {
+func (d *decoder) copyFrame(pb uintptr, in inflightFrame) (*codec.Frame, error) {
 	if st := sys.CVPixelBufferLockBaseAddress(pb, sys.PixelBufferLockReadOnly); st != 0 {
 		return nil, &codec.BackendError{Backend: Name, Op: "CVPixelBufferLockBaseAddress", Status: int64(st)}
 	}
 	defer sys.CVPixelBufferUnlockBaseAddress(pb, sys.PixelBufferLockReadOnly)
 
-	pixfmt := sys.CVPixelBufferGetPixelFormatType(pb)
-	if pixfmt != sys.PixelFormat420YpCbCr8BiPlanarVideoRange && pixfmt != sys.PixelFormat420YpCbCr8BiPlanarFullRange {
-		return nil, &codec.BackendError{Backend: Name, Op: "copy frame", Status: int64(pixfmt), Message: "unexpected pixel format from decoder"}
+	format := d.cfg.OutputFormat
+	bufFormat := format
+	if d.swizzle {
+		bufFormat = codec.BGRA
 	}
-	if n := sys.CVPixelBufferGetPlaneCount(pb); n != 2 {
-		return nil, &codec.BackendError{Backend: Name, Op: "copy frame", Status: int64(n), Message: "unexpected plane count"}
+	planes, ok := bufferPlanes(pb, bufFormat)
+	if !ok {
+		return nil, &codec.BackendError{Backend: Name, Op: "copy frame", Status: int64(sys.CVPixelBufferGetPixelFormatType(pb)), Message: "unexpected pixel buffer layout from the decoder"}
 	}
 	width := int(sys.CVPixelBufferGetWidth(pb))
 	height := int(sys.CVPixelBufferGetHeight(pb))
 
-	type plane struct {
-		rowBytes int
-		rows     int
+	total := 0
+	for _, pl := range planes {
+		total += pl.width * pl.rows
 	}
-	planes := [2]plane{
-		{rowBytes: int(sys.CVPixelBufferGetWidthOfPlane(pb, 0)), rows: int(sys.CVPixelBufferGetHeightOfPlane(pb, 0))},
-		{rowBytes: int(sys.CVPixelBufferGetWidthOfPlane(pb, 1)) * 2, rows: int(sys.CVPixelBufferGetHeightOfPlane(pb, 1))},
-	}
-	total := planes[0].rowBytes*planes[0].rows + planes[1].rowBytes*planes[1].rows
 	buf := d.getBuffer(total)
-
 	off := 0
-	out := make([][]byte, 2)
-	strides := make([]int, 2)
+	out := make([][]byte, len(planes))
+	strides := make([]int, len(planes))
 	for i, pl := range planes {
-		base := sys.CVPixelBufferGetBaseAddressOfPlane(pb, uintptr(i))
-		stride := int(sys.CVPixelBufferGetBytesPerRowOfPlane(pb, uintptr(i)))
-		if base == nil || stride < pl.rowBytes {
-			d.putBuffer(buf)
-			return nil, &codec.BackendError{Backend: Name, Op: "copy frame", Message: "plane base address unavailable"}
-		}
-		src := unsafe.Slice(base, stride*pl.rows)
-		dst := buf[off : off+pl.rowBytes*pl.rows]
-		for r := 0; r < pl.rows; r++ {
-			copy(dst[r*pl.rowBytes:(r+1)*pl.rowBytes], src[r*stride:r*stride+pl.rowBytes])
-		}
+		dst := buf[off : off+pl.width*pl.rows]
+		copyRows(dst, pl.width, pl.bytes(), pl.stride, pl.rows, pl.width, d.swizzle)
 		out[i] = dst
-		strides[i] = pl.rowBytes
-		off += pl.rowBytes * pl.rows
+		strides[i] = pl.width
+		off += pl.width * pl.rows
 	}
 
-	f := &codec.Frame{Width: width, Height: height, Format: codec.NV12, Planes: out, Strides: strides, PTS: pts}
+	f := &codec.Frame{Width: width, Height: height, Format: format, Planes: out, Strides: strides, PTS: in.pts}
+	codec.SetFrameOrder(f, in.order)
 	codec.SetRelease(f, func() { d.putBuffer(buf) })
 	return f, nil
 }

@@ -31,6 +31,7 @@ type surface struct {
 	dummy         bool // shared stand-in for non-existing (frame_num gap) frames
 
 	pts                 int64
+	order               codec.Order
 	cropX, cropY        int
 	width, height       int
 	codedW, codedH      int
@@ -227,6 +228,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	s.inDPB = cur.Reference
 	s.pendingOutput = true
 	s.pts = p.PTS
+	s.order = codec.PacketOrder(p)
 	s.cropX, s.cropY, s.width, s.height = sps.Crop()
 	s.codedW, s.codedH = sps.CodedWidth(), sps.CodedHeight()
 
@@ -538,6 +540,7 @@ func (d *decoder) copySurface(s *surface) (*codec.Frame, error) {
 		off += rowBytes[i] * rows[i]
 	}
 	f := &codec.Frame{Width: width, Height: height, Format: codec.NV12, Planes: planes, Strides: strides, PTS: s.pts}
+	codec.SetFrameOrder(f, s.order)
 	codec.SetRelease(f, func() { d.putBuffer(buf) })
 	return f, nil
 }

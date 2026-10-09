@@ -3,8 +3,11 @@ package hwmediacodec_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"runtime"
 	"sort"
 	"testing"
@@ -33,6 +36,24 @@ func requireHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direct
 	t.Skipf("no hardware %s %s on this machine (%s/%s)", c, dir, runtime.GOOS, runtime.GOARCH)
 }
 
+// hasHardware reports whether Probe lists a hardware engine for c.
+func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) bool {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
+		return false
+	}
+	caps, err := hwmediacodec.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	for _, cap := range caps {
+		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
+			return true
+		}
+	}
+	return false
+}
+
 func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {
 	t.Helper()
 	requireHardware(t, c, hwmediacodec.Decode)
@@ -43,10 +64,46 @@ func requireHardwareEncode(t *testing.T, c hwmediacodec.Codec) {
 	requireHardware(t, c, hwmediacodec.Encode)
 }
 
+// newDecoderOrSkip opens a decoder and skips the test when the backend on
+// this machine does not offer the requested configuration (for example an
+// output format a backend does not convert to).
+func newDecoderOrSkip(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.DecoderOption) hwmediacodec.Decoder {
+	t.Helper()
+	dec, err := hwmediacodec.NewDecoder(context.Background(), c, opts...)
+	if errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Skipf("configuration not available on this backend: %v", err)
+	}
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+	return dec
+}
+
 // decodeAll feeds every access unit of an Annex-B stream and returns the
 // decoded frames' checksums and sizes in output order.
 func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, stream []byte) (sums [][32]byte, sizes [][2]int) {
 	t.Helper()
+	frames := decodeFrames(t, dec, c, stream, hwmediacodec.NV12)
+	for _, f := range frames {
+		sums = append(sums, sha256.Sum256(f.pix))
+		sizes = append(sizes, [2]int{f.width, f.height})
+	}
+	return sums, sizes
+}
+
+// decodedFrame is a tightly packed copy of a decoded frame.
+type decodedFrame struct {
+	pix           []byte
+	width, height int
+	pts           int64
+}
+
+// decodeFrames feeds every access unit of an Annex-B stream, checks that
+// the frames come back in format f with tight strides, and returns copies
+// in output order.
+func decodeFrames(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, stream []byte, format hwmediacodec.PixelFormat) []decodedFrame {
+	t.Helper()
+	var out []decodedFrame
 	ctx := context.Background()
 	r := annexb.NewReader(bytes.NewReader(stream), c)
 	var pts int64
@@ -68,11 +125,15 @@ func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, str
 			if err != nil {
 				t.Fatalf("Receive: %v", err)
 			}
-			if f.Format != hwmediacodec.NV12 || len(f.Planes) != 2 {
+			if f.Format != format || len(f.Planes) != format.PlaneCount() {
 				t.Fatalf("unexpected frame layout: %s planes=%d", f.Format, len(f.Planes))
 			}
-			sums = append(sums, testutil.FrameChecksum(f))
-			sizes = append(sizes, [2]int{f.Width, f.Height})
+			for i, stride := range f.Strides {
+				if _, rowBytes := format.PlaneLayout(i, f.Width, f.Height); stride != rowBytes {
+					t.Fatalf("plane %d stride %d, want tight rows of %d bytes", i, stride, rowBytes)
+				}
+			}
+			out = append(out, decodedFrame{pix: testutil.FrameBytes(f), width: f.Width, height: f.Height, pts: f.PTS})
 			f.Release()
 		}
 	}
@@ -94,7 +155,7 @@ func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, str
 		t.Fatalf("Flush: %v", err)
 	}
 	drain(true)
-	return sums, sizes
+	return out
 }
 
 func compareChecksums(t *testing.T, got, want [][32]byte) {
@@ -135,29 +196,119 @@ func TestDecodeH264MatchesReference(t *testing.T) {
 	compareChecksums(t, got, want)
 }
 
-// TestDecodeBFramesMatchesReference checks that streams with B-frames decode
-// correctly. Without real presentation timestamps the frames come back in
-// decode order, so the comparison is order-insensitive: every reference
-// frame must appear exactly once.
+// TestDecodeBFramesMatchesReference checks that streams with B-frames come
+// back in display order: the frame sequence must equal ffmpeg's output
+// frame for frame.
 func TestDecodeBFramesMatchesReference(t *testing.T) {
-	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
-		t.Run(c.String(), func(t *testing.T) {
-			requireHardwareDecode(t, c)
-			s := testutil.GenerateStreamBFrames(t, c, 320, 240, 60, 3)
+	cases := []struct {
+		codec   hwmediacodec.Codec
+		bframes int
+	}{
+		{hwmediacodec.H264, 3}, {hwmediacodec.H264, 8},
+		{hwmediacodec.HEVC, 3}, {hwmediacodec.HEVC, 6},
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%s-bf%d", c.codec, c.bframes), func(t *testing.T) {
+			requireHardwareDecode(t, c.codec)
+			s := testutil.GenerateStreamBFrames(t, c.codec, 320, 240, 60, c.bframes)
 			want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
-			dec, err := hwmediacodec.NewDecoder(context.Background(), c)
+			dec, err := hwmediacodec.NewDecoder(context.Background(), c.codec)
 			if err != nil {
 				t.Fatalf("NewDecoder: %v", err)
 			}
 			defer dec.Close()
-			got, _ := decodeAll(t, dec, c, testutil.ReadFile(t, s.Path))
-			if len(got) != len(want) {
-				t.Fatalf("frame count: got %d want %d", len(got), len(want))
-			}
-			sortChecksums(got)
-			sortChecksums(want)
+			got, _ := decodeAll(t, dec, c.codec, testutil.ReadFile(t, s.Path))
 			compareChecksums(t, got, want)
 		})
+	}
+}
+
+// TestDecodeOrderOption checks that WithDecodeOrder returns the frames as
+// the hardware produces them: the same set of frames, not in display order.
+func TestDecodeOrderOption(t *testing.T) {
+	requireHardwareDecode(t, hwmediacodec.H264)
+	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
+	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
+	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264, hwmediacodec.WithDecodeOrder())
+	if err != nil {
+		t.Fatalf("NewDecoder: %v", err)
+	}
+	defer dec.Close()
+	got, _ := decodeAll(t, dec, hwmediacodec.H264, testutil.ReadFile(t, s.Path))
+	if len(got) != len(want) {
+		t.Fatalf("frame count: got %d want %d", len(got), len(want))
+	}
+	inOrder := true
+	for i := range want {
+		if got[i] != want[i] {
+			inOrder = false
+		}
+	}
+	if inOrder {
+		t.Error("decode order equals display order for a B-frame stream")
+	}
+	sortChecksums(got)
+	sortChecksums(want)
+	compareChecksums(t, got, want)
+}
+
+// TestDecodeRGBA checks the packed RGB output formats against ffmpeg's
+// conversion of the same frames. The two converters interpolate chroma
+// differently around sharp edges (about 28 dB plain PSNR on testsrc2), so
+// the comparison averages 8x8 blocks first: a wrong matrix, range or
+// channel order still fails by a wide margin (BT.709 scores 25 dB, swapped
+// channels 4 dB). RGBA and BGRA must be exact mirrors of each other.
+func TestDecodeRGBA(t *testing.T) {
+	const minPSNR = 30.0
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		if !hasHardware(t, c, hwmediacodec.Decode) {
+			continue
+		}
+		s := testutil.GenerateStreamBFrames(t, c, 320, 240, 20, 2)
+		stream := testutil.ReadFile(t, s.Path)
+		decoded := map[hwmediacodec.PixelFormat][]decodedFrame{}
+		for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
+			t.Run(c.String()+"-"+f.String(), func(t *testing.T) {
+				want := testutil.ReferenceFrames(t, s.Path, c, f, s.Width, s.Height)
+				dec := newDecoderOrSkip(t, c, hwmediacodec.WithOutputFormat(f))
+				defer dec.Close()
+				got := decodeFrames(t, dec, c, stream, f)
+				if len(got) != len(want) {
+					t.Fatalf("frame count: got %d want %d", len(got), len(want))
+				}
+				worst := math.Inf(1)
+				for i := range got {
+					if len(got[i].pix) != f.FrameSize(320, 240) {
+						t.Fatalf("frame %d has %d bytes", i, len(got[i].pix))
+					}
+					for j := 3; j < len(got[i].pix); j += 4 {
+						if got[i].pix[j] != 255 {
+							t.Fatalf("frame %d pixel %d alpha = %d, want 255", i, j/4, got[i].pix[j])
+						}
+					}
+					if psnr := testutil.BlockPSNR(got[i].pix, want[i], 320, 240, 8); psnr < worst {
+						worst = psnr
+					}
+				}
+				t.Logf("worst 8x8-block PSNR against ffmpeg %s: %.2f dB", f, worst)
+				if worst < minPSNR {
+					t.Fatalf("worst PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+				}
+				decoded[f] = got
+			})
+		}
+		rgba, bgra := decoded[hwmediacodec.RGBA], decoded[hwmediacodec.BGRA]
+		if len(rgba) == 0 || len(rgba) != len(bgra) {
+			continue
+		}
+		for i := range rgba {
+			a, b := rgba[i].pix, bgra[i].pix
+			for j := 0; j < len(a); j += 4 {
+				if a[j] != b[j+2] || a[j+1] != b[j+1] || a[j+2] != b[j] || a[j+3] != b[j+3] {
+					t.Fatalf("%s frame %d pixel %d: RGBA %v is not the mirror of BGRA %v", c, i, j/4, a[j:j+4], b[j:j+4])
+				}
+			}
+		}
 	}
 }
 

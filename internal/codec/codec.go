@@ -56,14 +56,70 @@ const (
 	// NV12 is 8-bit 4:2:0 with a full-resolution Y plane followed by one
 	// interleaved CbCr plane at half resolution.
 	NV12 PixelFormat = iota + 1
+	// RGBA is 8-bit packed RGB with alpha in one plane, R first in memory,
+	// 4 bytes per pixel and rows of exactly 4*Width bytes (no padding), so
+	// that Planes[0] can be handed to ebiten.Image.WritePixels or wrapped
+	// in an image.RGBA as is. Decoders emit alpha 255; encoders ignore
+	// alpha.
+	RGBA
+	// BGRA is RGBA with B first in memory (the native 32-bit format of
+	// Metal, Direct3D and Core Video).
+	BGRA
 )
 
 func (p PixelFormat) String() string {
 	switch p {
 	case NV12:
 		return "nv12"
+	case RGBA:
+		return "rgba"
+	case BGRA:
+		return "bgra"
 	}
 	return fmt.Sprintf("pixelformat(%d)", uint8(p))
+}
+
+// PlaneCount returns the number of planes of a frame in format p, or 0 for
+// an unknown format.
+func (p PixelFormat) PlaneCount() int {
+	switch p {
+	case NV12:
+		return 2
+	case RGBA, BGRA:
+		return 1
+	}
+	return 0
+}
+
+// PlaneLayout returns the number of rows and the number of meaningful bytes
+// per row of plane i of a picture of the given size, or (0, 0) when the
+// plane does not exist.
+func (p PixelFormat) PlaneLayout(i, width, height int) (rows, rowBytes int) {
+	switch p {
+	case NV12:
+		switch i {
+		case 0:
+			return height, width
+		case 1:
+			return (height + 1) / 2, (width + 1) / 2 * 2
+		}
+	case RGBA, BGRA:
+		if i == 0 {
+			return height, width * 4
+		}
+	}
+	return 0, 0
+}
+
+// FrameSize returns the number of bytes of a tightly packed picture of the
+// given size in format p.
+func (p PixelFormat) FrameSize(width, height int) int {
+	n := 0
+	for i := 0; i < p.PlaneCount(); i++ {
+		rows, rowBytes := p.PlaneLayout(i, width, height)
+		n += rows * rowBytes
+	}
+	return n
 }
 
 // RateControl selects how an encoder spends its bit budget.
@@ -149,7 +205,30 @@ type Packet struct {
 	// decoder input it is a hint only; decoders inspect the bitstream
 	// themselves. Encoders set it authoritatively.
 	Keyframe bool
+
+	order Order
 }
+
+// Order is the display-order key the reorder layer derives for a picture
+// from its slice header. Decoders copy it from the Packet to the Frame they
+// produce for it.
+type Order struct {
+	// Seq counts coded video sequences: it increases whenever the picture
+	// order count restarts (IDR and BLA pictures). Frames of an older
+	// sequence are always displayed before frames of a newer one.
+	Seq uint32
+	// POC is the picture order count within the sequence.
+	POC int32
+	// Reorder is the number of frames that may precede this frame in decode
+	// order and follow it in display order (num_reorder_frames).
+	Reorder uint8
+}
+
+// SetPacketOrder attaches the display-order key to a packet.
+func SetPacketOrder(p *Packet, o Order) { p.order = o }
+
+// PacketOrder returns the display-order key attached to a packet.
+func PacketOrder(p Packet) Order { return p.order }
 
 // Frame is one raw picture in CPU memory.
 //
@@ -170,6 +249,7 @@ type Frame struct {
 
 	release func()
 	native  any
+	order   Order
 }
 
 // Release returns the frame memory to the decoder. The frame must not be
@@ -196,6 +276,13 @@ func SetRelease(f *Frame, fn func()) { f.release = fn }
 
 // SetNative installs the backend-specific handle.
 func SetNative(f *Frame, n any) { f.native = n }
+
+// SetFrameOrder attaches the display-order key of the packet the frame was
+// decoded from. Backends call it when they construct a Frame.
+func SetFrameOrder(f *Frame, o Order) { f.order = o }
+
+// FrameOrder returns the display-order key attached to a frame.
+func FrameOrder(f *Frame) Order { return f.order }
 
 // Decoder turns Packets into Frames.
 //
@@ -301,6 +388,16 @@ type DecoderConfig struct {
 	OutputFormat PixelFormat
 	// TimeScale is the number of PTS units per second.
 	TimeScale int32
+	// DisplayOrder asks for frames in display order. Backends that emit
+	// decode order are wrapped in the reorder layer by the public API;
+	// a backend that reorders natively should implement DisplayOrderer.
+	DisplayOrder bool
+}
+
+// DisplayOrderer is implemented by decoders that already emit frames in
+// display order, so the public API does not wrap them in the reorder layer.
+type DisplayOrderer interface {
+	OutputsDisplayOrder() bool
 }
 
 // EncoderConfig is the resolved set of encoder options handed to a backend.

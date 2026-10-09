@@ -287,13 +287,13 @@ verification:
     - path: internal/vaapi/encoder.go
       input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
     - path: internal/vaapi/backend.go
-      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
+      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
     - path: internal/vaapi/display.go
       input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: 7a8a5ff4b95acb3175c1aab0239b18ec1eb1cc08a687111548342548f21bf27a
+      input_hash: e7b47cb5ccff5dde22616edc25af04981d5cb5190beab95513d461f7f85ce5b1
   h264-reference-linux:
     state: not_run
     method: integration

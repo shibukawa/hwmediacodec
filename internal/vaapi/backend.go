@@ -71,7 +71,7 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 		return nil, unsupported(cfg.Codec, "only h264 decoding is implemented on the vaapi backend")
 	}
 	if cfg.OutputFormat != codec.NV12 {
-		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not supported; use NV12")
+		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not available on the vaapi backend yet; use NV12")
 	}
 	d, err := openDisplay()
 	if err != nil {
@@ -105,7 +105,7 @@ func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.E
 		return nil, unsupportedEncode(cfg.Codec, "only h264 encoding is implemented on the vaapi backend")
 	}
 	if cfg.InputFormat != codec.NV12 {
-		return nil, unsupportedEncode(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not supported; use NV12")
+		return nil, unsupportedEncode(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not available on the vaapi backend yet; use NV12")
 	}
 	d, err := openDisplay()
 	if err != nil {

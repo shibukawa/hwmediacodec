@@ -178,15 +178,15 @@ verification:
     - path: internal/vaapi/display.go
       input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
     - path: internal/vaapi/backend.go
-      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
+      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
     - path: internal/vaapi/decoder.go
-      input_hash: efe32365692dc17f7520c9c9f5a3d4a6816cdf93a60d26fa74d25bd3f618ad4a
+      input_hash: bb3ac4a4d0c3e112a3806b7294fc9d9659feab28fa7477643b165cbec0585e42
     - path: internal/vaapi/h264fill.go
       input_hash: f9dc33284533ccafb2576c955220e9bfa0383e9339fcd8f1c86921d4fc53bd35
     - path: backends_linux.go
       input_hash: 6d1ca44fde42ab5db095d5f985f68ba6fd2b355e77880bb082a51ad5e99eb87a
     - path: probe_test.go
-      input_hash: 5bd3f003dc94cd2baf9f10ad015b8ce366c0a59bd490376ccfd5921c6e18da67
+      input_hash: cf84c37f092545c38725fc8d272e988322bea279a940bc4b25e0bee60e146044
   hardware-conformance:
     state: not_run
     method: integration
@@ -236,13 +236,13 @@ verification:
     - path: internal/vaapi/encoder.go
       input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
     - path: internal/vaapi/backend.go
-      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
+      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
     - path: internal/vaapi/display.go
       input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: 7a8a5ff4b95acb3175c1aab0239b18ec1eb1cc08a687111548342548f21bf27a
+      input_hash: e7b47cb5ccff5dde22616edc25af04981d5cb5190beab95513d461f7f85ce5b1
   cross-build-check:
     state: passed
     method: static
@@ -317,3 +317,7 @@ history:
   encoder-added-2026-10-09:
     summary: VA-API H.264 encoder added to the same PR at the author's request; header writer verified
       on the host, hardware encode pending.
+  merged-display-order-2026-10-09:
+    summary: Merged main after the display-order/RGBA milestone; the reorder tracker now runs on the
+      full H.264 parser of this slice (the lightweight parser was removed), so MMCO 5 resets are honoured,
+      and VA-API decoders are wrapped by the reorder layer like VideoToolbox. RGBA/BGRA stay VideoToolbox-only.

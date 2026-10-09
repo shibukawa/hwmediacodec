@@ -74,8 +74,8 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 	if !ok {
 		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Decode, Reason: "only h264 and hevc decoding are implemented"}
 	}
-	if cfg.OutputFormat != codec.NV12 {
-		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Decode, Reason: "output format " + cfg.OutputFormat.String() + " is not supported; use NV12"}
+	if _, ok := vtPixelFormat(cfg.OutputFormat); !ok {
+		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Decode, Reason: "output format " + cfg.OutputFormat.String() + " is not supported; use NV12, RGBA or BGRA"}
 	}
 	if err := sys.Load(); err != nil {
 		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Decode, Reason: err.Error()}
@@ -92,8 +92,8 @@ func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.E
 	if !ok {
 		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "only h264 and hevc encoding are implemented"}
 	}
-	if cfg.InputFormat != codec.NV12 {
-		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "input format " + cfg.InputFormat.String() + " is not supported; use NV12"}
+	if _, ok := vtPixelFormat(cfg.InputFormat); !ok {
+		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "input format " + cfg.InputFormat.String() + " is not supported; use NV12, RGBA or BGRA"}
 	}
 	if err := sys.Load(); err != nil {
 		return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: err.Error()}
