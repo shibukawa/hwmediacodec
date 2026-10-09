@@ -11,8 +11,8 @@ require (
 	github.com/pion/rtp v1.10.5
 	github.com/pion/webrtc/v4 v4.2.23
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/shibukawa/hwmediacodec v0.0.0-20261009132643-b6692122ef4b
-	github.com/shibukawa/hwmediacodec/ebitenvideo v0.0.0-20261009133137-4dccc1549fb0
+	github.com/shibukawa/hwmediacodec v0.1.0
+	github.com/shibukawa/hwmediacodec/ebitenvideo v0.1.0
 	golang.org/x/image v0.45.0
 )
 
