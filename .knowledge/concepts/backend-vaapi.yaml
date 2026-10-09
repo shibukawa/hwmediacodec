@@ -337,7 +337,7 @@ verification:
         against VideoToolbox and may need tuning for VCN.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
+      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
     - path: internal/vaapi/backend.go
       input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
     - path: internal/vaapi/display.go
@@ -388,7 +388,7 @@ verification:
       note: debian trixie container, libva 2.22, linux/arm64 and (emulated) linux/amd64, 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: bcae97623e49532f3d3d84db4f13ec2a79626ae9f06ba88362af5d1029f8cb57
+      input_hash: 3e9bd8fa8cb3ebbc2f29e6bd6b4043a03ffe1cd9e39587ab6e37783ad42332cd
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 1a7944caf1b0fb5a07b684811049bb2dd612bff6403453ae41875031398b6486
     - path: internal/vaapi/decoder.go
@@ -396,9 +396,9 @@ verification:
     - path: internal/vaapi/hevcdec.go
       input_hash: 8844e4633fe10e21b8afe6c235ed2832ab0d4252b9cdf46c601ddb2a6f651697
     - path: internal/vaapi/encoder.go
-      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
+      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
     - path: internal/vaapi/hevcenc.go
-      input_hash: bd0e4ae1968170577f4d8ff51a29f222e3b5c0ff6180662997f9c01d23f805d8
+      input_hash: ed6177cdde5e0977d0928cf6672aded322130788ec632a437159169edd9c77dd
   hevc-reference-linux:
     state: not_run
     method: integration

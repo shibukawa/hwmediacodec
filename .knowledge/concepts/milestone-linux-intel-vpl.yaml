@@ -129,9 +129,9 @@ verification:
         2026-10-09; 159 sizes and offsets and 13 constants; the Go test runs on any 64-bit host
     basis:
     - path: internal/vpl/sys/types.go
-      input_hash: 255204a39eedc3f30e68e371c69913b5f44c2749b4e6ee4b08c538102ce4c361
+      input_hash: 09a81d7a270bef5cce7939f16301ddb2bbfeedf19c2395bb8fd038f4a4a4e470
     - path: internal/vpl/sys/layout_test.go
-      input_hash: 5816fab5455e22aacc1560070a88061121175e33164208c2a5a8744ed5ea1993
+      input_hash: b8bb2ff5ca016673f7a486c5c6311d9719693353b5b47e5c66137cf008ee8b9d
   symbol-binding-container:
     state: passed
     method: integration
@@ -180,17 +180,17 @@ verification:
         (2026-10-09)
     basis:
     - path: internal/vpl/encparam.go
-      input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/pixels.go
       input_hash: 2608790206cbeae5fb7f099df41646ae2e1b10c597f9687864f121f6d7f4dd84
     - path: internal/vpl/paramsets.go
       input_hash: 53e3da15c421ec59b5224e662bc3a8d77826c0a854fda7bdfe9b2c549577e117
     - path: internal/vpl/vpl_test.go
-      input_hash: d382023e62cb1e069c47424f4863964d9790d4ff4bffd1cc4281d614eba020af
+      input_hash: 3e7a0e50d37bf0f9d0d013fb0ecb3dd5a3df0d8b55eb723c00bf05ded1544921
     - path: backends_test.go
       input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
   hardware-decode:
     state: not_run
     method: integration
@@ -245,7 +245,7 @@ verification:
     - path: internal/vpl/encoder.go
       input_hash: 037b7abb3e556c8d7d9cbf96b2a34c9c2ec8b7656ed7446736ad7be363b339e1
     - path: internal/vpl/encparam.go
-      input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/session.go
       input_hash: 8cab8713e6b7e2477f0058df004cad170d6dff036ec6ed8560ad547782a8f586
     - path: internal/vpl/backend.go
@@ -284,7 +284,7 @@ verification:
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
 facts:
   steps:
   - internal/vpl/sys - status codes, FourCC identifiers and struct mirrors of the VPL headers

@@ -53,7 +53,8 @@ type encodeParams struct {
 	co   sys.ExtCodingOption
 	co2  sys.ExtCodingOption2
 	co3  sys.ExtCodingOption3
-	ext  [3]unsafe.Pointer // mfxExtBuffer *[], referenced from par.ExtParam
+	vsi  sys.ExtVideoSignalInfo
+	ext  [4]unsafe.Pointer // mfxExtBuffer *[], referenced from par.ExtParam
 	next int               // number of buffers in ext
 }
 
@@ -63,10 +64,14 @@ func (p *encodeParams) attach() {
 	p.ext[0] = unsafe.Pointer(&p.co)
 	p.ext[1] = unsafe.Pointer(&p.co2)
 	p.next = 2
+	// The optional buffers come last, so that they are the first to go.
+	if p.vsi.Header.BufferID != 0 {
+		p.ext[p.next] = unsafe.Pointer(&p.vsi)
+		p.next++
+	}
 	if p.co3.Header.BufferID != 0 {
-		// Last, so that it is the first one to go.
-		p.ext[2] = unsafe.Pointer(&p.co3)
-		p.next = 3
+		p.ext[p.next] = unsafe.Pointer(&p.co3)
+		p.next++
 	}
 	p.par.ExtParam = unsafe.Pointer(&p.ext[0])
 	p.par.NumExtParam = uint16(p.next)
@@ -79,12 +84,13 @@ func (p *encodeParams) detach() {
 }
 
 // reduce drops extension buffers for a runtime that rejected the
-// configuration: first mfxExtCodingOption3 alone, then all of them. It
-// reports false when nothing is left to drop.
+// configuration: first the optional ones (mfxExtCodingOption3, then
+// mfxExtVideoSignalInfo) one at a time, then all of them. It reports false
+// when nothing is left to drop.
 func (p *encodeParams) reduce() bool {
 	switch {
 	case p.par.NumExtParam > 2:
-		p.par.NumExtParam = 2
+		p.par.NumExtParam--
 	case p.par.NumExtParam > 0:
 		p.detach()
 	default:
@@ -215,6 +221,14 @@ func (p *encodeParams) fill(cfg codec.EncoderConfig) error {
 		// default; plain P pictures keep "no B-frames" literally true.
 		p.co3.Header = sys.ExtBuffer{BufferID: sys.ExtBuffCodingOption3, BufferSz: uint32(unsafe.Sizeof(p.co3))}
 		p.co3.GPB = sys.CodingOptionOff
+	}
+	if cfg.BT709 {
+		p.vsi.Header = sys.ExtBuffer{BufferID: sys.ExtBuffVideoSignalInfo, BufferSz: uint32(unsafe.Sizeof(p.vsi))}
+		p.vsi.VideoFormat = 5 // unspecified
+		p.vsi.ColourDescriptionPresent = 1
+		p.vsi.ColourPrimaries = 1 // BT.709, as are the next two
+		p.vsi.TransferCharacteristics = 1
+		p.vsi.MatrixCoefficients = 1
 	}
 	p.attach()
 	return nil

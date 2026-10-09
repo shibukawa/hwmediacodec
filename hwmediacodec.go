@@ -16,8 +16,9 @@
 // (decoding with the Microsoft decoder transforms accelerated by Direct3D 11,
 // encoding with the vendor's hardware encoder transforms). Where the NVIDIA
 // driver is installed its backend is tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
-// return NV12 only on VA-API, NVDEC, Intel VPL and Media Foundation for now,
-// and the VA-API, Intel VPL and Media Foundation encoders take NV12 only).
+// return NV12 only on VA-API, NVDEC, Intel VPL and Media Foundation for now;
+// the VA-API, Intel VPL and Media Foundation encoders take NV12, so RGBA
+// and BGRA input is converted to it in Go on those backends).
 // Decoded frames are returned in display order (see NewDecoder and
 // WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
 // natively, so WithDecodeOrder has no effect on those backends).
@@ -83,6 +84,7 @@ import (
 	"strings"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
+	"github.com/shibukawa/hwmediacodec/internal/pixconv"
 	"github.com/shibukawa/hwmediacodec/internal/reorder"
 )
 
@@ -264,9 +266,25 @@ func NewEncoder(ctx context.Context, c Codec, width, height int, opts ...Encoder
 	case cfg.RateControl != VBR && cfg.RateControl != CBR:
 		return nil, fmt.Errorf("hwmediacodec: unknown rate control %s", cfg.RateControl)
 	}
+	return newEncoder(ctx, backends(), cfg)
+}
+
+// newEncoder opens the encoder on the first candidate that supports cfg. A
+// backend that rejects packed RGB input is asked again for NV12 and, when it
+// accepts, gets the conversion in Go in front of it.
+func newEncoder(ctx context.Context, candidates []codec.Backend, cfg codec.EncoderConfig) (Encoder, error) {
+	rgb := cfg.InputFormat == RGBA || cfg.InputFormat == BGRA
 	var unsupported error
-	for _, b := range backends() {
+	for _, b := range candidates {
 		e, err := b.NewEncoder(ctx, cfg)
+		if rgb && errors.Is(err, ErrUnsupported) {
+			nv12 := cfg
+			nv12.InputFormat = NV12
+			nv12.BT709 = true
+			if e, err = b.NewEncoder(ctx, nv12); err == nil {
+				return pixconv.WrapEncoder(e, cfg.InputFormat, cfg.Width, cfg.Height), nil
+			}
+		}
 		if err == nil {
 			return e, nil
 		}
@@ -279,7 +297,7 @@ func NewEncoder(ctx context.Context, c Codec, width, height int, opts ...Encoder
 	if unsupported != nil {
 		return nil, unsupported
 	}
-	return nil, &UnsupportedError{Codec: c, Direction: Encode, Reason: "no backend is available on this platform"}
+	return nil, &UnsupportedError{Codec: cfg.Codec, Direction: Encode, Reason: "no backend is available on this platform"}
 }
 
 type decoderOption func(*codec.DecoderConfig)
@@ -337,7 +355,9 @@ func WithDecodeOrder() DecoderOption {
 
 // WithInputFormat sets the pixel format of frames given to Encoder.Send:
 // NV12 (the default), RGBA or BGRA. The alpha byte of RGBA and BGRA input
-// is ignored.
+// is ignored. A backend whose encoder takes NV12 only gets RGBA and BGRA
+// frames converted in Go (BT.709, video range) and declares that matrix in
+// the stream where the encoder lets it.
 func WithInputFormat(f PixelFormat) EncoderOption {
 	return encoderOption(func(c *codec.EncoderConfig) { c.InputFormat = f })
 }

@@ -221,9 +221,9 @@ verification:
       note: see milestone:linux-intel-vpl for the oracle recipe
     basis:
     - path: internal/vpl/sys/types.go
-      input_hash: 255204a39eedc3f30e68e371c69913b5f44c2749b4e6ee4b08c538102ce4c361
+      input_hash: 09a81d7a270bef5cce7939f16301ddb2bbfeedf19c2395bb8fd038f4a4a4e470
     - path: internal/vpl/sys/layout_test.go
-      input_hash: 5816fab5455e22aacc1560070a88061121175e33164208c2a5a8744ed5ea1993
+      input_hash: b8bb2ff5ca016673f7a486c5c6311d9719693353b5b47e5c66137cf008ee8b9d
   symbol-binding:
     state: passed
     method: integration
@@ -276,7 +276,7 @@ verification:
     - path: internal/vpl/encoder.go
       input_hash: 037b7abb3e556c8d7d9cbf96b2a34c9c2ec8b7656ed7446736ad7be363b339e1
     - path: internal/vpl/encparam.go
-      input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/backend.go
       input_hash: a67e205ed2332fa2b958527c327240f864bbaf4cb785754c2e05d14680af5367
 history:

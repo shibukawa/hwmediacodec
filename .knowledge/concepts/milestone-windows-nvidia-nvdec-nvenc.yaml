@@ -156,7 +156,7 @@ verification:
     - path: internal/nvidia/sys/lib_windows.go
       input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
     - path: ebitenvideo/go.sum
-      input_hash: 765f20a5f56b7c5201a52a73377d2c0f0e5e544d002ee551d509d0a66f8fac36
+      input_hash: 7e7d91e9336a2f39e5bd87263ab1e71a867d35dc0f52082caacfcd0041fc4fa8
   linux-regression:
     state: passed
     method: integration
@@ -200,7 +200,7 @@ verification:
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
   windows-loader-run:
     state: not_run
     method: integration

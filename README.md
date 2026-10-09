@@ -14,11 +14,11 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -49,9 +49,19 @@ Known limitations:
   RGBA as a destination. Untagged streams are converted with the matrix
   VideoToolbox assumes (BT.601 for standard definition in our tests).
   RGB input is converted with BT.709 and the stream is tagged accordingly.
-  Alpha is 255 on output and ignored on input. The VA-API, Intel VPL and
-  Media Foundation backends offer NV12 only for now; requesting RGBA or BGRA
-  there reports `ErrUnsupported`.
+  Alpha is 255 on output and ignored on input.
+- The VA-API, Intel VPL and Media Foundation encoders take NV12 only, so
+  for RGBA or BGRA input the library converts each frame to NV12 in Go
+  before the backend sees it (`internal/pixconv`: BT.709 in video range,
+  chroma averaged over 2x2 pixels, rows split across cores; about 0.8 ms per
+  1080p frame on an Apple M3) and asks the backend to tag the stream as
+  BT.709. The VA-API backend writes that into its own SPS, Intel VPL gets
+  an `mfxExtVideoSignalInfo`, and Media Foundation gets the colour attributes
+  on its media types; an encoder MFT that ignores them leaves the stream
+  untagged, and players then guess the matrix from the picture size.
+- Decoders on the VA-API, NVDEC, Intel VPL and Media Foundation backends
+  return NV12 only for now; requesting RGBA or BGRA output there reports
+  `ErrUnsupported`.
 - On Windows the display order comes from the Media Foundation decoder
   itself, and on Linux with Intel VPL from the VPL runtime, so
   `WithDecodeOrder` has no effect there.
@@ -429,7 +439,7 @@ encoders write complete access units, so H.264 and HEVC both work and no
 slice-level bookkeeping runs in Go. Decoding yields 8-bit 4:2:0 NV12 (10-bit
 streams report `ErrUnsupported`), copied to CPU memory per picture; field
 pairs of interlaced streams come back as one woven frame. Encoding takes
-NV12 with even dimensions and supports B-frames (two consecutive, when the
+NV12 with even dimensions (RGBA and BGRA are converted in Go first) and supports B-frames (two consecutive, when the
 GPU has them), VBR/CBR, constant QP for `WithQuality` (and QP 26 without a
 bitrate or quality), low latency (no B-frames) and profiles; keyframes are
 IDR pictures with in-band VPS/SPS/PPS, placed by `WithKeyframeInterval` and

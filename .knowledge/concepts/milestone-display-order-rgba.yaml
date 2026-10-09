@@ -121,7 +121,7 @@ verification:
     - path: internal/videotoolbox/decoder.go
       input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: internal/testutil/ffmpeg.go
@@ -205,7 +205,7 @@ verification:
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 237a2a56daf8eced9adb91c6fc81c56f02822a3332e53c758c0b19c89ca1280f
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
   rgba-decode-test:
@@ -231,7 +231,7 @@ verification:
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: internal/testutil/ffmpeg.go
@@ -252,7 +252,7 @@ verification:
         (27.7 dB when decoded with BT.601)
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: internal/videotoolbox/sys/sys_encode.go
@@ -313,7 +313,7 @@ verification:
       note: ebiten v2.10.4; the core go.mod still requires only purego
     basis:
     - path: ebitenvideo/go.mod
-      input_hash: 7db4eff4b8d61e9577f4213fcb75f64de334d2db391e7b8a243ee7e5adbcaffe
+      input_hash: 30cc55a2bb64bd6d2cf24769c1e0888b1c8a00a078929ec02a221dd5a7a0b968
     - path: go.mod
       input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
 open_questions:

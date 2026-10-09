@@ -241,7 +241,7 @@ verification:
         surface. The first run of the pre-existing H.264 backend code through libva.
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: bcae97623e49532f3d3d84db4f13ec2a79626ae9f06ba88362af5d1029f8cb57
+      input_hash: 3e9bd8fa8cb3ebbc2f29e6bd6b4043a03ffe1cd9e39587ab6e37783ad42332cd
     - path: scripts/vaapi_fake_driver_test.sh
       input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
@@ -257,9 +257,9 @@ verification:
     - path: internal/vaapi/hevcfill.go
       input_hash: a96d02e0c2fb0a53c91b77cef6c901db0e94d08ec1d6a5c5ebe9cbabdc700ae5
     - path: internal/vaapi/encoder.go
-      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
+      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
     - path: internal/vaapi/hevcenc.go
-      input_hash: bd0e4ae1968170577f4d8ff51a29f222e3b5c0ff6180662997f9c01d23f805d8
+      input_hash: ed6177cdde5e0977d0928cf6672aded322130788ec632a437159169edd9c77dd
     - path: internal/vaapi/hevcparams.go
       input_hash: cc811fa1bfe1c396c0c9561c25ae53c35a142948ad4f9ab7e9eca60c3060c507
     - path: internal/vaapi/backend.go

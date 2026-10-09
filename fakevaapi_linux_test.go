@@ -462,6 +462,90 @@ func TestFakeVAAPIEncode(t *testing.T) {
 	}
 }
 
+// TestFakeVAAPIEncodeRGB feeds packed RGB frames, which the public API
+// converts to NV12 for this backend: the driver must see the BT.709 video
+// range picture, and the parameter sets must declare that matrix.
+func TestFakeVAAPIEncodeRGB(t *testing.T) {
+	requireFakeVAAPI(t)
+	const width, height, frames = 64, 48, 3
+	// Pure red is Y 63, Cb 102, Cr 240 in BT.709 video range.
+	const wantSum = width*height*63 + width/2*height/2*(102+240)
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		for _, f := range []hwmediacodec.PixelFormat{hwmediacodec.RGBA, hwmediacodec.BGRA} {
+			t.Run(c.String()+"/"+f.String(), func(t *testing.T) {
+				requireFakeVAAPI(t)
+				ctx := context.Background()
+				enc, err := hwmediacodec.NewEncoder(ctx, c, width, height, hwmediacodec.WithFrameRate(30), hwmediacodec.WithInputFormat(f))
+				if err != nil {
+					t.Fatalf("NewEncoder: %v", err)
+				}
+				defer enc.Close()
+				red := []byte{255, 0, 0, 255}
+				if f == hwmediacodec.BGRA {
+					red = []byte{0, 0, 255, 255}
+				}
+				pix := bytes.Repeat(red, width*height)
+				var stream []byte
+				for i := 0; i < frames; i++ {
+					if err := enc.Send(ctx, testutil.RawFrame(pix, f, width, height, int64(i)*testPTSStep)); err != nil {
+						t.Fatalf("Send frame %d: %v", i, err)
+					}
+					for {
+						p, err := enc.Receive(ctx)
+						if errors.Is(err, hwmediacodec.ErrAgain) {
+							break
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						stream = append(stream, p.Data...)
+					}
+				}
+				log := fakeLog(t, "enc")
+				if len(log) != frames {
+					t.Fatalf("the driver encoded %d pictures, want %d", len(log), frames)
+				}
+				for k, l := range log {
+					if in00, sum := logInt(t, l, "in00"), logInt(t, l, "sum"); in00 != 63 || sum != wantSum {
+						t.Errorf("picture %d: the driver saw in00=%d sum=%d, want 63 and %d", k, in00, sum, wantSum)
+					}
+				}
+
+				// Primaries, transfer function, matrix, full range flag.
+				var colour [3]uint8
+				var fullRange, described bool
+				for _, nal := range annexb.Split(stream) {
+					switch c {
+					case hwmediacodec.H264:
+						if _, typ, _ := h264.NALHeader(nal); typ == h264.NALSPS {
+							s, err := h264.NewParameterSets().AddSPS(nal)
+							if err != nil {
+								t.Fatalf("SPS: %v", err)
+							}
+							v := s.VUI
+							described = v.VideoSignalTypePresent && v.ColourDescriptionPresent
+							colour, fullRange = [3]uint8{v.ColourPrimaries, v.TransferCharacteristics, v.MatrixCoefficients}, v.VideoFullRange
+						}
+					case hwmediacodec.HEVC:
+						if hevc.Type(nal) == hevc.NALSPS {
+							s, err := hevc.NewParameterSets().AddSPS(nal)
+							if err != nil {
+								t.Fatalf("SPS: %v", err)
+							}
+							v := s.VUI
+							described = v.VideoSignalTypePresent && v.ColourDescriptionPresent
+							colour, fullRange = [3]uint8{v.ColourPrimaries, v.TransferCharacteristics, v.MatrixCoeffs}, v.VideoFullRange
+						}
+					}
+				}
+				if !described || colour != [3]uint8{1, 1, 1} || fullRange {
+					t.Errorf("SPS colour description present=%v %v full range=%v, want BT.709 in video range", described, colour, fullRange)
+				}
+			})
+		}
+	}
+}
+
 func b2int(b bool) int {
 	if b {
 		return 1

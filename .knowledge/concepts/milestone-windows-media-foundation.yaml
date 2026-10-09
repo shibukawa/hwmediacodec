@@ -270,10 +270,10 @@ verification:
       input_hash: 17adee94e73aa9bfa32381632547621fcf4d87185ab988689589451d4654332e
     - &mf_encoder
       path: internal/mediafoundation/encoder.go
-      input_hash: 8d27e0c9005148538185c0c06c8f3c0b062f3697131831cbda5760a4e2e2ded4
+      input_hash: 8a39fbbe97bbf68e2f7e899f3ad9cb0d89781326ec62613579f365ab9ee300f2
     - &mf_sys_encode
       path: internal/mediafoundation/sys/encode.go
-      input_hash: 202b5cd3a676d70ae5f6b7893623cc31b83e91866bb612784d02903d017122af
+      input_hash: 19d25f22ffa23369663a8e6adc38dfd22b169295c4e6f58bbf4917d9cb31c6db
   layout-check-m3:
     state: passed
     method: static
