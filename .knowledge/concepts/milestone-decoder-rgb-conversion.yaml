@@ -22,7 +22,9 @@ constraints:
   pixconv.Decoder outermost, so only frames that leave are converted. Backend order is kept;
   VideoToolbox converts itself and is never wrapped.'
 - 'Colour (pixconv.ColorFor): the wrapper parses every new SPS it is sent (H.264 and HEVC, byte-compared
-  with the previous one) and takes matrix_coeffs and video_full_range_flag from the VUI: 1 and 7 are
+  with the previous one) and takes matrix_coeffs and video_full_range_flag from the VUI; for AV1 (decoded
+  on these backends since milestone:av1-decode-linux-windows) it takes matrix_coefficients and color_range
+  from the color_config of every new sequence header OBU. 1 and 7 are
   BT.709, 4/5/6 BT.601, 9/10 BT.2020. A stream that names no matrix gets BT.709 when the picture is
   wider than 704 or taller than 576 pixels and BT.601 otherwise - the rule VideoToolbox applies, so
   that every backend shows the same colours.'
@@ -43,7 +45,7 @@ constraints:
   are converted with the new one (the description is not tracked per picture).
 non_goals:
 - Bilinear chroma interpolation, SIMD or GPU conversion, a public option to override the matrix.
-- AV1 (only VideoToolbox decodes it and converts itself), 10-bit output.
+- 10-bit output.
 - Per-picture tracking of the colour description across a mid-stream change.
 acceptance:
   conversion-exact:
@@ -55,8 +57,8 @@ acceptance:
     verified_by:
     - pixconv-unit-test
   stream-colour:
-    text: The wrapper follows the colour description of H.264 and HEVC parameter sets as they arrive,
-      falls back to the size rule without one, ignores broken parameter sets and other codecs, releases
+    text: The wrapper follows the colour description of H.264 and HEVC parameter sets and AV1 sequence
+      headers as they arrive, falls back to the size rule without one, ignores broken ones, releases
       the backend frame, and returns independent frames that outlive Close.
     scope:
       milestone: decoder-rgb-conversion
@@ -112,9 +114,9 @@ verification:
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
     - path: internal/pixconv/yuv_test.go
-      input_hash: d007b8a4d18c2d60082eec854cd1d6bd8e0aa59a3ee4c8c723c8af6cfdad4dcf
+      input_hash: d057cb80a9b3421898e353fe1ec16a88f61e5d10222df9ca3374a59f849d1053
   selection-test:
     state: passed
     method: unit
@@ -153,7 +155,7 @@ verification:
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -185,7 +187,7 @@ verification:
         streams, that the backend returns the samples unscaled.'
     basis:
     - path: internal/pixconv/decoder.go
-      input_hash: 8b4b6adf0d0e5f3bdeca964cd6b5e39500a7f328b13d11f0d131c307a403b7bf
+      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
 open_questions:
 - Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range NV12?
   The wrapper assumes so; VideoToolbox is the one backend known to rescale.

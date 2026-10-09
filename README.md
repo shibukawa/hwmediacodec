@@ -69,8 +69,9 @@ Known limitations:
   only, so for RGBA or BGRA output the library converts each frame in Go
   after the backend (and after the reordering) has delivered it
   (`internal/pixconv`, about 0.8 ms per 1080p frame on an Apple M3). The
-  matrix and the range follow the stream's VUI (BT.601, BT.709 or BT.2020,
-  video or full range); a stream that names no matrix gets BT.709 when the
+  matrix and the range follow the stream's VUI, or for AV1 the sequence
+  header's colour configuration (BT.601, BT.709 or BT.2020, video or full
+  range); a stream that names no matrix gets BT.709 when the
   picture is wider than 704 or taller than 576 pixels and BT.601 otherwise,
   which is where VideoToolbox draws the line, so the colours are the same
   on every backend. Every chroma sample colours its 2x2 block of pixels

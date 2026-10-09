@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/hevc"
@@ -17,8 +18,9 @@ const matrixUnspecified = 2
 // Decoder turns the NV12 frames of a backend decoder into packed RGB
 // frames. It implements codec.Decoder.
 //
-// The matrix and range of the conversion follow the video signal fields of
-// the newest sequence parameter set sent to the decoder (see ColorFor).
+// The matrix and range of the conversion follow the newest sequence
+// parameter set (H.264, HEVC: the video signal fields of the VUI) or
+// sequence header (AV1: color_config) sent to the decoder; see ColorFor.
 // Frames still inside the decoder when a stream switches to parameter sets
 // with another colour description are converted with the new one.
 type Decoder struct {
@@ -26,7 +28,7 @@ type Decoder struct {
 	codec  codec.Codec
 	format codec.PixelFormat
 
-	sps       []byte // the last SPS NAL unit seen
+	sps       []byte // the last SPS NAL unit or sequence header payload seen
 	matrix    uint8
 	fullRange bool
 
@@ -65,7 +67,12 @@ func (d *Decoder) Send(ctx context.Context, p codec.Packet) error {
 // in an access unit. A parameter set that does not parse leaves the
 // description as it was; the backend reports the broken stream.
 func (d *Decoder) readColor(au []byte) {
-	if d.codec != codec.H264 && d.codec != codec.HEVC {
+	switch d.codec {
+	case codec.H264, codec.HEVC:
+	case codec.AV1:
+		d.readAV1Color(au)
+		return
+	default:
 		return
 	}
 	for _, nal := range annexb.Split(au) {
@@ -87,6 +94,26 @@ func (d *Decoder) readColor(au []byte) {
 			d.matrix, d.fullRange = signal(s.VUIPresent && s.VUI.VideoSignalTypePresent, s.VUI.ColourDescriptionPresent, s.VUI.MatrixCoeffs, s.VUI.VideoFullRange)
 		}
 		d.sps = append(d.sps[:0], nal...)
+	}
+}
+
+// readAV1Color is readColor for a temporal unit of an AV1 stream.
+func (d *Decoder) readAV1Color(tu []byte) {
+	obus, err := av1.Split(tu)
+	if err != nil {
+		return
+	}
+	for _, o := range obus {
+		if o.Type != av1.OBUSequenceHeader || bytes.Equal(o.Payload, d.sps) {
+			continue
+		}
+		sh, err := av1.ParseSequenceHeader(o.Payload)
+		if err != nil {
+			continue
+		}
+		// Without a colour description the parser reports matrix 2.
+		d.matrix, d.fullRange = sh.MatrixCoefficients, sh.FullRange
+		d.sps = append(d.sps[:0], o.Payload...)
 	}
 }
 

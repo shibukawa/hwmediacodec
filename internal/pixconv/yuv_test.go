@@ -8,6 +8,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/hevc"
@@ -241,6 +242,15 @@ func hevcSPS(vui hevc.VUI) []byte {
 	})...)
 }
 
+// av1SequenceHeader returns a sequence header OBU for a 320x240 8-bit
+// stream: the one SVT-AV1 writes, up to color_description_present_flag,
+// followed by the given end (the flag, the three colour codes when it is
+// set, color_range and the rest of the header).
+func av1SequenceHeader(end ...byte) []byte {
+	payload := append([]byte{0x02, 0x00, 0x00, 0x05, 0x21, 0xe7, 0xfd, 0xe2, 0x57, 0xc8}, end...)
+	return av1.AppendOBU(nil, av1.OBUSequenceHeader, payload)
+}
+
 // TestDecoderFollowsStreamColor sends parameter sets with different colour
 // descriptions and checks which conversion the frames get. The source frame
 // is pure red in BT.601 video range.
@@ -275,14 +285,29 @@ func TestDecoderFollowsStreamColor(t *testing.T) {
 			{"no video signal", hevcSPS(hevc.VUI{}), Color{BT601, false}},
 			{"bt709 full range", hevcSPS(hevc.VUI{VideoSignalTypePresent: true, VideoFormat: 5, VideoFullRange: true, ColourDescriptionPresent: true, ColourPrimaries: 1, TransferCharacteristics: 1, MatrixCoeffs: 1}), Color{BT709, true}},
 		}},
+		{codec.AV1, 320, 240, []step{
+			{"no colour description", av1SequenceHeader(0x02), Color{BT601, false}},
+			{"bt709", av1SequenceHeader(0x80, 0x80, 0x80, 0x82), Color{BT709, false}},
+			{"bt709 full range", av1SequenceHeader(0x80, 0x80, 0x80, 0xc2), Color{BT709, true}},
+			{"bt2020", av1SequenceHeader(0x84, 0x84, 0x84, 0x82), Color{BT2020, false}},
+			{"broken sequence header", []byte{0x0a, 0x01, 0xff}, Color{BT2020, false}},
+		}},
 		{codec.AV1, 1280, 720, []step{
+			{"no colour description, high definition", av1SequenceHeader(0x02), Color{BT709, false}},
+			{"smpte170m", av1SequenceHeader(0x83, 0x03, 0x03, 0x02), Color{BT601, false}},
+		}},
+		{codec.Codec(99), 1280, 720, []step{
 			{"other codec", h264SPS(h264.VUI{VideoSignalTypePresent: true, ColourDescriptionPresent: true, MatrixCoefficients: 6}), Color{BT709, false}},
 		}},
 	} {
 		src := &source{width: tc.width, height: tc.height}
 		dec := WrapDecoder(src, tc.codec, codec.RGBA)
 		for i, s := range tc.steps {
-			if err := dec.Send(ctx, codec.Packet{Data: append(append([]byte{}, s.sps...), slice...), PTS: int64(i)}); err != nil {
+			data := append([]byte{}, s.sps...)
+			if tc.codec != codec.AV1 {
+				data = append(data, slice...)
+			}
+			if err := dec.Send(ctx, codec.Packet{Data: data, PTS: int64(i)}); err != nil {
 				t.Fatal(err)
 			}
 			f, err := dec.Receive(ctx)

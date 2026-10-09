@@ -43,7 +43,8 @@ non_goals:
 - AV1 encoding on any backend (NVENC from RTX 40, VPL from Arc, VA-API from RDNA3/Arc, vendor encoder
   MFTs) - a later slice.
 - 10-bit AV1 on Linux and Windows (needs P010 surfaces and a conversion; VideoToolbox converts itself).
-- RGBA/BGRA output on these backends (NV12 only, as for H.264 and HEVC there).
+- RGBA/BGRA output from the backends themselves (they return NV12; the conversion in Go of milestone:decoder-rgb-conversion
+  provides both formats, with the matrix and range of the sequence header's color_config).
 - Spatial scalability (several spatial layers) and large-scale-tile streams on VA-API - ErrUnsupported.
 - The Annex B length-delimited AV1 format.
 acceptance:
