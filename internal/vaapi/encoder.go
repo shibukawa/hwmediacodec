@@ -13,6 +13,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
+	"github.com/shibukawa/hwmediacodec/internal/hevc"
 	"github.com/shibukawa/hwmediacodec/internal/vaapi/sys"
 )
 
@@ -29,8 +30,9 @@ const (
 	encLog2MaxPOCLsb   = 8
 )
 
-// encoder is an H.264 encoder on VAEntrypointEncSlice: I and P frames with
-// one reference, frames in presentation order, synchronous per picture.
+// encoder is an H.264 or HEVC encoder on VAEntrypointEncSlice: I and P
+// frames with one reference, frames in presentation order, synchronous per
+// picture.
 type encoder struct {
 	mu  sync.Mutex
 	cfg codec.EncoderConfig
@@ -85,11 +87,25 @@ type encoder struct {
 	hrdParam   sys.EncMiscParameterHRD
 	packedHdr  [2]sys.EncPackedHeaderParameterBuffer
 	sliceHdr   []byte
+
+	// hevc holds the HEVC parameter sets and buffers; it is nil for H.264
+	// encoders.
+	hevc *hevcEncoder
 }
 
 // encodeProfiles maps the requested profile to VA profiles in preference
-// order.
-func encodeProfiles(p codec.Profile) []int32 {
+// order; it is empty when the codec has no such profile here.
+func encodeProfiles(c codec.Codec, p codec.Profile) []int32 {
+	if c == codec.HEVC {
+		// 8-bit 4:2:0 only.
+		if p == codec.ProfileDefault || p == codec.ProfileMain {
+			return []int32{sys.ProfileHEVCMain}
+		}
+		return nil
+	}
+	if c != codec.H264 {
+		return nil
+	}
 	switch p {
 	case codec.ProfileBaseline:
 		return []int32{sys.ProfileH264ConstrainedBaseline}
@@ -108,12 +124,18 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 	if cfg.Width%2 != 0 || cfg.Height%2 != 0 {
 		return fail(fmt.Sprintf("picture size %dx%d: 4:2:0 encoding needs even dimensions", cfg.Width, cfg.Height))
 	}
+	// Macroblock alignment; an HEVC encoder replaces the aligned size by its
+	// minimum coding block alignment in initHEVC.
 	e.mbW = (cfg.Width + 15) / 16
 	e.mbH = (cfg.Height + 15) / 16
 	e.alignedW, e.alignedH = e.mbW*16, e.mbH*16
 
 	// Profile and entrypoint.
-	for _, p := range encodeProfiles(cfg.Profile) {
+	candidates := encodeProfiles(cfg.Codec, cfg.Profile)
+	if len(candidates) == 0 {
+		return fail("profile " + cfg.Profile.String() + " is not available for " + cfg.Codec.String() + " on the vaapi backend")
+	}
+	for _, p := range candidates {
 		if ep, ok := dpy.encodeEntrypoint(p); ok {
 			e.profile, e.entrypoint = p, ep
 			break
@@ -121,9 +143,14 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 	}
 	if e.entrypoint == 0 {
 		if cfg.Profile != codec.ProfileDefault {
-			return fail("profile " + cfg.Profile.String() + " has no H.264 encode entrypoint on this driver (" + dpy.vendor + ")")
+			return fail("profile " + cfg.Profile.String() + " has no " + cfg.Codec.String() + " encode entrypoint on this driver (" + dpy.vendor + ")")
 		}
-		return fail("the VA-API driver (" + dpy.vendor + ") offers no H.264 encode entrypoint")
+		return fail("the VA-API driver (" + dpy.vendor + ") offers no " + cfg.Codec.String() + " encode entrypoint")
+	}
+	if cfg.Codec == codec.HEVC {
+		if err := e.initHEVC(); err != nil {
+			return nil, err
+		}
 	}
 	if mw, ok := dpy.configAttrib(e.profile, e.entrypoint, sys.ConfigAttribMaxPictureWidth); ok && int(mw) < cfg.Width {
 		return fail(fmt.Sprintf("width %d exceeds the encoder maximum of %d", cfg.Width, mw))
@@ -198,7 +225,11 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 		e.packed = supported & (sys.EncPackedHeaderSequence | sys.EncPackedHeaderSlice)
 	}
 
-	e.buildParameterSets()
+	if e.hevc != nil {
+		e.buildHEVCParameterSets()
+	} else {
+		e.buildParameterSets()
+	}
 
 	if err := e.createContext(); err != nil {
 		e.teardown()
@@ -437,7 +468,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	// Bookkeeping for the next picture.
 	e.haveRef = true
 	e.refFrameNum = e.framesSinceIDR % (1 << encLog2MaxFrameNum)
-	e.refPOC = 2 * e.framesSinceIDR
+	e.refPOC = e.pictureOrderCount(e.framesSinceIDR)
 	e.framesSinceIDR++
 	e.frameIndex++
 	e.inputIdx ^= 1
@@ -446,8 +477,22 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	e.flushed = false
 
 	pkt := e.packetFromStream(data, f.PTS)
+	if e.hevc != nil && pkt.Keyframe {
+		if err := e.checkHEVCOutput(pkt.Data); err != nil {
+			return err
+		}
+	}
 	e.pending = append(e.pending, pkt)
 	return nil
+}
+
+// pictureOrderCount returns the picture order count of the n-th picture
+// after an IDR picture: H.264 counts fields, HEVC pictures.
+func (e *encoder) pictureOrderCount(n int) int {
+	if e.hevc != nil {
+		return n
+	}
+	return 2 * n
 }
 
 // upload copies the frame into the input surface, replicating the last
@@ -580,14 +625,21 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 		e.idrPicID = (e.idrPicID + 1) & 0xffff
 	}
 	frameNum := e.framesSinceIDR % (1 << encLog2MaxFrameNum)
-	poc := 2 * e.framesSinceIDR
+	poc := e.pictureOrderCount(e.framesSinceIDR)
 	recon := e.recon[e.reconIdx]
 	ref := e.recon[e.reconIdx^1]
 
 	if idr {
-		e.fillSequenceParameters()
-		if err := create(sys.EncSequenceParameterBufferType, int(unsafe.Sizeof(e.seqParam)), unsafe.Pointer(&e.seqParam)); err != nil {
-			return nil, err
+		if h := e.hevc; h != nil {
+			e.fillHEVCSequenceParameters()
+			if err := create(sys.EncSequenceParameterBufferType, int(unsafe.Sizeof(h.seqParam)), unsafe.Pointer(&h.seqParam)); err != nil {
+				return nil, err
+			}
+		} else {
+			e.fillSequenceParameters()
+			if err := create(sys.EncSequenceParameterBufferType, int(unsafe.Sizeof(e.seqParam)), unsafe.Pointer(&e.seqParam)); err != nil {
+				return nil, err
+			}
 		}
 		if num, den := frameRateFraction(e.cfg.FrameRate); num > 0 {
 			e.frParam = sys.EncMiscParameterFrameRate{Type: sys.EncMiscParameterTypeFrameRate, Framerate: num | den<<16}
@@ -610,9 +662,16 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 		}
 	}
 
-	e.fillPictureParameters(idr, recon, ref, frameNum, poc)
-	if err := create(sys.EncPictureParameterBufferType, int(unsafe.Sizeof(e.picParam)), unsafe.Pointer(&e.picParam)); err != nil {
-		return nil, err
+	if h := e.hevc; h != nil {
+		e.fillHEVCPictureParameters(idr, recon, ref, poc)
+		if err := create(sys.EncPictureParameterBufferType, int(unsafe.Sizeof(h.picParam)), unsafe.Pointer(&h.picParam)); err != nil {
+			return nil, err
+		}
+	} else {
+		e.fillPictureParameters(idr, recon, ref, frameNum, poc)
+		if err := create(sys.EncPictureParameterBufferType, int(unsafe.Sizeof(e.picParam)), unsafe.Pointer(&e.picParam)); err != nil {
+			return nil, err
+		}
 	}
 	if idr && e.packed&sys.EncPackedHeaderSequence != 0 {
 		e.packedHdr[0] = sys.EncPackedHeaderParameterBuffer{Type: sys.EncPackedHeaderTypeSequence, BitLength: uint32(8 * len(e.paramSets)), HasEmulationBytes: 1}
@@ -624,15 +683,34 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 		}
 	}
 
-	sh := e.sliceHeader(idr, frameNum, poc)
-	e.fillSliceParameters(sh, idr, ref, frameNum)
-	if err := create(sys.EncSliceParameterBufferType, int(unsafe.Sizeof(e.sliceParam)), unsafe.Pointer(&e.sliceParam)); err != nil {
-		return nil, err
+	// sliceBits is the size of the packed slice header after its start code.
+	var sliceBits int
+	if h := e.hevc; h != nil {
+		sh := hevcSliceHeader(h.sps, h.pps, idr, poc)
+		e.fillHEVCSliceParameters(sh, idr)
+		if err := create(sys.EncSliceParameterBufferType, int(unsafe.Sizeof(h.sliceParam)), unsafe.Pointer(&h.sliceParam)); err != nil {
+			return nil, err
+		}
+		if e.packed&sys.EncPackedHeaderSlice != 0 {
+			// The header ends with byte_alignment(), so it is whole bytes.
+			hdr := hevc.WriteSliceHeader(sh, h.sps, h.pps)
+			e.sliceHdr = append(append(e.sliceHdr[:0], 0, 0, 0, 1), hdr...)
+			sliceBits = 8 * len(hdr)
+		}
+	} else {
+		sh := e.sliceHeader(idr, frameNum, poc)
+		e.fillSliceParameters(sh, idr, ref, frameNum)
+		if err := create(sys.EncSliceParameterBufferType, int(unsafe.Sizeof(e.sliceParam)), unsafe.Pointer(&e.sliceParam)); err != nil {
+			return nil, err
+		}
+		if e.packed&sys.EncPackedHeaderSlice != 0 {
+			hdr, bits := h264.WriteSliceHeader(sh, e.sps, e.pps)
+			e.sliceHdr = append(append(e.sliceHdr[:0], 0, 0, 0, 1), hdr...)
+			sliceBits = bits
+		}
 	}
 	if e.packed&sys.EncPackedHeaderSlice != 0 {
-		hdr, bits := h264.WriteSliceHeader(sh, e.sps, e.pps)
-		e.sliceHdr = append(append(e.sliceHdr[:0], 0, 0, 0, 1), hdr...)
-		e.packedHdr[1] = sys.EncPackedHeaderParameterBuffer{Type: sys.EncPackedHeaderTypeSlice, BitLength: uint32(32 + bits), HasEmulationBytes: 1}
+		e.packedHdr[1] = sys.EncPackedHeaderParameterBuffer{Type: sys.EncPackedHeaderTypeSlice, BitLength: uint32(32 + sliceBits), HasEmulationBytes: 1}
 		if err := create(sys.EncPackedHeaderParameterBufferType, int(unsafe.Sizeof(e.packedHdr[1])), unsafe.Pointer(&e.packedHdr[1])); err != nil {
 			return nil, err
 		}
@@ -694,23 +772,34 @@ func (e *encoder) readCodedBuffer() ([]byte, error) {
 // packetFromStream wraps the coded data as an Annex-B access unit, adding
 // the parameter sets in front of keyframes when the driver did not.
 func (e *encoder) packetFromStream(data []byte, pts int64) codec.Packet {
-	keyframe, hasSPS := false, false
+	keyframe, hasSPS, hasVPS := false, false, false
+	spsType := h264.NALSPS
+	if e.hevc != nil {
+		spsType = hevc.NALSPS
+	}
 	for _, nal := range annexb.Split(data) {
-		switch annexb.NALUnitType(codec.H264, nal) {
-		case h264.NALSliceIDR:
+		t := annexb.NALUnitType(e.cfg.Codec, nal)
+		switch {
+		case annexb.IsVCL(e.cfg.Codec, t) && annexb.IsKeyframe(e.cfg.Codec, t):
 			keyframe = true
-		case h264.NALSPS:
+		case t == spsType:
 			hasSPS = true
+		case e.hevc != nil && t == hevc.NALVPS:
+			hasVPS = true
 		}
 	}
-	var out []byte
-	if keyframe && !hasSPS {
-		out = make([]byte, 0, len(e.paramSets)+len(data))
-		out = append(out, e.paramSets...)
-	} else {
-		out = make([]byte, 0, len(data))
+	var prefix []byte
+	switch {
+	case !keyframe:
+	case !hasSPS:
+		prefix = e.paramSets
+	case e.hevc != nil && !hasVPS:
+		// The driver wrote its own SPS and PPS but no VPS; ours describes
+		// the same single-layer stream.
+		prefix = append([]byte{0, 0, 0, 1}, hevc.WriteVPS(e.hevc.vps)...)
 	}
-	out = append(out, data...)
+	out := make([]byte, 0, len(prefix)+len(data))
+	out = append(append(out, prefix...), data...)
 	return codec.Packet{Data: out, PTS: pts, DTS: pts, Keyframe: keyframe}
 }
 

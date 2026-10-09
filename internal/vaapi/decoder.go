@@ -38,6 +38,9 @@ type surface struct {
 	deriveTried, derive bool
 }
 
+// surfaceID implements vaSurface.
+func (s *surface) surfaceID() uint32 { return s.id }
+
 // sequence is the VA configuration, context and surface pool created for
 // one SPS (profile, size, reference count).
 type sequence struct {
@@ -76,11 +79,17 @@ type decoder struct {
 	iqMatrix sys.IQMatrixBufferH264
 	sliceBuf []sys.SliceParameterBufferH264
 	bufIDs   []uint32
+
+	// hevc holds the HEVC bitstream state; it is nil for H.264 decoders.
+	hevc *hevcDecoder
 }
 
 func newDecoder(cfg codec.DecoderConfig, dpy *display) *decoder {
 	d := &decoder{cfg: cfg, dpy: dpy, ps: h264.NewParameterSets(), waitKeyframe: true}
 	d.dpb = h264.NewDPB(d)
+	if cfg.Codec == codec.HEVC {
+		d.hevc = newHEVCDecoder(d)
+	}
 	return d
 }
 
@@ -127,6 +136,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return codec.ErrInvalidData
+	}
+	if d.hevc != nil {
+		return d.sendHEVC(p, nals)
 	}
 	var slices [][]byte
 	for _, nal := range nals {
@@ -204,7 +216,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 			return codec.ErrAgain
 		}
 		d.dpb.Reset()
-		if err := d.setupSequence(sps); err != nil {
+		candidates := append([]int32{profileFor(sps, -1)}, h264Profiles...)
+		if err := d.setupSequence(candidates, sps.CodedWidth(), sps.CodedHeight(), refCount(sps),
+			fmt.Sprintf("profile_idc %d", sps.ProfileIDC)); err != nil {
 			return err
 		}
 	}
@@ -295,14 +309,14 @@ func profileFor(sps *h264.SPS, current int32) int32 {
 	return want[0]
 }
 
-func (d *decoder) setupSequence(sps *h264.SPS) error {
+// setupSequence creates the VA configuration, the surface pool and the
+// context for a coded size. candidates lists the VA profiles that can decode
+// the stream in order of preference; maxRefs is the number of reference
+// pictures the stream keeps besides the one being decoded.
+func (d *decoder) setupSequence(candidates []int32, width, height, maxRefs int, stream string) error {
 	d.teardownSequence()
 
 	var profile int32 = -1
-	candidates := []int32{profileFor(sps, -1)}
-	for _, p := range h264Profiles {
-		candidates = append(candidates, p)
-	}
 	for _, p := range candidates {
 		if d.dpy.decodeProfiles[p] {
 			profile = p
@@ -310,7 +324,7 @@ func (d *decoder) setupSequence(sps *h264.SPS) error {
 		}
 	}
 	if profile < 0 {
-		return unsupported(d.cfg.Codec, fmt.Sprintf("profile_idc %d has no VA-API decode profile on this driver", sps.ProfileIDC))
+		return unsupported(d.cfg.Codec, stream+" has no VA-API decode profile on this driver")
 	}
 	attr := sys.ConfigAttrib{Type: sys.ConfigAttribRTFormat}
 	if st := sys.GetConfigAttributes(d.dpy.dpy, profile, sys.EntrypointVLD, &attr, 1); st != sys.StatusSuccess {
@@ -319,7 +333,7 @@ func (d *decoder) setupSequence(sps *h264.SPS) error {
 	if attr.Value == sys.AttribNotSupported || attr.Value&sys.RTFormatYUV420 == 0 {
 		return unsupported(d.cfg.Codec, "the VA-API driver does not decode to 4:2:0 8-bit surfaces")
 	}
-	seq := &sequence{profile: profile, width: sps.CodedWidth(), height: sps.CodedHeight(), maxRefs: refCount(sps)}
+	seq := &sequence{profile: profile, width: width, height: height, maxRefs: maxRefs}
 	attr.Value = sys.RTFormatYUV420
 	if st := sys.CreateConfig(d.dpy.dpy, profile, sys.EntrypointVLD, &attr, 1, &seq.config); st != sys.StatusSuccess {
 		if st == sys.StatusErrorUnsupportedProfile || st == sys.StatusErrorUnsupportedEntrypoint || st == sys.StatusErrorUnsupportedRTFormat {
@@ -337,9 +351,8 @@ func (d *decoder) setupSequence(sps *h264.SPS) error {
 		}
 		return vaError("vaCreateSurfaces", st)
 	}
-	for i, id := range seq.ids[:n-1] {
+	for _, id := range seq.ids[:n-1] {
 		seq.surfaces = append(seq.surfaces, &surface{id: id})
-		_ = i
 	}
 	seq.dummy = &surface{id: seq.ids[n-1], dummy: true}
 	if st := sys.CreateContext(d.dpy.dpy, seq.config, int32(seq.width), int32(seq.height), sys.Progressive, &seq.ids[0], int32(n), &seq.context); st != sys.StatusSuccess {
@@ -375,21 +388,9 @@ func (d *decoder) teardownSequence() {
 // decodePicture submits one picture (all its slices) to the driver.
 func (d *decoder) decodePicture(sps *h264.SPS, pps *h264.PPS, headers []*h264.SliceHeader, cur *h264.Picture, slices [][]byte) error {
 	first := headers[0]
-	dpy, ctx := d.dpy.dpy, d.seq.context
 	d.bufIDs = d.bufIDs[:0]
-	defer func() {
-		for _, id := range d.bufIDs {
-			sys.DestroyBuffer(dpy, id)
-		}
-	}()
-	create := func(typ int32, size int, data unsafe.Pointer) error {
-		var id uint32
-		if st := sys.CreateBuffer(dpy, ctx, typ, uint32(size), 1, data, &id); st != sys.StatusSuccess {
-			return vaError("vaCreateBuffer", st)
-		}
-		d.bufIDs = append(d.bufIDs, id)
-		return nil
-	}
+	defer d.destroyBuffers()
+	create := d.createBuffer
 
 	fillPictureParameters(&d.picParam, sps, pps, first, cur, d.dpb.Refs())
 	if err := create(sys.PictureParameterBufferType, int(unsafe.Sizeof(d.picParam)), unsafe.Pointer(&d.picParam)); err != nil {
@@ -417,7 +418,31 @@ func (d *decoder) decodePicture(sps *h264.SPS, pps *h264.PPS, headers []*h264.Sl
 		}
 	}
 
-	s := cur.Handle.(*surface)
+	return d.renderBuffers(cur.Handle.(*surface))
+}
+
+// createBuffer creates one VA buffer for the picture being assembled; the
+// buffers are destroyed by destroyBuffers.
+func (d *decoder) createBuffer(typ int32, size int, data unsafe.Pointer) error {
+	var id uint32
+	if st := sys.CreateBuffer(d.dpy.dpy, d.seq.context, typ, uint32(size), 1, data, &id); st != sys.StatusSuccess {
+		return vaError("vaCreateBuffer", st)
+	}
+	d.bufIDs = append(d.bufIDs, id)
+	return nil
+}
+
+func (d *decoder) destroyBuffers() {
+	for _, id := range d.bufIDs {
+		sys.DestroyBuffer(d.dpy.dpy, id)
+	}
+	d.bufIDs = d.bufIDs[:0]
+}
+
+// renderBuffers submits the buffers created for one picture to the driver,
+// decoding into s.
+func (d *decoder) renderBuffers(s *surface) error {
+	dpy, ctx := d.dpy.dpy, d.seq.context
 	if st := sys.BeginPicture(dpy, ctx, s.id); st != sys.StatusSuccess {
 		return vaError("vaBeginPicture", st)
 	}
@@ -567,8 +592,11 @@ func (d *decoder) Flush(ctx context.Context) error {
 	}
 	// Decoding is synchronous per picture, so nothing is in flight; frames
 	// already decoded stay queued for Receive. Drop the references so that
-	// decoding restarts at the next IDR picture.
+	// decoding restarts at the next IDR (HEVC: IRAP) picture.
 	d.dpb.Reset()
+	if d.hevc != nil {
+		d.hevc.dpb.Reset()
+	}
 	d.flushed = true
 	d.waitKeyframe = true
 	return nil
@@ -582,6 +610,9 @@ func (d *decoder) Close() error {
 	}
 	d.closed = true
 	d.dpb.Reset()
+	if d.hevc != nil {
+		d.hevc.dpb.Reset()
+	}
 	d.pending = nil
 	d.teardownSequence()
 	d.dpy.close()

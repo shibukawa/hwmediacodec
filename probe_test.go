@@ -67,9 +67,13 @@ func TestProbe(t *testing.T) {
 
 func TestUnsupportedCodec(t *testing.T) {
 	ctx := context.Background()
-	_, err := hwmediacodec.NewDecoder(ctx, hwmediacodec.AV1)
+	// An unknown codec value is unsupported everywhere; AV1 decoding is
+	// unsupported wherever Probe lists no hardware for it (every backend
+	// but VideoToolbox on an M3 or newer), and AV1 encoding everywhere.
+	unknown := hwmediacodec.Codec(200)
+	_, err := hwmediacodec.NewDecoder(ctx, unknown)
 	if err == nil {
-		t.Fatal("expected an error for AV1 decoding")
+		t.Fatal("expected an error for decoding an unknown codec")
 	}
 	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 		t.Fatalf("error does not match ErrUnsupported: %v", err)
@@ -78,10 +82,18 @@ func TestUnsupportedCodec(t *testing.T) {
 	if !errors.As(err, &ue) {
 		t.Fatalf("error is not *UnsupportedError: %T %v", err, err)
 	}
-	if ue.Codec != hwmediacodec.AV1 || ue.Direction != hwmediacodec.Decode || ue.Reason == "" {
+	if ue.Codec != unknown || ue.Direction != hwmediacodec.Decode || ue.Reason == "" {
 		t.Fatalf("unexpected UnsupportedError contents: %+v", ue)
 	}
 	t.Log(err)
+
+	if !hasHardware(t, hwmediacodec.AV1, hwmediacodec.Decode) {
+		_, err = hwmediacodec.NewDecoder(ctx, hwmediacodec.AV1)
+		if !errors.As(err, &ue) || !errors.Is(err, hwmediacodec.ErrUnsupported) || ue.Codec != hwmediacodec.AV1 || ue.Direction != hwmediacodec.Decode {
+			t.Fatalf("AV1 decode without hardware: unexpected error %v", err)
+		}
+		t.Log(err)
+	}
 
 	_, err = hwmediacodec.NewEncoder(ctx, hwmediacodec.AV1, 640, 480)
 	if !errors.As(err, &ue) {

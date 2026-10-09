@@ -230,73 +230,77 @@ func TestEncodeMatchesSource(t *testing.T) {
 // TestTranscodeRoundTrip runs the end-to-end batch transcode path: hardware
 // encode, then hardware decode, compared to the source.
 func TestTranscodeRoundTrip(t *testing.T) {
-	src := testutil.GenerateNV12Frames(t, encodeWidth, encodeHeight, 30)
-	enc := newTestEncoder(t, hwmediacodec.H264, hwmediacodec.WithBitrate(1_500_000))
-	pkts := encodeAll(t, enc, src, encodeWidth, encodeHeight)
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			src := testutil.GenerateNV12Frames(t, encodeWidth, encodeHeight, 30)
+			enc := newTestEncoder(t, c, hwmediacodec.WithBitrate(1_500_000))
+			pkts := encodeAll(t, enc, src, encodeWidth, encodeHeight)
 
-	ctx := context.Background()
-	dec, err := hwmediacodec.NewDecoder(ctx, hwmediacodec.H264)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dec.Close()
-	var stream []byte
-	for _, p := range pkts {
-		stream = append(stream, p.Data...)
-	}
-	var decoded [][]byte
-	r := annexb.NewReader(bytes.NewReader(stream), hwmediacodec.H264)
-	for {
-		au, err := r.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
-			t.Fatalf("decoder Send: %v", err)
-		}
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				break
-			}
+			ctx := context.Background()
+			dec, err := hwmediacodec.NewDecoder(ctx, c)
 			if err != nil {
-				t.Fatalf("decoder Receive: %v", err)
+				t.Fatal(err)
 			}
-			decoded = append(decoded, testutil.FrameBytes(f))
-			f.Release()
-		}
-	}
-	// The hardware encoder writes no VUI reorder bound, so the display-order
-	// decoder holds the DPB depth back until Flush.
-	if err := dec.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
-	for {
-		f, err := dec.Receive(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		decoded = append(decoded, testutil.FrameBytes(f))
-		f.Release()
-	}
-	if len(decoded) != len(src) {
-		t.Fatalf("decoded %d frames, want %d", len(decoded), len(src))
-	}
-	worst := 1e9
-	for i := range src {
-		if psnr := testutil.PSNRY(src[i], decoded[i], encodeWidth, encodeHeight); psnr < worst {
-			worst = psnr
-		}
-	}
-	t.Logf("worst luma PSNR %.2f dB", worst)
-	if worst < minPSNR {
-		t.Fatalf("worst luma PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+			defer dec.Close()
+			var stream []byte
+			for _, p := range pkts {
+				stream = append(stream, p.Data...)
+			}
+			var decoded [][]byte
+			r := annexb.NewReader(bytes.NewReader(stream), c)
+			for {
+				au, err := r.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
+					t.Fatalf("decoder Send: %v", err)
+				}
+				for {
+					f, err := dec.Receive(ctx)
+					if errors.Is(err, hwmediacodec.ErrAgain) {
+						break
+					}
+					if err != nil {
+						t.Fatalf("decoder Receive: %v", err)
+					}
+					decoded = append(decoded, testutil.FrameBytes(f))
+					f.Release()
+				}
+			}
+			// The hardware encoder writes no VUI reorder bound, so the display-order
+			// decoder holds the DPB depth back until Flush.
+			if err := dec.Flush(ctx); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				f, err := dec.Receive(ctx)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded = append(decoded, testutil.FrameBytes(f))
+				f.Release()
+			}
+			if len(decoded) != len(src) {
+				t.Fatalf("decoded %d frames, want %d", len(decoded), len(src))
+			}
+			worst := 1e9
+			for i := range src {
+				if psnr := testutil.PSNRY(src[i], decoded[i], encodeWidth, encodeHeight); psnr < worst {
+					worst = psnr
+				}
+			}
+			t.Logf("worst luma PSNR %.2f dB", worst)
+			if worst < minPSNR {
+				t.Fatalf("worst luma PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+			}
+		})
 	}
 }
 

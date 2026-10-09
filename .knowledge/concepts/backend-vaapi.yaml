@@ -37,8 +37,25 @@ capabilities:
     - linux-symbol-binding
     - h264-reference-linux
   decode/hevc:
-    state: planned
+    state: implemented
     about: capability:hwmediacodec/decode-hevc
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/hevcdec.go
+      note: Code complete (2026-10-09), Main 8-bit 4:2:0. Parser, reference picture sets and the VA parameter
+        buffers are verified against ffmpeg and x265 on the host and the decoder ran through libva
+        against the fake driver; no AMD or Intel hardware run yet, hence authority inferred.
+    verified_by:
+    - hevc-host-oracles
+    - fake-driver
+    - hevc-reference-linux
   decode/av1:
     state: unknown
     about: capability:hwmediacodec/decode-av1
@@ -62,8 +79,25 @@ capabilities:
     - linux-symbol-binding
     - h264-encode-linux
   encode/hevc:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/encode-hevc
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/hevcenc.go
+      note: Code complete (2026-10-09), Main profile, I and P pictures. Headers verified against the
+        parser, ffmpeg trace_headers and ffprobe; the encoder ran through libva against the fake driver;
+        hardware encode pending.
+    verified_by:
+    - hevc-host-oracles
+    - fake-driver
+    - hevc-encode-linux
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -144,7 +178,7 @@ facts:
     profile_mapping: profile_idc 66 -> ConstrainedBaseline/Main/High, 77 -> Main/High, else High; first
       profile with a VLD entrypoint wins.
     limitations:
-    - H.264 only (HEVC parser/RPS and VA HEVC buffers are the next step).
+    - H.264 and HEVC Main; no 10-bit, range extension or screen content streams.
     - Progressive frames only; field_pic_flag=1 is rejected with ErrUnsupported (MBAFF frames are fine).
     - 8-bit 4:2:0 only (NV12); no FMO, no data partitioning, redundant slices are dropped.
   encoder_implementation:
@@ -164,7 +198,23 @@ facts:
       edge replication into the macroblock padding; one coded buffer (3 bytes/pixel) mapped after vaSyncBuffer
       (vaSyncSurface fallback); synchronous per picture inside Send.
     limitations:
-    - H.264 only; no B-frames; even width/height required; one slice per picture; no SEI.
+    - H.264 and HEVC Main; no B-frames; even width/height required; one slice per picture; no SEI; Intel
+      HEVC encoders without P-frames (generalised-B only) are reported as unsupported.
+  hevc_implementation:
+    see: milestone:linux-vaapi-hevc (facts.design)
+    decode: hevcdec.go parses the access unit with internal/hevc, keeps the DPB there, and submits
+      VAPictureParameterBufferHEVC, VAIQMatrixBufferHEVC (when scaling lists are enabled) and one VASliceParameterBufferHEVC
+      plus slice data per slice segment; pool = sps_max_dec_pic_buffering + output slack + one stand-in
+      surface for missing references; RASL pictures after the random access point are dropped.
+    encode: hevcenc.go/hevcparams.go build VPS/SPS/PPS from the driver's block size and feature attributes,
+      send VAEncSequence/Picture/SliceParameterBufferHEVC with the same rate control misc buffers as
+      H.264, and check the SPS in the first keyframe against the requested size.
+  fake_driver:
+    path: internal/vaapi/testdata/fakedriver (fake_drv_video.c, fake_drm.c, Dockerfile); scripts/vaapi_fake_driver_test.sh
+    purpose: runs the backend through libva without a GPU; validates buffers through the libva C headers
+      and reports each picture in a log; decoded surfaces carry a pattern that names their POC.
+    personalities: FAKE_VA_PACKED (packed header mask), FAKE_VA_HEVC_ATTRS, FAKE_VA_DERIVE; PLATFORM=linux/amd64
+      runs it through emulation.
   host_verification_2026-10-09:
     parser: every SPS/PPS/slice-header syntax element equals ffmpeg trace_headers on six x264 streams
       (CAVLC/CABAC, POC types 0 and 2, B-pyramid, 16 refs, weighted prediction, cqm=jvt, 3 slices,
@@ -184,6 +234,8 @@ relations:
   to: policy:support-tiers
 - relation: implemented_in
   to: milestone:linux-vaapi-h264-decode
+- relation: implemented_in
+  to: milestone:linux-vaapi-hevc
 verification:
   h264-parser-oracle:
     state: passed
@@ -248,7 +300,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux_test.go
       input_hash: e5ccfdee741414432a931d5769e0f28ca73953505247000f60e49e69c0f0aa52
     - path: internal/vaapi/display.go
-      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
   h264-writer-roundtrip:
     state: passed
     method: unit
@@ -285,15 +337,15 @@ verification:
         against VideoToolbox and may need tuning for VCN.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
+      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
     - path: internal/vaapi/backend.go
-      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
+      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
     - path: internal/vaapi/display.go
-      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+      input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
   h264-reference-linux:
     state: not_run
     method: integration
@@ -302,7 +354,72 @@ verification:
     evidence:
       path: decode_test.go
       note: Needs an AMD (or Intel) Linux machine with ffmpeg+libx264; run go test -count=1 -v . there.
+  hevc-host-oracles:
+    state: passed
+    method: integration
+    authority: observed
+    test: internal/hevc and internal/vaapi tests (see milestone:linux-vaapi-hevc verification hevc-parser-oracle,
+      hevc-dpb-oracle, hevc-va-buffer-test, hevc-writer-test, hevc-encoder-header-test, hevc-layout-test)
+    evidence:
+      path: internal/vaapi/hevcfill_test.go
+      note: ffmpeg trace_headers and the x265 reference-list report as oracles, on the author's M3, 2026-10-09
+    basis:
+    - path: internal/vaapi/hevcfill.go
+      input_hash: a96d02e0c2fb0a53c91b77cef6c901db0e94d08ec1d6a5c5ebe9cbabdc700ae5
+    - path: internal/vaapi/hevcparams.go
+      input_hash: cc811fa1bfe1c396c0c9561c25ae53c35a142948ad4f9ab7e9eca60c3060c507
+    - path: internal/hevc/dpb.go
+      input_hash: 71ccc5e889291ebe46d5b832db7a0e03eacc38bddc58338c0bc9a8b1a4334982
+    - path: internal/hevc/slice.go
+      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+    - path: internal/hevc/sps.go
+      input_hash: 1374983ce37a6610377a25f0c5b14aca43b9af613141f7fb2c7d18127bbdefdf
+    - path: internal/hevc/pps.go
+      input_hash: e77afbbb3211faff364fd819840e0e5fd348a8e536876bf327b8d15fa5084a11
+    - path: internal/hevc/write.go
+      input_hash: 346027af5b6f5cdacc4e746789f74d9e7b7bb960846483e92dc447a22dabe34d
+  fake-driver:
+    state: passed
+    method: integration
+    authority: observed
+    test: scripts/vaapi_fake_driver_test.sh (four driver personalities; H.264 and HEVC, decode and encode)
+    evidence:
+      path: fakevaapi_linux_test.go
+      note: debian trixie container, libva 2.22, linux/arm64 and (emulated) linux/amd64, 2026-10-09
+    basis:
+    - path: fakevaapi_linux_test.go
+      input_hash: bcae97623e49532f3d3d84db4f13ec2a79626ae9f06ba88362af5d1029f8cb57
+    - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
+      input_hash: 1a7944caf1b0fb5a07b684811049bb2dd612bff6403453ae41875031398b6486
+    - path: internal/vaapi/decoder.go
+      input_hash: 072e21339ab564f3f16596ce27fb9f788f6802b0ab0392ee4cdc6b013c29de12
+    - path: internal/vaapi/hevcdec.go
+      input_hash: 8844e4633fe10e21b8afe6c235ed2832ab0d4252b9cdf46c601ddb2a6f651697
+    - path: internal/vaapi/encoder.go
+      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
+    - path: internal/vaapi/hevcenc.go
+      input_hash: bd0e4ae1968170577f4d8ff51a29f222e3b5c0ff6180662997f9c01d23f805d8
+  hevc-reference-linux:
+    state: not_run
+    method: integration
+    authority: inferred
+    test: TestDecodeHEVCMatchesReference, TestDecodeBFramesMatchesReference/hevc, TestDecodeHEVCCodingTools,
+      TestDecodeHEVCOpenGOP on Linux with a VA-API driver
+    evidence:
+      path: decode_test.go
+      note: Needs an AMD (or Intel) Linux machine with ffmpeg+libx265.
+  hevc-encode-linux:
+    state: not_run
+    method: integration
+    authority: inferred
+    test: the HEVC subtests of the encode and transcode tests on Linux with a VA-API encoder
+    evidence:
+      path: encode_test.go
+      note: Needs an AMD (or Intel) Linux machine with ffmpeg.
 history:
+  hevc-implemented-2026-10-09:
+    summary: HEVC decode and encode added (milestone:linux-vaapi-hevc) with a fake VA driver that runs
+      the backend through libva; hardware verification pending.
   decode-implemented-2026-10-09:
     summary: H.264 decode implemented (Go parser/DPB + purego libva bindings) at the author's request
       ("Linux AMD, decoder first"); host-side oracle tests pass, hardware conformance pending.

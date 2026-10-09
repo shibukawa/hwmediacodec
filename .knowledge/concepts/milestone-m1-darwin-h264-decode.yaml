@@ -61,25 +61,25 @@ verification:
     basis:
     - &id004
       path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - &id005
       path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - &id006
       path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id007
       path: hwmediacodec.go
-      input_hash: 4aa1fac3178aa01ae5d844ef4490d0958b540825cf7fd96215bf338ae2b2094a
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - &id001
       path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - &id002
       path: probe_test.go
-      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
+      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - &id003
       path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   probe-test:
     state: passed
     method: integration
@@ -173,7 +173,7 @@ verification:
       note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
   bframe-set-test:
     state: passed
     method: integration
@@ -186,19 +186,19 @@ verification:
       locator: TestDecodeBFramesMatchesReference
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 4aa1fac3178aa01ae5d844ef4490d0958b540825cf7fd96215bf338ae2b2094a
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: probe_test.go
-      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
+      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: internal/testutil/ffmpeg.go
-      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
 open_questions:
   annexb-parser-scope:
     text: Is a minimal Go Annex-B NAL splitter plus SPS/PPS extraction enough for M1, or should M1 already

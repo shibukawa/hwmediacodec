@@ -7,13 +7,6 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/vaapi/sys"
 )
 
-func b2u(b bool) uint32 {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // vaPicture converts a DPB picture to a VAPictureH264 entry.
 func vaPicture(p *h264.Picture) sys.PictureH264 {
 	if p == nil {

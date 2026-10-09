@@ -83,7 +83,8 @@ type decoder struct {
 
 	session    uintptr
 	formatDesc uintptr
-	params     *paramSetStore
+	params     *paramSetStore // H.264 and HEVC parameter sets
+	av1        av1State       // AV1 sequence header
 
 	waitKeyframe bool
 	flushed      bool
@@ -118,6 +119,13 @@ func newDecoder(cfg codec.DecoderConfig, vtCodec uint32) *decoder {
 	return d
 }
 
+// OutputsDisplayOrder implements codec.DisplayOrderer. An AV1 temporal unit
+// carries exactly one shown frame and the units come in presentation
+// order, so VideoToolbox's output is already in display order. H.264 and
+// HEVC frames come out in decode order and are reordered by the public
+// API.
+func (d *decoder) OutputsDisplayOrder() bool { return d.cfg.Codec == codec.AV1 }
+
 func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -128,7 +136,15 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		return err
 	}
 	d.flushed = false
+	if d.cfg.Codec == codec.AV1 {
+		return d.sendAV1(p)
+	}
+	return d.sendAnnexB(p)
+}
 
+// sendAnnexB is Send for H.264 and HEVC: p.Data is one access unit in
+// Annex-B form.
+func (d *decoder) sendAnnexB(p codec.Packet) error {
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return codec.ErrInvalidData
@@ -158,7 +174,11 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 
 	if d.params.dirty && d.params.complete() {
-		if err := d.recreateSession(); err != nil {
+		fd, st := d.params.formatDescription()
+		if st != 0 || fd == 0 {
+			return &codec.BackendError{Backend: Name, Op: "CMVideoFormatDescriptionCreateFromParameterSets", Status: int64(st), Message: sys.StatusString(st)}
+		}
+		if err := d.recreateSession(fd); err != nil {
 			return err
 		}
 	}
@@ -175,10 +195,12 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		}
 		d.waitKeyframe = false
 	}
-	return d.decode(payload, inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)})
+	return d.decodePacket(lengthPrefixed(payload), inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)})
 }
 
-func (d *decoder) decode(nals [][]byte, in inflightFrame) error {
+// lengthPrefixed joins NAL units in the 4-byte length-prefixed layout
+// (AVCC/HVCC) that a VideoToolbox sample buffer holds.
+func lengthPrefixed(nals [][]byte) []byte {
 	size := 0
 	for _, n := range nals {
 		size += 4 + len(n)
@@ -188,7 +210,16 @@ func (d *decoder) decode(nals [][]byte, in inflightFrame) error {
 		data = binary.BigEndian.AppendUint32(data, uint32(len(n)))
 		data = append(data, n...)
 	}
+	return data
+}
 
+// decodePacket hands one coded picture (length-prefixed NAL units, or an
+// AV1 temporal unit) to the session and collects its output.
+func (d *decoder) decodePacket(data []byte, in inflightFrame) error {
+	size := len(data)
+	if size == 0 {
+		return codec.ErrInvalidData
+	}
 	var block uintptr
 	if st := sys.CMBlockBufferCreateWithMemoryBlock(0, 0, uintptr(size), 0, 0, 0, uintptr(size), 0, &block); st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "CMBlockBufferCreateWithMemoryBlock", Status: int64(st), Message: sys.StatusString(st)}
@@ -235,11 +266,9 @@ func (d *decoder) decode(nals [][]byte, in inflightFrame) error {
 	return err
 }
 
-func (d *decoder) recreateSession() error {
-	fd, st := d.params.formatDescription()
-	if st != 0 || fd == 0 {
-		return &codec.BackendError{Backend: Name, Op: "CMVideoFormatDescriptionCreateFromParameterSets", Status: int64(st), Message: sys.StatusString(st)}
-	}
+// recreateSession replaces the decompression session with one for the
+// format description fd, whose reference it takes over.
+func (d *decoder) recreateSession(fd uintptr) error {
 	if d.session != 0 {
 		d.drainSession()
 		d.destroySession()

@@ -8,6 +8,7 @@ package sys
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"unsafe"
@@ -78,7 +79,12 @@ var (
 	CFDictionaryCreateMutable func(alloc uintptr, capacity int, keyCallBacks, valueCallBacks uintptr) uintptr
 	CFDictionarySetValue      func(dict, key, value uintptr)
 	CFNumberCreate            func(alloc uintptr, numberType int, valuePtr *int32) uintptr
+	CFDataCreate              func(alloc uintptr, bytes *byte, length int) uintptr
 
+	// CMVideoFormatDescriptionCreate builds a format description from a codec
+	// type, picture size and an extensions dictionary; the AV1 decoder uses
+	// it with the av1C record under SampleDescriptionExtensionAtoms.
+	CMVideoFormatDescriptionCreate                      func(alloc uintptr, codecType uint32, width, height int32, extensions uintptr, out *uintptr) int32
 	CMVideoFormatDescriptionCreateFromH264ParameterSets func(alloc uintptr, count uintptr, pointers *uintptr, sizes *uintptr, nalUnitHeaderLength int32, out *uintptr) int32
 	CMVideoFormatDescriptionCreateFromHEVCParameterSets func(alloc uintptr, count uintptr, pointers *uintptr, sizes *uintptr, nalUnitHeaderLength int32, extensions uintptr, out *uintptr) int32
 	CMBlockBufferCreateWithMemoryBlock                  func(alloc uintptr, memoryBlock uintptr, blockLength uintptr, blockAllocator uintptr, customBlockSource uintptr, offsetToData uintptr, dataLength uintptr, flags uint32, out *uintptr) int32
@@ -120,6 +126,10 @@ var (
 	KCVPixelBufferPixelFormatTypeKey uintptr
 	KVTRequireHardwareDecoder        uintptr
 	KVTEnableHardwareDecoder         uintptr
+	// KCMFormatDescriptionExtensionSampleDescriptionExtensionAtoms keys the
+	// dictionary of ISOBMFF sample description atoms (such as "av1C") in a
+	// format description's extensions.
+	KCMFormatDescriptionExtensionSampleDescriptionExtensionAtoms uintptr
 )
 
 var (
@@ -209,11 +219,14 @@ func load() error {
 	cf.fn(&CFDictionaryCreateMutable, "CFDictionaryCreateMutable")
 	cf.fn(&CFDictionarySetValue, "CFDictionarySetValue")
 	cf.fn(&CFNumberCreate, "CFNumberCreate")
+	cf.fn(&CFDataCreate, "CFDataCreate")
 	cf.ptrConst(&KCFBooleanTrue, "kCFBooleanTrue")
 	cf.ptrConst(&KCFBooleanFalse, "kCFBooleanFalse")
 	cf.addrConst(&KCFTypeDictionaryKeyCallBacks, "kCFTypeDictionaryKeyCallBacks")
 	cf.addrConst(&KCFTypeDictionaryValueCallBacks, "kCFTypeDictionaryValueCallBacks")
 
+	cm.fn(&CMVideoFormatDescriptionCreate, "CMVideoFormatDescriptionCreate")
+	cm.ptrConst(&KCMFormatDescriptionExtensionSampleDescriptionExtensionAtoms, "kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms")
 	cm.fn(&CMVideoFormatDescriptionCreateFromH264ParameterSets, "CMVideoFormatDescriptionCreateFromH264ParameterSets")
 	cm.fn(&CMVideoFormatDescriptionCreateFromHEVCParameterSets, "CMVideoFormatDescriptionCreateFromHEVCParameterSets")
 	cm.fn(&CMBlockBufferCreateWithMemoryBlock, "CMBlockBufferCreateWithMemoryBlock")
@@ -267,6 +280,16 @@ func CFString(s string) uintptr {
 // CFNumberInt32 creates a CFNumberRef. The caller owns the result.
 func CFNumberInt32(v int32) uintptr {
 	return CFNumberCreate(0, cfNumberSInt32Type, &v)
+}
+
+// CFData creates a CFDataRef holding a copy of b. The caller owns the result.
+func CFData(b []byte) uintptr {
+	if len(b) == 0 {
+		return CFDataCreate(0, nil, 0)
+	}
+	d := CFDataCreate(0, &b[0], len(b))
+	runtime.KeepAlive(b)
+	return d
 }
 
 // NewDictionary creates a mutable CFDictionary with CFType callbacks.

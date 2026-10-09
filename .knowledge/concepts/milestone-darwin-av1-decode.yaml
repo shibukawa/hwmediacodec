@@ -1,0 +1,505 @@
+id: milestone:darwin-av1-decode
+type: milestone
+title: macOS AV1 decoding through VideoToolbox (Apple M3 and newer)
+summary: 'macOS slice, requested on 2026-10-09: AV1 decoding on the VideoToolbox backend. A Packet is
+  one temporal unit in the low-overhead OBU format (an IVF frame or an ISOBMFF av01 sample); the
+  sequence header is parsed in Go (internal/av1) to build the av1C record that CMVideoFormatDescriptionCreate
+  takes as a SampleDescriptionExtensionAtoms entry; every temporal unit yields exactly one frame in
+  presentation order, so the decoder implements codec.DisplayOrderer and bypasses the POC reorder
+  layer. 8-bit output is bit-exact with libdav1d; Main profile 10-bit input is converted to 8-bit by
+  VideoToolbox. A public ivf package reads and writes IVF files and the CLI reads IVF for -codec av1.
+  No Apple Silicon chip has an AV1 encoder.'
+lifecycle: active
+authority: authored
+aliases:
+- AV1 decode
+- av01
+- AV1デコード
+- IVF
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: darwin-av1-decode
+constraints:
+- CGO_ENABLED=0; every framework call goes through internal/videotoolbox/sys via purego; ffmpeg (libsvtav1
+  as the encoder, libdav1d as the reference decoder) is a test oracle only.
+- Packet.Data for AV1 is one temporal unit whose OBUs carry obu_has_size_field=1 (the last one may run
+  to the end); temporal delimiter OBUs are optional and passed through; Annex-B does not apply.
+- The AV1 decoder implements codec.DisplayOrderer returning true, so NewDecoder does not wrap it in
+  the reorder layer; WithDecodeOrder is a no-op; Frame.PTS equals Packet.PTS; one Receive per temporal
+  unit.
+- Probe lists av1 decode only when VTIsHardwareDecodeSupported('av01') is non-zero; NewDecoder returns
+  *UnsupportedError otherwise, also with WithSoftwareFallback, because VideoToolbox does not let applications
+  instantiate its software AV1 decoder (checked with a probe session at NewDecoder time).
+- Streams outside Main profile 4:2:0 (High and Professional profiles, monochrome) report ErrUnsupported
+  from Send before a session is created; a different sequence header replaces the session.
+non_goals:
+- AV1 encoding (no Apple Silicon chip has an AV1 encoder; NewEncoder reports ErrUnsupported).
+- AV1 on the Linux and Windows backends.
+- The length-delimited (Annex B) AV1 bitstream format and container parsing beyond IVF.
+- 10-bit output formats (P010); 10-bit input comes out as 8-bit.
+- Film grain synthesis - the test streams are generated with film grain off, and what VideoToolbox does
+  with film_grain_params_present streams is not measured.
+acceptance:
+  av1-bit-exact:
+    text: Decoding an SVT-AV1 8-bit 4:2:0 IVF stream (320x240, 60 frames, keyframe every 25, hidden
+      alternate reference frames shown later through show_existing_frame) to NV12 yields exactly libdav1d's
+      frames, one frame per temporal unit in order, each carrying its packet's PTS, and the frame count
+      equals ffmpeg's.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-reference-test
+  av1-temporal-delimiters-optional:
+    text: The same kind of stream with the temporal delimiter OBUs removed from every unit decodes to
+      identical frames.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-no-td-test
+  av1-rgba:
+    text: WithOutputFormat(RGBA|BGRA) on AV1 returns tightly packed frames within 30 dB (8x8-block PSNR)
+      of ffmpeg's BT.601 conversion, alpha 255, RGBA the exact mirror of BGRA.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-rgba-test
+  av1-sequence-change:
+    text: Two IVF streams of different sizes (320x240 then 160x120) written into one IVF file decode
+      as 60 frames of the right sizes matching ffmpeg's frames; the session is recreated at the new
+      sequence header.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-sequence-change-test
+  av1-flush-resume:
+    text: After Flush, Receive returns io.EOF; a non-key temporal unit is then skipped without error
+      and decoding resumes at a key temporal unit; garbage input is ErrInvalidData; WithDecodeOrder returns
+      the same frames in the same order.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-flush-resume-test
+    - av1-decode-order-noop-test
+  av1-ten-bit:
+    text: A Main profile 10-bit stream decodes with NV12 requested - VideoToolbox converts to 8-bit, every
+      frame within 45 dB PSNR of ffmpeg's conversion, and BGRA output works as well.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-ten-bit-test
+  av1-parser-oracle:
+    text: Split, ParseSequenceHeader, ParseFrameHeader and CodecConfigurationRecord agree with ffmpeg's
+      trace_headers (OBU types and sizes, every sequence header field, show_existing_frame/frame_type/show_frame)
+      and with the av1C ffmpeg writes into an MP4 of the same stream, on 8-bit and 10-bit SVT-AV1 streams;
+      the synthetic unit tests cover the branches SVT-AV1 never takes.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - av1-parser-oracle-test
+    - av1-parser-unit-test
+  ivf-round-trip:
+    text: ivf.Writer output is read back by ivf.Reader (and by ffprobe) with the same frames, timestamps,
+      frame count and timebase, is byte-identical to ffmpeg's IVF of the same frames, and truncated files
+      and bad signatures are errors.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - ivf-unit-test
+  probe-and-unsupported:
+    text: Probe lists videotoolbox av1 decode hardware=true on the M3; NewEncoder(AV1) and NewDecoder of
+      an unknown codec return *UnsupportedError, as does NewDecoder(AV1) where Probe lists no AV1 hardware.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - probe-test
+  builds:
+    text: go test ./... and CGO_ENABLED=0 go test ./... pass, scripts/crossbuild.sh builds every target,
+      and the ebitenvideo module still builds.
+    scope:
+      milestone: darwin-av1-decode
+    verified_by:
+    - build-check
+verification:
+  av1-reference-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1MatchesReference
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1MatchesReference
+      note: 2026-10-09, Apple M3, macOS 26, ffmpeg 9.0.1 with libsvtav1 (SVT-AV1 4.2.0) and libdav1d;
+        60 frames bit-exact with libdav1d, 28 hidden frames and 28 show_existing_frame units in the stream,
+        frame i has PTS 3000*i
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/videotoolbox/decoder.go
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+    - path: internal/videotoolbox/backend.go
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+    - path: internal/av1/obu.go
+      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+    - path: internal/av1/seqhdr.go
+      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: hwmediacodec.go
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+    - path: decode_test.go
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+    - path: internal/testutil/av1.go
+      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+    - path: internal/testutil/ffmpeg.go
+      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+  av1-no-td-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1WithoutTemporalDelimiters
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1WithoutTemporalDelimiters
+      note: 2026-10-09; 30 frames 160x120, identical checksums with the temporal delimiters stripped
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+  av1-rgba-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeRGBA/av1-rgba, TestDecodeRGBA/av1-bgra
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeRGBA
+      note: 2026-10-09; worst 8x8-block PSNR 35.35 dB against ffmpeg's BT.601 conversion (the same figure
+        as H.264 and HEVC), alpha 255, RGBA == mirror(BGRA)
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/videotoolbox/pixels.go
+      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+    - path: decode_test.go
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+  av1-sequence-change-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeParameterSetChange/av1
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeParameterSetChange
+      note: 2026-10-09; 30 frames 320x240 followed by 30 frames 160x120 in one IVF file written with ivf.Writer
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: ivf/ivf.go
+      input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
+    - path: decode_test.go
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+  av1-flush-resume-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestFlushResumesAtKeyframe/av1, TestDecodeAV1InvalidData
+    evidence:
+      path: decode_test.go
+      locator: TestFlushResumesAtKeyframe
+      note: 2026-10-09; 20 units 160x120, five decoded then Flush, unit 7 skipped, unit 0 resumes with one
+        frame; garbage and empty packets are ErrInvalidData
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: internal/videotoolbox/decoder.go
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+    - path: decode_test.go
+      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+  av1-decode-order-noop-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1DecodeOrderOption
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1DecodeOrderOption
+      note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
+    basis:
+    - path: hwmediacodec.go
+      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+    - path: internal/videotoolbox/decoder.go
+      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+  av1-ten-bit-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1TenBit
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1TenBit
+      note: 2026-10-09; yuv420p10le SVT-AV1 stream, 30 frames; VideoToolbox converted to NV12 (no frame
+        bit-exact, worst PSNR 53.50 dB against ffmpeg's 10-to-8-bit conversion) and to BGRA
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
+    - path: decode_av1_test.go
+      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+    - path: internal/testutil/av1.go
+      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+  av1-parser-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+    test: TestHeadersMatchFFmpegTrace (8bit, 10bit), TestCodecConfigurationRecordMatchesFFmpeg (8bit, 10bit)
+    evidence:
+      path: internal/av1/oracle_test.go
+      locator: TestHeadersMatchFFmpegTrace
+      note: 2026-10-09, ffmpeg 9.0.1 trace_headers; per stream 76 OBUs, 2 sequence headers and 44 frame
+        headers (14 hidden, 14 show_existing_frame) agree; av1C equals ffmpeg's MP4 extradata byte for
+        byte. Runs on any platform with ffmpeg + libsvtav1.
+    basis:
+    - path: internal/av1/obu.go
+      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+    - path: internal/av1/seqhdr.go
+      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: internal/av1/oracle_test.go
+      input_hash: 33849e8281f5abd6c53224870b72c4f142f72aaaad686a4790cee1b443429117
+    - path: internal/testutil/av1.go
+      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+    - path: internal/testutil/h264.go
+      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+  av1-parser-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+    test: TestParseSequenceHeaderSVT, TestParseSequenceHeaderSynthetic, TestLEB128, TestSplit, TestParseFrameHeader,
+      TestParseTemporalUnit, TestCodecConfigurationRecord
+    evidence:
+      path: internal/av1/av1_test.go
+      locator: TestParseSequenceHeaderSynthetic
+      note: headers written bit by bit with internal/bitstream cover timing and decoder model info, two
+        operating points with tier and display delay, frame id numbers, Professional 12-bit 4:2:2 with a colour
+        description, High profile sRGB 4:4:4 as a reduced still picture, and monochrome
+    basis:
+    - path: internal/av1/obu.go
+      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+    - path: internal/av1/seqhdr.go
+      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: internal/av1/av1_test.go
+      input_hash: adce98e92d2f390f2b72bdb57339d1b6f703f00bdecff2357b49cc234bccbc60
+  ivf-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+    test: TestRoundTripSeekable, TestRoundTripStream, TestEmptyFile, TestErrors, TestFFmpegInterop
+    evidence:
+      path: ivf/ivf_test.go
+      locator: TestFFmpegInterop
+      note: 2026-10-09; the copy of ffmpeg's IVF is byte-identical and ffprobe reads it as 96x64, 1/30,
+        12 packets
+    basis:
+    - path: ivf/ivf.go
+      input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
+    - path: ivf/ivf_test.go
+      input_hash: 369573156dc14c846d4efe1adc30c1847f409031b0220979dff502d8001e6736
+  probe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestProbe, TestUnsupportedCodec
+    evidence:
+      path: probe_test.go
+      locator: TestUnsupportedCodec
+      note: 2026-10-09; Probe lists videotoolbox av1 decode hardware=true on the M3
+    basis:
+    - path: internal/videotoolbox/backend.go
+      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+    - path: probe_test.go
+      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+  build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+    test: go test ./... -count=1; CGO_ENABLED=0 go test ./... -count=1; scripts/crossbuild.sh; go build
+      and go vet in ebitenvideo (CGO_ENABLED=1 and 0)
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-09; every package ok with cgo on and off, six targets ok
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: go.mod
+      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
+open_questions:
+  software-av1-on-m1-m2:
+    text: On an M1 or M2, NewDecoder(AV1, WithSoftwareFallback()) runs av1SessionAvailable, which on
+      the M3 with hardware decoding disabled fails with kVTCouldNotFindVideoDecoderErr. The M1/M2 behaviour
+      itself is inferred from that measurement, not observed.
+    state: open
+    resolution: Run TestUnsupportedCodec and NewDecoder(AV1, WithSoftwareFallback()) on an M1 or M2 Mac;
+      if VideoToolbox does hand out its software AV1 decoder there, the decoder works unchanged and only
+      the README sentence needs a correction.
+  av1-colour-tags:
+    text: Only untagged streams were measured for RGB conversion (VideoToolbox assumed BT.601, as for
+      H.264 at 320x240). Whether it reads color_config from av1C for tagged streams (BT.709, BT.2020)
+      is not measured.
+    state: open
+    resolution: Encode a tagged stream (-color_primaries bt709 -color_trc bt709 -colorspace bt709) and
+      compare RGB output with ffmpeg's BT.709 conversion; if VideoToolbox ignores the tags, add the
+      kCMFormatDescriptionExtension_ColorPrimaries/TransferFunction/YCbCrMatrix extensions from the parsed
+      sequence header.
+  film-grain:
+    text: What VideoToolbox does with film_grain_params_present streams (grain synthesis in hardware,
+      and whether output is then deterministic) is not measured; the tests encode with film-grain=0.
+    state: deferred
+    resolution: Deferred until a consumer needs film grain; libdav1d applies grain by default, so a comparison
+      would need -filmgrain 0 on the ffmpeg side or a PSNR check.
+facts:
+  api:
+    decoder: NewDecoder(ctx, AV1, WithOutputFormat(NV12|RGBA|BGRA)); Packet.Data is one temporal unit;
+      Frame.PTS == Packet.PTS; WithDecodeOrder is a no-op; WithSoftwareFallback does not help without the
+      hardware engine
+    probe: Capability{Backend videotoolbox, Codec AV1, Direction Decode, Hardware true} only when VTIsHardwareDecodeSupported('av01')
+      != 0
+    ivf: ivf.NewReader(io.Reader) (*Reader, error) with Header() {FourCC, Width, Height, TimebaseNum,
+      TimebaseDen, FrameCount} and Next() (frame, pts, error); ivf.NewWriter(io.Writer, fourcc, width,
+      height, timebaseNum, timebaseDen) with WriteFrame(data, pts) and Close() (patches the frame count
+      when the writer can seek)
+    cli: decode -codec av1 input.ivf (PTS from the IVF timebase, rescaled to 90 kHz); transcode -in av1;
+      probe prints av1 decode
+  implementation:
+    parser: internal/av1 - Split (OBU framing, leb128, extension headers, size-less last OBU), ParseSequenceHeader
+      (whole sequence_header_obu incl. timing/decoder model info, operating points, color_config), ParseFrameHeader
+      (show_existing_frame, frame_type, show_frame), ParseTemporalUnit (classification - HasFrame, Keyframe,
+      ShowExistingFrame), CodecConfigurationRecord (av1C, re-framing the sequence header OBU with obu_has_size_field=1),
+      StripTemporalDelimiters
+    videotoolbox: internal/videotoolbox/av1.go - sendAV1 parses the unit, rebuilds the session on a new
+      sequence header (CMVideoFormatDescriptionCreate with 'av01', max_frame_width/height and an extensions
+      dictionary whose SampleDescriptionExtensionAtoms entry holds the av1C record as CFData), skips until
+      a shown key frame after creation and Flush, and hands the whole unit (temporal delimiters included)
+      to VTDecompressionSessionDecodeFrame; decoder.go now branches Send by codec (sendAnnexB / sendAV1)
+      and shares decodePacket; OutputsDisplayOrder() returns true for AV1
+    probe: backend.go lists AV1 decode from VTIsHardwareDecodeSupported('av01'), never asks the encoder
+      property dictionary for 'av01'; NewDecoder(AV1) without hardware returns UnsupportedError, with WithSoftwareFallback
+      only after av1SessionAvailable(true) fails
+    sys: CFDataCreate, CMVideoFormatDescriptionCreate and kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms
+      added; CFData helper
+    tests: testutil.GenerateAV1 (ffmpeg -f lavfi testsrc2 -c:v libsvtav1 -preset 10 -g 25 -svtav1-params
+      film-grain=0 -f ivf), HasDecoder, containerFormat/decoderArgs (ivf + libdav1d); decode_test.go splits
+      packets with splitStream (annexb or ivf) and joins streams with concatStreams (ivf.Writer for AV1)
+  result:
+    status: delivered 2026-10-09
+    environment:
+      host: Apple M3, macOS 26 (Darwin 27.0.0)
+      go: go1.27.0 darwin/arm64
+      purego: github.com/ebitengine/purego v0.11.1
+      oracle: ffmpeg/ffprobe 9.0.1 with libsvtav1 (SVT-AV1 4.2.0) and libdav1d
+      date: '2026-10-09'
+    tests:
+    - TestDecodeAV1MatchesReference (60 frames bit-exact, 28 hidden frames, 28 show_existing_frame units)
+    - TestDecodeAV1WithoutTemporalDelimiters, TestDecodeAV1DecodeOrderOption, TestDecodeAV1InvalidData, TestDecodeAV1TenBit
+      (53.50 dB)
+    - TestDecodeRGBA/av1-rgba and av1-bgra (35.35 dB), TestDecodeParameterSetChange/av1, TestFlushResumesAtKeyframe/av1
+    - TestProbe, TestUnsupportedCodec
+    - internal/av1 unit and ffmpeg oracle tests; ivf unit and ffmpeg interop tests
+    - go test ./... and CGO_ENABLED=0 go test ./... all ok; scripts/crossbuild.sh six targets ok
+    performance:
+      av1_1080p_decode_fps_nv12: 821
+      av1_1080p_decode_fps_bgra: 308
+      av1_1080p_decode_fps_rgba: 223
+      note: cmd/hwmediacodec decode on an M3 over a 300-frame 1920x1080 SVT-AV1 (preset 10, -g 60) IVF
+        file, including the CPU copy; RGBA pays for the Go R/B swap as with H.264
+  learned:
+  - VTIsHardwareDecodeSupported('av01') is 1 on the M3 before any registration call; VTRegisterSupplementalVideoDecoderIfAvailable('av01')
+    changes nothing for AV1 (and VP9 stays 0 after registering it), so it is not called.
+  - VideoToolbox accepts an AV1 temporal unit as one sample buffer with or without the leading temporal
+    delimiter OBU and outputs the same frames; a unit holding hidden frames plus a shown frame yields one
+    frame, and a 5-byte show_existing_frame unit yields the previously decoded hidden frame.
+  - The hardware AV1 decoder runs synchronously under VTDecodeFrameFlags 0 like H.264/HEVC - the output
+    callback fires before DecodeFrame returns - and its 8-bit output is bit-exact with libdav1d.
+  - Main profile 10-bit input is accepted with a '420v' destination; VideoToolbox converts to 8-bit itself
+    (53.5 dB against ffmpeg's conversion, no frame exact).
+  - macOS 26 registers "SW AV1 Decoder" (com.apple.videotoolbox.videodecoder.av1.sw) in VTCopyVideoDecoderList
+    next to the AVD hardware entry, but a session with EnableHardwareAcceleratedVideoDecoder=false fails with
+    -12906, as does naming the DecoderID; applications cannot use it.
+  - The av1C ffmpeg writes into MP4 is 0x81, profile/level, the flags byte and 0x00 followed by the sequence
+    header OBU; a parser built from the specification reproduces it byte for byte.
+  - SVT-AV1 at preset 10 with -g 25 produces temporal units with up to four hidden frames in front of
+    a shown one and show_existing_frame units of 5 bytes, which is enough to exercise the hidden-frame path.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:display-order-rgba
+history:
+  accepted-2026-10-09:
+    summary: Author asked for AV1 decoding on the VideoToolbox backend (Apple M3), with an IVF package
+      and CLI support; encoding out of scope since no Apple chip has an AV1 encoder.
+  delivered-2026-10-09:
+    summary: internal/av1 parser, VideoToolbox AV1 session via av1C, DisplayOrderer bypass of the reorder
+      layer, ivf package, CLI, ffmpeg-oracle tests; all acceptance checks passed on the author's M3 with
+      CGO_ENABLED=1 and 0.
