@@ -103,7 +103,7 @@ verification:
       gpu: apple-silicon
     test: TestDecodeBFramesMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeBFramesMatchesReference
       note: 60 frames 320x240; H.264 bframes 3 and 8, HEVC bframes 3 and 6; checksums equal ffmpeg's
         display-order output frame for frame
@@ -121,9 +121,9 @@ verification:
     - path: internal/videotoolbox/decoder.go
       input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
-    - path: decode_darwin_test.go
-      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
+    - path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   reorder-oracle-test:
@@ -201,13 +201,13 @@ verification:
       gpu: apple-silicon
     test: TestDecodeOrderOption
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
-    - path: decode_darwin_test.go
-      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
+    - path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
   rgba-decode-test:
     state: passed
     method: integration
@@ -218,7 +218,7 @@ verification:
       gpu: apple-silicon
     test: TestDecodeRGBA
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeRGBA
       note: worst 8x8-block PSNR 35.4 dB against ffmpeg (bilinear chroma, BT.601) for H.264 and HEVC;
         plain PSNR is about 28 dB because of chroma interpolation, BT.709 would score 25 dB and swapped
@@ -232,8 +232,8 @@ verification:
       input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: decode_darwin_test.go
-      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+    - path: decode_test.go
+      input_hash: da46e0efd07459c468f7a1e38d44196e45dc5e6b7fef90de46e71fe1a75e7cf5
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   rgb-encode-test:
@@ -246,7 +246,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeRGBAInput
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeRGBAInput
       note: 30 frames 320x240 at 1.5 Mbit/s; ffprobe color_space bt709; worst 8x8-block PSNR 39.3 dB
         (27.7 dB when decoded with BT.601)
@@ -257,8 +257,8 @@ verification:
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   timeline-unit-test:

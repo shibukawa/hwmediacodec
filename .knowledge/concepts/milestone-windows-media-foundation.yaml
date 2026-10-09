@@ -129,10 +129,10 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeH264MatchesReference (decode_windows_test.go)
+    test: TestDecodeH264MatchesReference (decode_test.go)
     authority: authored
     evidence:
-      path: decode_windows_test.go
+      path: decode_test.go
       locator: TestDecodeH264MatchesReference
       note: Needs a Windows machine with a DXVA GPU and ffmpeg; skips when Probe reports no hardware.
   hevc-reference-test-windows:
@@ -141,10 +141,10 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeHEVCMatchesReference (decode_windows_test.go)
+    test: TestDecodeHEVCMatchesReference (decode_test.go)
     authority: authored
     evidence:
-      path: decode_windows_test.go
+      path: decode_test.go
       locator: TestDecodeHEVCMatchesReference
   bframe-order-test-windows:
     state: not_run
@@ -152,23 +152,23 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeBFramesDisplayOrder (decode_windows_test.go)
+    test: TestDecodeBFramesMatchesReference (decode_test.go)
     authority: authored
     evidence:
-      path: decode_windows_test.go
-      locator: TestDecodeBFramesDisplayOrder
-      note: Reports "not in display order" separately from checksum mismatches so a reorder bug is
-        distinguishable from a decode bug.
+      path: decode_test.go
+      locator: TestDecodeBFramesMatchesReference
+      note: Compares frame for frame in display order, which the Media Foundation decoders produce
+        natively (TestDecodeOrderOption is skipped on Windows).
   sps-change-test-windows:
     state: not_run
     method: integration
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeParameterSetChange (decode_windows_test.go)
+    test: TestDecodeParameterSetChange (decode_test.go)
     authority: authored
     evidence:
-      path: decode_windows_test.go
+      path: decode_test.go
       locator: TestDecodeParameterSetChange
   flush-seek-test-windows:
     state: not_run
@@ -176,10 +176,10 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestFlushResumesAtKeyframe (decode_windows_test.go)
+    test: TestFlushResumesAtKeyframe (decode_test.go)
     authority: authored
     evidence:
-      path: decode_windows_test.go
+      path: decode_test.go
       locator: TestFlushResumesAtKeyframe
   encode-reference-test-windows:
     state: not_run
@@ -187,10 +187,10 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestEncodeMatchesSource (encode_windows_test.go)
+    test: TestEncodeMatchesSource (encode_test.go)
     authority: authored
     evidence:
-      path: encode_windows_test.go
+      path: encode_test.go
       locator: TestEncodeMatchesSource
   encode-controls-test-windows:
     state: not_run
@@ -200,10 +200,10 @@ verification:
       platform: windows
     test: TestEncodeKeyframeInterval, TestEncodeForceKeyframe, TestEncodeBFrames, TestEncodeBitrateControl,
       TestEncodeQuality, TestEncodeLowLatency, TestEncodeProfiles, TestEncodeFlushAndReuse,
-      TestEncodeInvalidInput (encode_windows_test.go)
+      TestEncodeInvalidInput (encode_test.go)
     authority: authored
     evidence:
-      path: encode_windows_test.go
+      path: encode_test.go
       locator: newTestEncoder
       note: Optional controls skip with the ErrUnsupported reason so a run documents the driver's
         capabilities.
@@ -213,10 +213,10 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestTranscodeRoundTrip (encode_windows_test.go)
+    test: TestTranscodeRoundTrip (encode_test.go)
     authority: authored
     evidence:
-      path: encode_windows_test.go
+      path: encode_test.go
       locator: TestTranscodeRoundTrip
   probe-test-windows:
     state: not_run
@@ -245,7 +245,7 @@ verification:
     - path: backends_windows.go
       input_hash: 9cd5cccd9b59e8f032c7bb5c2d4631fa0ae8787f5d2415454cfb12850c83acd6
     - path: backends_other.go
-      input_hash: 19015bc84b6630ba3a7de46de6e7156881e46d7b43c7f590b91ef0fdcaf21aba
+      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
     - &mf_backend
       path: internal/mediafoundation/backend.go
       input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
@@ -421,7 +421,7 @@ facts:
   files:
   - internal/mediafoundation/sys (guid.go, sys.go, com.go, d3d11.go, encode.go, mftenumex_{amd64,arm64}.go)
   - internal/mediafoundation (backend.go, decoder.go, encoder.go, encodeutil.go, frame.go, time.go, paramsets.go)
-  - backends_windows.go, decode_windows_test.go, encode_windows_test.go, decode_test.go and
+  - backends_windows.go, decode_test.go, encode_test.go, decode_test.go and
     encode_test.go (helpers shared with the macOS tests)
   - annexb/paramsets.go (ParameterSetID moved out of the VideoToolbox backend)
   known_risks:

@@ -103,7 +103,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeMatchesSource
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeMatchesSource
       note: 60 frames 320x240 at 1 Mbit/s; worst luma PSNR 50.1 dB (H.264) and 50.1 dB (HEVC); keyframe
         flags equal ffprobe; no B-frames
@@ -117,11 +117,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   keyframe-interval-test:
@@ -134,7 +134,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeKeyframeInterval
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeKeyframeInterval
       note: 'interval 10 over 45 frames: keyframes at 0,10,20,30,40 and no others'
     basis:
@@ -147,11 +147,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   force-keyframe-test:
@@ -164,7 +164,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeForceKeyframe
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeForceKeyframe
       note: forced at frames 7 and 13; neighbours are not keyframes
     basis:
@@ -177,11 +177,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   bframes-test:
@@ -194,7 +194,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeBFrames
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeBFrames
       note: 'H.264: 39 B-frames, 28 reordered packets; HEVC: 44 B-frames, 30 reordered packets; PSNR >=
         49.8 dB'
@@ -208,11 +208,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   bitrate-test:
@@ -225,7 +225,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeBitrateControl
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeBitrateControl
       note: '90 frames 320x240: VBR 400k -> 410 kbit/s, VBR 2M -> 1369 kbit/s, CBR 1M -> 951 kbit/s'
     basis:
@@ -238,11 +238,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   quality-test:
@@ -255,7 +255,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeQuality
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeQuality
       note: quality 0.5 -> 33 KB / 39.8 dB; quality 0.9 -> 132 KB / 60.6 dB
     basis:
@@ -268,11 +268,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   low-latency-test:
@@ -285,7 +285,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeLowLatency
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeLowLatency
       note: EnableLowLatencyRateControl + RealTime; keyframes every 15 frames enforced from Go; PSNR 52
         dB
@@ -299,11 +299,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   profile-test:
@@ -316,7 +316,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeProfiles
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeProfiles
       note: ffprobe reports Baseline/Main/High (H.264) and Main (HEVC); HEVC+Baseline -> ErrUnsupported
     basis:
@@ -329,11 +329,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   transcode-test:
@@ -346,7 +346,7 @@ verification:
       gpu: apple-silicon
     test: TestTranscodeRoundTrip
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestTranscodeRoundTrip
       note: 'encode 1.5 Mbit/s then VideoToolbox decode: worst luma PSNR 52.8 dB'
     basis:
@@ -359,11 +359,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
     - path: internal/videotoolbox/decoder.go
@@ -378,7 +378,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeFlushAndReuse
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeFlushAndReuse
       note: Receive returns io.EOF after Flush; the first packet after Flush is a keyframe with parameter
         sets
@@ -392,11 +392,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   invalid-input-test:
@@ -409,7 +409,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeInvalidInput
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeInvalidInput
       note: wrong size and short planes -> ErrInvalidData; Send/Receive after Close -> ErrClosed
     basis:
@@ -422,11 +422,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: encode_test.go
+      input_hash: ae05fe2729a957d384b9b0beee30c99d3a4199da442e39ad3c2ac05c0b0528d0
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   probe-test:
@@ -444,7 +444,7 @@ verification:
       note: videotoolbox h264/hevc decode and encode hardware=true on 2026-10-09
     basis:
     - path: probe_test.go
-      input_hash: 34e16685b9ee14854cbf91c9eb0b732f9117807c8dbfa0d4a37efe8dc407b087
+      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
   option-validation-test:
@@ -459,9 +459,9 @@ verification:
       locator: TestEncoderOptionValidation
     basis:
     - path: probe_test.go
-      input_hash: 34e16685b9ee14854cbf91c9eb0b732f9117807c8dbfa0d4a37efe8dc407b087
+      input_hash: e2baefb230f892f49cb3716acaa3ff5ae908e5e1b8e6172385d95871b30322cd
     - path: hwmediacodec.go
-      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+      input_hash: dd4061a08765982b56d7bc5d27f14e32b79564a7baa15c2b9699b944829361d5
   cross-build-check:
     state: passed
     method: static
@@ -477,7 +477,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_other.go
-      input_hash: 19015bc84b6630ba3a7de46de6e7156881e46d7b43c7f590b91ef0fdcaf21aba
+      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
     - path: backends_darwin.go
       input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
   nocgo-test-run:

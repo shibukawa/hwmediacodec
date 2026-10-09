@@ -24,8 +24,7 @@ type Tracker struct {
 	// NoRaslOutputFlag; they reference pictures the decoder never saw.
 	skipRASL bool
 
-	h264SPS map[uint32]*h264.SPS
-	h264PPS map[uint32]*h264.PPS
+	h264PS  *h264.ParameterSets
 	h264POC h264.POCState
 
 	hevcSPS map[uint32]*hevc.SPS
@@ -37,8 +36,7 @@ type Tracker struct {
 func NewTracker(c codec.Codec) *Tracker {
 	t := &Tracker{
 		codec:   c,
-		h264SPS: map[uint32]*h264.SPS{},
-		h264PPS: map[uint32]*h264.PPS{},
+		h264PS:  h264.NewParameterSets(),
 		hevcSPS: map[uint32]*hevc.SPS{},
 		hevcPPS: map[uint32]*hevc.PPS{},
 	}
@@ -75,23 +73,21 @@ func (t *Tracker) classifyH264(nals [][]byte) (codec.Order, bool) {
 	for _, nal := range nals {
 		switch annexb.NALUnitType(codec.H264, nal) {
 		case h264.NALSPS:
-			if s, err := h264.ParseSPS(nal); err == nil {
-				t.h264SPS[s.ID] = s
-			}
+			t.h264PS.AddSPS(nal) //nolint:errcheck // a broken SPS is reported by the backend
 		case h264.NALPPS:
-			if p, err := h264.ParsePPS(nal); err == nil {
-				t.h264PPS[p.ID] = p
-			}
+			t.h264PS.AddPPS(nal) //nolint:errcheck
 		case h264.NALSlice, h264.NALSliceIDR:
-			h, err := h264.ParseSliceHeader(nal, t.lookupH264)
+			h, sps, _, err := h264.ParseSliceHeader(nal, t.h264PS)
 			if err != nil {
 				// Unparseable picture: order it after everything seen so
 				// far so that it cannot hold other frames back.
 				t.seq++
 				return codec.Order{Seq: t.seq}, true
 			}
-			_, sps := t.lookupH264(h.PPSID)
-			if h.IDR {
+			if h.IDR || (h.NALRefIdc != 0 && h.HasMMCO5()) {
+				// An IDR picture, or one that resets the picture order
+				// count with memory_management_control_operation 5, starts
+				// a new output sequence.
 				t.seq++
 				t.afterReset = false
 			}
@@ -100,14 +96,6 @@ func (t *Tracker) classifyH264(nals [][]byte) (codec.Order, bool) {
 		}
 	}
 	return codec.Order{}, true
-}
-
-func (t *Tracker) lookupH264(ppsID uint32) (*h264.PPS, *h264.SPS) {
-	p := t.h264PPS[ppsID]
-	if p == nil {
-		return nil, nil
-	}
-	return p, t.h264SPS[p.SPSID]
 }
 
 func (t *Tracker) classifyHEVC(nals [][]byte) (codec.Order, bool) {
