@@ -1,10 +1,10 @@
 // Command hwmediacodec probes the hardware codecs on this machine, decodes
-// raw Annex-B elementary streams, encodes raw NV12 frames and transcodes
-// between the two.
+// raw Annex-B elementary streams, encodes raw frames and transcodes between
+// the two.
 //
 //	hwmediacodec probe
-//	hwmediacodec decode [-codec h264|hevc] [-o out.nv12] [-hash] file.h264
-//	hwmediacodec encode -size WxH [-codec h264|hevc] [encode flags] -o out.h264 in.nv12
+//	hwmediacodec decode [-codec h264|hevc] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file.h264
+//	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
 //	hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
 //
 // Encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes
@@ -56,8 +56,8 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   hwmediacodec probe
-  hwmediacodec decode [-codec h264|hevc] [-o out.nv12] [-hash] file
-  hwmediacodec encode -size WxH [-codec h264|hevc] [encode flags] -o out.h264 in.nv12
+  hwmediacodec decode [-codec h264|hevc] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
+  hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
   hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
 encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes -lowlatency -profile baseline|main|high -software`)
 }
@@ -89,6 +89,31 @@ func parseCodec(name string) (hwmediacodec.Codec, error) {
 		return hwmediacodec.HEVC, nil
 	}
 	return 0, fmt.Errorf("unknown codec %q", name)
+}
+
+func parseFormat(name string) (hwmediacodec.PixelFormat, error) {
+	switch strings.ToLower(name) {
+	case "nv12":
+		return hwmediacodec.NV12, nil
+	case "rgba":
+		return hwmediacodec.RGBA, nil
+	case "bgra":
+		return hwmediacodec.BGRA, nil
+	}
+	return 0, fmt.Errorf("unknown pixel format %q", name)
+}
+
+// rawFrame wraps one tightly packed raw frame.
+func rawFrame(buf []byte, f hwmediacodec.PixelFormat, width, height int, pts int64) *hwmediacodec.Frame {
+	fr := &hwmediacodec.Frame{Width: width, Height: height, Format: f, PTS: pts}
+	off := 0
+	for i := 0; i < f.PlaneCount(); i++ {
+		rows, rowBytes := f.PlaneLayout(i, width, height)
+		fr.Planes = append(fr.Planes, buf[off:off+rows*rowBytes])
+		fr.Strides = append(fr.Strides, rowBytes)
+		off += rows * rowBytes
+	}
+	return fr
 }
 
 func parseSize(s string) (int, int, error) {
@@ -250,15 +275,20 @@ func (s *packetSink) report(what string, width, height int, elapsed time.Duratio
 func encode(args []string) error {
 	fs := flag.NewFlagSet("encode", flag.ExitOnError)
 	size := fs.String("size", "", "input picture size as WxH (required)")
+	formatName := fs.String("format", "nv12", "input pixel format: nv12, rgba or bgra")
 	out := fs.String("o", "", "write the Annex-B stream to this file")
 	ef := addEncodeFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("encode needs exactly one input file of raw NV12 frames")
+		return errors.New("encode needs exactly one input file of raw frames")
 	}
 	width, height, err := parseSize(*size)
+	if err != nil {
+		return err
+	}
+	format, err := parseFormat(*formatName)
 	if err != nil {
 		return err
 	}
@@ -270,6 +300,7 @@ func encode(args []string) error {
 	if err != nil {
 		return err
 	}
+	opts = append(opts, hwmediacodec.WithInputFormat(format))
 	in, err := os.Open(fs.Arg(0))
 	if err != nil {
 		return err
@@ -289,7 +320,7 @@ func encode(args []string) error {
 	defer enc.Close()
 
 	sink := &packetSink{w: w}
-	frameSize := width*height + (width+1)/2*2*((height+1)/2)
+	frameSize := format.FrameSize(width, height)
 	buf := make([]byte, frameSize)
 	r := bufio.NewReaderSize(in, 1<<20)
 	step := ptsStep(ef.rate)
@@ -304,12 +335,7 @@ func encode(args []string) error {
 			}
 			return err
 		}
-		f := &hwmediacodec.Frame{
-			Width: width, Height: height, Format: hwmediacodec.NV12,
-			Planes:  [][]byte{buf[:width*height], buf[width*height:]},
-			Strides: []int{width, (width + 1) / 2 * 2},
-			PTS:     int64(i) * step,
-		}
+		f := rawFrame(buf, format, width, height, int64(i)*step)
 		if err := enc.Send(ctx, f); err != nil {
 			return fmt.Errorf("send frame %d: %w", i, err)
 		}
@@ -463,7 +489,9 @@ func transcode(args []string) error {
 func decode(args []string) error {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
 	codecName := fs.String("codec", "h264", "input codec: h264 or hevc")
-	out := fs.String("o", "", "write decoded NV12 frames to this file")
+	formatName := fs.String("format", "nv12", "output pixel format: nv12, rgba or bgra")
+	decodeOrder := fs.Bool("decode-order", false, "return frames in decode order instead of display order")
+	out := fs.String("o", "", "write decoded raw frames to this file")
 	hash := fs.Bool("hash", false, "print the SHA-256 of every frame")
 	software := fs.Bool("software", false, "allow the OS software decoder when no hardware engine exists")
 	if err := fs.Parse(args); err != nil {
@@ -473,6 +501,10 @@ func decode(args []string) error {
 		return errors.New("decode needs exactly one input file")
 	}
 	c, err := parseCodec(*codecName)
+	if err != nil {
+		return err
+	}
+	format, err := parseFormat(*formatName)
 	if err != nil {
 		return err
 	}
@@ -489,9 +521,12 @@ func decode(args []string) error {
 	defer closeOut()
 
 	ctx := context.Background()
-	var opts []hwmediacodec.DecoderOption
+	opts := []hwmediacodec.DecoderOption{hwmediacodec.WithOutputFormat(format)}
 	if *software {
 		opts = append(opts, hwmediacodec.WithSoftwareFallback())
+	}
+	if *decodeOrder {
+		opts = append(opts, hwmediacodec.WithDecodeOrder())
 	}
 	dec, err := hwmediacodec.NewDecoder(ctx, c, opts...)
 	if err != nil {
@@ -506,11 +541,10 @@ func decode(args []string) error {
 		defer f.Release()
 		width, height = f.Width, f.Height
 		h := sha256.New()
-		rows := []int{f.Height, (f.Height + 1) / 2}
-		rowBytes := []int{f.Width, (f.Width + 1) / 2 * 2}
 		for i, p := range f.Planes {
-			for r := 0; r < rows[i]; r++ {
-				row := p[r*f.Strides[i] : r*f.Strides[i]+rowBytes[i]]
+			rows, rowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
+			for r := 0; r < rows; r++ {
+				row := p[r*f.Strides[i] : r*f.Strides[i]+rowBytes]
 				if _, err := w.Write(row); err != nil {
 					return err
 				}

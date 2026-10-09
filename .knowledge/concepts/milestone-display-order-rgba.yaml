@@ -1,0 +1,444 @@
+id: milestone:display-order-rgba
+type: milestone
+title: Display-order decoding, RGBA/BGRA frames and the ebitenvideo player
+summary: 'Third slice: decoded frames come back in display order through a Go-side reorder layer driven
+  by picture order counts parsed from the bitstream; decoders emit and encoders accept RGBA/BGRA next
+  to NV12 (VideoToolbox converts, Go swaps R/B where VideoToolbox cannot); and a separate Go module,
+  ebitenvideo, plays elementary streams in Ebitengine with frame pacing. Serves the playback and both
+  Ebitengine use cases from the requirement.'
+lifecycle: active
+authority: authored
+aliases:
+- reorder buffer
+- 表示順デコード
+- リオーダバッファ
+- Ebitengine RGBA/BGRA
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: display-order-rgba
+constraints:
+- Display order is derived in Go from the bitstream (H.264/HEVC parameter sets and slice headers to
+  picture order counts), so it works for any backend that emits decode order; VideoToolbox cannot be
+  delegated the job (M1 experiment).
+- Frames are held back no longer than the stream's reorder bound - num_reorder_frames (H.264 VUI) or
+  sps_max_num_reorder_pics (HEVC), or for H.264 SPS without VUI bitstream_restriction the DPB size the
+  level allows (clause A.3.1), which is 0 when the stream cannot reorder (pic_order_cnt_type 2, intra-only,
+  constrained profiles with constraint_set3_flag).
+- RGBA/BGRA frames are one plane with rows of exactly 4*Width bytes so that Planes[0] feeds ebiten.Image.WritePixels
+  as is; the conversion stays in the backend, never in the public API.
+- The core module never imports Ebitengine. ebitenvideo is a separate module (own go.mod) that depends
+  on both hwmediacodec and Ebitengine; inside the repository a replace directive binds it to the working
+  tree.
+- Display order is the default; WithDecodeOrder restores the hardware order for latency-sensitive callers.
+non_goals:
+- Pure-Go NV12<->RGBA conversion (no backend needs it yet; the VideoToolbox backend converts).
+- Frame-rate detection from VUI timing (the H.264 SPS parser reads it, the player takes fps as a parameter).
+- Zero-copy textures (see requirement open question ebitengine-zero-copy).
+- H.264 memory_management_control_operation 5, HEVC pic_output_flag 0, field-coded (interlaced) streams.
+- Other platforms.
+acceptance:
+  display-order-exact:
+    text: Decoding H.264 and HEVC streams with B-frames (b-pyramid, up to 8 consecutive) yields exactly
+      ffmpeg's output sequence, frame for frame, including checksums.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - bframe-display-order-test
+    - reorder-oracle-test
+  reorder-bound:
+    text: A stream that cannot reorder is never held back; otherwise at most num_reorder_frames frames
+      wait, the buffer releases the lowest POC once it holds more than that, an IDR/BLA flushes the previous
+      sequence first, and Flush releases everything in order before io.EOF.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - reorder-oracle-test
+    - reorder-buffer-unit-test
+  decode-order-option:
+    text: WithDecodeOrder returns the same frame set in the order the hardware produces (not display
+      order for a B-frame stream).
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - decode-order-test
+  rgba-output:
+    text: WithOutputFormat(RGBA|BGRA) returns one tightly packed plane, alpha 255, RGBA the exact byte
+      mirror of BGRA, within 30 dB (8x8-block PSNR) of ffmpeg's conversion for H.264 and HEVC.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - rgba-decode-test
+  rgb-input:
+    text: WithInputFormat(RGBA|BGRA) encodes packed frames; the stream declares the BT.709 matrix the
+      hardware converted with, and ffmpeg's RGB decode of it is within 35 dB (8x8-block PSNR) of the source.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - rgb-encode-test
+  ebitenvideo-player:
+    text: The player shows frame k at k/fps on the game clock, starts its clock at the first decoded
+      frame, skips frames when behind, reports the end, loops over an io.ReadSeeker without shortening
+      the last frame, and delivers RGBA frames in display order from the decode goroutine.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - timeline-unit-test
+    - player-hardware-test
+  module-split:
+    text: The core module has no Ebitengine dependency (go.mod unchanged apart from purego) and ebitenvideo
+      builds with CGO_ENABLED=1 and 0 on darwin/arm64.
+    scope:
+      milestone: display-order-rgba
+    verified_by:
+    - module-build-check
+verification:
+  bframe-display-order-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeBFramesMatchesReference
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeBFramesMatchesReference
+      note: 60 frames 320x240; H.264 bframes 3 and 8, HEVC bframes 3 and 6; checksums equal ffmpeg's
+        display-order output frame for frame
+    basis:
+    - path: internal/reorder/decoder.go
+      input_hash: 8ff7ce8a0f5074a7db24b0b6c1368b339ce8938fd78a77f14785ee2713a6e584
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/tracker.go
+      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
+    - path: internal/h264/h264.go
+      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+    - path: internal/hevc/hevc.go
+      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+    - path: internal/videotoolbox/decoder.go
+      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+    - path: hwmediacodec.go
+      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+    - path: decode_darwin_test.go
+      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+  reorder-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+    test: TestDisplayOrderMatchesTimestamps
+    evidence:
+      path: internal/reorder/reorder_test.go
+      locator: TestDisplayOrderMatchesTimestamps
+      note: no hardware - a fake decode-order backend; the output order equals the order of the presentation
+        timestamps ffmpeg wrote into an MP4 of the same stream (H.264 bframes 0/3/8, HEVC 0/3/6, 60 frames);
+        streams without B-frames hold nothing back
+    basis:
+    - path: internal/reorder/decoder.go
+      input_hash: 8ff7ce8a0f5074a7db24b0b6c1368b339ce8938fd78a77f14785ee2713a6e584
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/tracker.go
+      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
+    - path: internal/h264/h264.go
+      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+    - path: internal/hevc/hevc.go
+      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+    - path: internal/reorder/reorder_test.go
+      input_hash: c602035448064880985b37d6b9ef936f7c09712500ebea643f1129baaeb3fe87
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+  reorder-buffer-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+    test: TestBufferBumping, TestBufferNewSequenceFlushesOld, TestBufferZeroReorderIsImmediate, TestBufferRelease,
+      TestFlushResetsSequence
+    evidence:
+      path: internal/reorder/reorder_test.go
+      locator: TestBufferBumping
+    basis:
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/reorder_test.go
+      input_hash: c602035448064880985b37d6b9ef936f7c09712500ebea643f1129baaeb3fe87
+  parser-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+    test: h264 and hevc package tests (ParseSPS, ParsePPS, slice headers, POC sequences, reorder bound
+      table, lsb wrap, CRA handling)
+    evidence:
+      path: internal/h264/h264_test.go
+      locator: TestSliceHeadersAndPOC
+      note: parameter sets and slice headers embedded from libx264/libx265 output
+    basis:
+    - path: internal/h264/h264.go
+      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+    - path: internal/h264/h264_test.go
+      input_hash: c25892deb133c635219456abe25c873c773429478443f4ae564ebddced44dbb0
+    - path: internal/hevc/hevc.go
+      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+    - path: internal/hevc/hevc_test.go
+      input_hash: d691a7f66c68183195f57fd51a51e7a839c3dfe0aefc44c671e47eb13ab5700e
+  decode-order-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeOrderOption
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeOrderOption
+    basis:
+    - path: hwmediacodec.go
+      input_hash: b614313c53e18c75edb770bca221db3a2cac5ea7e1e87903bc15c8767ae7a813
+    - path: decode_darwin_test.go
+      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+  rgba-decode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeRGBA
+    evidence:
+      path: decode_darwin_test.go
+      locator: TestDecodeRGBA
+      note: worst 8x8-block PSNR 35.4 dB against ffmpeg (bilinear chroma, BT.601) for H.264 and HEVC;
+        plain PSNR is about 28 dB because of chroma interpolation, BT.709 would score 25 dB and swapped
+        channels 4 dB; alpha 255; RGBA == mirror(BGRA)
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
+    - path: internal/videotoolbox/pixels.go
+      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
+    - path: internal/codec/codec.go
+      input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
+    - path: decode_darwin_test.go
+      input_hash: 16de4027a79f11f8d24bf030311ffe65c31068a244169b13ff42732a22011a6d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+  rgb-encode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeRGBAInput
+    evidence:
+      path: encode_darwin_test.go
+      locator: TestEncodeRGBAInput
+      note: 30 frames 320x240 at 1.5 Mbit/s; ffprobe color_space bt709; worst 8x8-block PSNR 39.3 dB
+        (27.7 dB when decoded with BT.601)
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+    - path: internal/videotoolbox/pixels.go
+      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
+    - path: encode_darwin_test.go
+      input_hash: f696a509c99a1e05fca58865edc6dffbd2f62a78bad1fd70cd52c140f70af3a0
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
+  timeline-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+    test: TestTimelineShowsFramesAtTheirTime, TestTimelineSkipsWhenBehind, TestTimelineWaitsForDecoder,
+      TestTimelineLoopKeepsLastFrameDuration
+    evidence:
+      path: ebitenvideo/timeline_test.go
+      locator: TestTimelineShowsFramesAtTheirTime
+    basis:
+    - path: ebitenvideo/timeline.go
+      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+    - path: ebitenvideo/timeline_test.go
+      input_hash: 0db50f888890bf7612f45f3a4c47afa5f0b4cab22d777a50ef43fd41ea46da35
+  player-hardware-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestSourceDeliversDisplayOrderRGBA, TestPlayerPlaysAndLoops
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      locator: TestPlayerPlaysAndLoops
+      note: runs without an Ebitengine window (ebiten.NewImage and WritePixels are allowed before RunGame);
+        a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 7e5449afada07486bd29c3a4e7b0c3585d6f855fa620e2d412960916e7886286
+    - path: ebitenvideo/source.go
+      input_hash: 6f4fc954a35550093cbe9a3464717b00eaf31afecbd76424636968d3ed88a189
+    - path: ebitenvideo/timeline.go
+      input_hash: 284d57dba7a691f348a99626273707ee11a3945a26f72920f47bcb9d5afd25cb
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 1674a8a12c24da3361c69180550f352989629e33487bb734321384458036ad26
+  module-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+    test: go build ./... and CGO_ENABLED=0 go build ./... in ebitenvideo; scripts/crossbuild.sh for the
+      core module
+    evidence:
+      path: ebitenvideo/go.mod
+      note: ebiten v2.10.4; the core go.mod still requires only purego
+    basis:
+    - path: ebitenvideo/go.mod
+      input_hash: 59eb7433ee6d00e34874dca6d65c0d3aac7a049ab97592d5133f8274a6d25155
+    - path: go.mod
+      input_hash: a41ea348c18cf502e3d470c51a770f33c9d357fc955376d160c2341fe38e5f45
+open_questions:
+  vui-less-h264-latency:
+    text: H.264 streams without VUI bitstream_restriction (VideoToolbox's own encoder writes none) are
+      held back by the level's DPB size (4 frames at 1080p level 4.0, 7 at 320x240) although they may
+      have no B-frames. ffmpeg instead guesses a small bound and grows it when it sees out-of-order POCs,
+      dropping frames at that moment. Should hwmediacodec adopt a heuristic, or stay spec-exact with WithDecodeOrder
+      as the escape hatch?
+    state: deferred
+    resolution: 'Spec-exact for now: the latency only matters for live decoding of such streams, and
+      a heuristic loses frames. Revisit if a live consumer needs display order from an untagged stream;
+      the encoder side could also be asked for VUI (VideoToolbox has no such property).'
+  untagged-hd-colour-matrix:
+    text: VideoToolbox converted untagged 320x240 streams to RGB with BT.601. Which matrix it assumes for
+      untagged HD streams (and whether ffmpeg agrees) is not measured.
+    state: open
+    resolution: Measure with a 1080p untagged stream before relying on RGB output colour accuracy in a
+      consumer; the encoder tags its RGB-input streams with BT.709, so round trips through hwmediacodec
+      are consistent either way.
+  frame-rate-from-stream:
+    text: The H.264 SPS parser already reads VUI timing_info; should the decoder expose the frame rate
+      so that ebitenvideo.NewPlayer can default fps from the stream?
+    state: deferred
+    resolution: Deferred until the HEVC VUI parser exists (its timing info sits behind the short-term
+      reference picture sets); an explicit fps parameter is enough for the author's streams.
+facts:
+  api:
+    decoder: NewDecoder returns display order by default (reorder.Wrap around the backend unless it implements
+      codec.DisplayOrderer); WithDecodeOrder() disables it; WithOutputFormat(NV12|RGBA|BGRA)
+    encoder: WithInputFormat(NV12|RGBA|BGRA)
+    pixel_formats: PixelFormat.PlaneCount(), PlaneLayout(i, w, h) (rows, rowBytes), FrameSize(w, h); RGBA/BGRA
+      are one plane, 4 bytes per pixel, stride == 4*Width, alpha 255 out / ignored in
+    order_keys: codec.Order{Seq, POC, Reorder} travels from Packet (SetPacketOrder) through the backend
+      to Frame (SetFrameOrder); backends copy it blindly
+    ebitenvideo: NewPlayer(r io.Reader, codec, fps, WithLoop|WithSoftwareFallback|WithPrefetch) -> Player{Play,
+      Pause, IsPlaying, Update, Image, Size, Position, Skipped, Ended, Err, Close}; module github.com/shibukawa/hwmediacodec/ebitenvideo
+    cli: decode -format nv12|rgba|bgra -decode-order; encode -format nv12|rgba|bgra; transcode now re-encodes
+      in display order
+  implementation:
+    parsers: internal/h264 (SPS incl. VUI bitstream_restriction and timing, PPS, slice header up to the
+      POC fields, POC types 0/1/2 incl. fields, MaxReorderFrames with the level table) and internal/hevc
+      (SPS up to sps_max_num_reorder_pics, PPS, first slice segment header, POC with NoRaslOutputFlag);
+      both skip scaling lists / profile_tier_level correctly
+    tracker: internal/reorder.Tracker classifies each access unit - new sequence at IDR (H.264) or IRAP
+      with NoRaslOutputFlag (HEVC IDR/BLA, CRA after reset or EOS), drops RASL pictures of such a CRA, unparseable
+      pictures get a sequence of their own so they cannot block others
+    buffer: internal/reorder.buffer releases the lowest POC of the oldest sequence when a newer sequence
+      exists, when more than Reorder frames wait, or when draining after Flush
+    videotoolbox_decode: destination pixel format from the requested output format; RGBA is decoded
+      as BGRA and swapped in Go (swapRB) because 'RGBA' destinations fail at decode time with -6680; copyFrame
+      is generic over PlaneLayout via bufferPlanes
+    videotoolbox_encode: source pixel buffer attributes from the input format; RGBA input is swapped
+      into BGRA buffers; the session's pixel buffer pool is looked up on every frame (VideoToolbox replaces
+      it after the first RGB frame) and exhausted pools fall back to IOSurface-backed CVPixelBufferCreate;
+      ColorPrimaries/TransferFunction/YCbCrMatrix set to ITU-R 709 for RGB input
+    ebitenvideo: source.go decodes on a goroutine into a bounded channel (prefetch) in display order as
+      RGBA; timeline.go paces by display index (clock starts at the first frame, loop rebases by the previous
+      iteration's duration, late frames are skipped); player.go uploads with WritePixels into an Unmanaged
+      ebiten.Image created lazily
+  result:
+    status: delivered 2026-10-09
+    environment:
+      host: Apple M3, macOS 27.0.1 (build 26A434)
+      go: go1.27.0 darwin/arm64
+      purego: github.com/ebitengine/purego v0.11.1
+      ebiten: github.com/hajimehoshi/ebiten/v2 v2.10.4
+      oracle: ffmpeg/ffprobe 9.0.1 (libx264, libx265 available)
+      date: '2026-10-09'
+    tests:
+    - TestDecodeBFramesMatchesReference (h264 bf3/bf8, hevc bf3/bf6, exact order)
+    - TestDecodeOrderOption
+    - TestDecodeRGBA (h264/hevc x rgba/bgra)
+    - TestEncodeRGBAInput (rgba, bgra)
+    - TestTranscodeRoundTrip (now collects the frames the reorder buffer releases at Flush)
+    - TestPixelFormatLayout
+    - internal/reorder TestDisplayOrderMatchesTimestamps (6 streams), buffer unit tests, TestFlushResetsSequence
+    - internal/h264 and internal/hevc parser tests
+    - ebitenvideo timeline unit tests, TestSourceDeliversDisplayOrderRGBA, TestPlayerPlaysAndLoops
+    - M1/M2 suites unchanged; all pass with CGO_ENABLED=1, CGO_ENABLED=0 and -race
+    performance:
+      h264_1080p_decode_fps_nv12_display_order: 782
+      h264_1080p_decode_fps_bgra: 346
+      h264_1080p_decode_fps_rgba: 254
+      h264_1080p_decode_fps_nv12_decode_order: 796
+      h264_1080p_encode_fps_nv12: 199
+      h264_1080p_encode_fps_rgba: 182
+      h264_1080p_encode_fps_bgra: 181
+      note: cmd/hwmediacodec on an M3; decode of a 300-frame libx264 stream with 3 B-frames, encode of
+        60 raw frames at 8 Mbit/s; the RGBA decode cost over BGRA is the Go R/B swap (about 1 ms per frame)
+  learned:
+  - VideoToolbox accepts 'RGBA' as a decompression destination and as CVPixelBufferCreate format at creation
+    time but fails later with kCVReturnInvalidPixelFormat (-6680); BGRA is the packed format to use.
+  - VTCompressionSessionGetPixelBufferPool must not be cached - with BGRA source attributes the pool is
+    replaced after the first frame and the stale pool crashes (SIGSEGV) or stops delivering; non-IOSurface
+    CVPixelBuffers then fail with kVTPixelTransferNotSupportedErr (-12905), so fallback buffers need kCVPixelBufferIOSurfacePropertiesKey.
+  - The VideoToolbox encoder converts untagged BGRA input with BT.709 but writes no colour description
+    unless the ColorPrimaries/TransferFunction/YCbCrMatrix properties are set; the decoder converts untagged
+    320x240 streams with BT.601 (ffmpeg's default too).
+  - VideoToolbox's hardware H.264 encoder writes no VUI bitstream_restriction and uses pic_order_cnt_type
+    0, so its own streams decode with the DPB-size reorder latency; its HEVC output carries sps_max_num_reorder_pics
+    (0 without B-frames, 2 with).
+  - libx264 uses pic_order_cnt_type 2 without B-frames (no latency) and bitstream_restriction with num_reorder_frames
+    2 for bframes=3 (b-pyramid); libx265 writes sps_max_num_reorder_pics 2 for bframes=3.
+  - The hardware decoder rejects 64x48 pictures with kVTVideoDecoderMalfunctionErr (-12911); 96x64 works.
+  - ffmpeg cannot be used as a timestamp oracle on raw elementary streams (pts N/A, and a -c copy remux
+    fakes pts == dts); encoding straight to MP4 and extracting the Annex-B stream with h264_mp4toannexb/hevc_mp4toannexb
+    gives real pts per access unit in decode order.
+  - ffmpeg's RGB conversion of the same frames differs from VideoToolbox's by about 28 dB plain PSNR (chroma
+    interpolation at sharp edges); averaging 8x8 blocks lifts the agreement to 35 dB while a wrong matrix
+    stays at 25 dB and swapped channels at 4 dB.
+  - Ebitengine v2.10 builds with CGO_ENABLED=0 on darwin/arm64, and ebiten.NewImageWithOptions/WritePixels
+    work before RunGame, so the player has headless tests.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:m2-darwin-encode
+history:
+  accepted-2026-10-09:
+    summary: Author asked for display-order decoding (reorder buffer) and RGBA/BGRA for Ebitengine, proposing
+      that the Ebitengine-specific package live in its own go.mod depending on both; the proposal was adopted.
+  delivered-2026-10-09:
+    summary: Reorder layer, RGBA/BGRA on VideoToolbox decode and encode, ebitenvideo module with player
+      and example, CLI flags, ffmpeg-oracle tests; all acceptance checks passed on the author's M3 with
+      CGO_ENABLED=1 and 0.

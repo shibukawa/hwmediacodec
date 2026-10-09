@@ -12,9 +12,12 @@
 // Silicon) through VideoToolbox and on Windows (amd64 and arm64) through
 // Media Foundation: decoding with the Microsoft decoder transforms
 // accelerated by Direct3D 11 (DXVA), encoding with the vendor's hardware
-// encoder transforms. Raw frames are NV12 in CPU memory. Decoded frames come
-// back in decode order on macOS and in display order on Windows. The Linux
-// backends are not implemented yet.
+// encoder transforms. Raw frames are NV12, RGBA or BGRA in CPU memory on
+// macOS and NV12 on Windows. Decoded frames are returned in display order
+// (see NewDecoder and WithDecodeOrder; the Windows decoders reorder natively,
+// so WithDecodeOrder has no effect there). The Linux backends are not
+// implemented yet. The separate module
+// github.com/shibukawa/hwmediacodec/ebitenvideo plays streams in Ebitengine.
 //
 // # Decoding
 //
@@ -59,6 +62,7 @@ import (
 	"fmt"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
+	"github.com/shibukawa/hwmediacodec/internal/reorder"
 )
 
 // Re-exported core types. See the documentation on each in package codec.
@@ -89,6 +93,8 @@ const (
 	Encode = codec.Encode
 
 	NV12 = codec.NV12
+	RGBA = codec.RGBA
+	BGRA = codec.BGRA
 
 	VBR = codec.VBR
 	CBR = codec.CBR
@@ -127,8 +133,14 @@ func Probe(ctx context.Context) ([]Capability, error) {
 // NewDecoder opens a hardware decoder for c on the first backend that
 // supports it. The error matches ErrUnsupported (and is an *UnsupportedError)
 // when no backend can serve the request.
+//
+// Frames come back in display order: pictures are reordered by their
+// picture order count, derived from the slice headers in Go, and held back
+// no longer than the stream's reorder bound (num_reorder_frames in the SPS
+// or, for H.264 streams without that VUI field, the DPB size of the level).
+// WithDecodeOrder turns the reordering off.
 func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, error) {
-	cfg := codec.DecoderConfig{Codec: c, OutputFormat: NV12, TimeScale: DefaultTimeScale}
+	cfg := codec.DecoderConfig{Codec: c, OutputFormat: NV12, TimeScale: DefaultTimeScale, DisplayOrder: true}
 	for _, o := range opts {
 		o.ApplyDecoder(&cfg)
 	}
@@ -139,6 +151,11 @@ func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, e
 	for _, b := range codec.Backends() {
 		d, err := b.NewDecoder(ctx, cfg)
 		if err == nil {
+			if cfg.DisplayOrder {
+				if o, ok := d.(codec.DisplayOrderer); !ok || !o.OutputsDisplayOrder() {
+					return reorder.Wrap(d, c), nil
+				}
+			}
 			return d, nil
 		}
 		if errors.Is(err, ErrUnsupported) {
@@ -245,14 +262,26 @@ func WithTimeScale(unitsPerSecond int32) Option {
 	}
 }
 
-// WithOutputFormat requests a pixel format for decoded frames. Only NV12 is
-// supported in this release.
+// WithOutputFormat requests a pixel format for decoded frames: NV12 (the
+// default), RGBA or BGRA. RGBA and BGRA frames have one plane with rows of
+// exactly 4*Width bytes, ready for ebiten.Image.WritePixels or image.RGBA.
+// The backend converts; a backend without the conversion reports
+// ErrUnsupported.
 func WithOutputFormat(f PixelFormat) DecoderOption {
 	return decoderOption(func(c *codec.DecoderConfig) { c.OutputFormat = f })
 }
 
-// WithInputFormat sets the pixel format of frames given to Encoder.Send.
-// Only NV12 is supported in this release.
+// WithDecodeOrder makes Receive return frames in decode order, as the
+// backend produces them, instead of display order. It avoids the latency of
+// the reorder buffer for streams without B-frames whose headers do not say
+// so, and is what a transcoder that preserves timestamps wants.
+func WithDecodeOrder() DecoderOption {
+	return decoderOption(func(c *codec.DecoderConfig) { c.DisplayOrder = false })
+}
+
+// WithInputFormat sets the pixel format of frames given to Encoder.Send:
+// NV12 (the default), RGBA or BGRA. The alpha byte of RGBA and BGRA input
+// is ignored.
 func WithInputFormat(f PixelFormat) EncoderOption {
 	return encoderOption(func(c *codec.EncoderConfig) { c.InputFormat = f })
 }

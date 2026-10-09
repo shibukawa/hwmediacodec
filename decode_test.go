@@ -3,6 +3,7 @@ package hwmediacodec_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"sort"
@@ -13,12 +14,33 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
-// Helpers shared by the platform-specific conformance tests.
+// Helpers shared by the platform-specific decoder conformance tests.
 
 // decodeAll feeds every access unit of an Annex-B stream and returns the
 // decoded frames' checksums and sizes in output order.
 func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, stream []byte) (sums [][32]byte, sizes [][2]int) {
 	t.Helper()
+	frames := decodeFrames(t, dec, c, stream, hwmediacodec.NV12)
+	for _, f := range frames {
+		sums = append(sums, sha256.Sum256(f.pix))
+		sizes = append(sizes, [2]int{f.width, f.height})
+	}
+	return sums, sizes
+}
+
+// decodedFrame is a tightly packed copy of a decoded frame.
+type decodedFrame struct {
+	pix           []byte
+	width, height int
+	pts           int64
+}
+
+// decodeFrames feeds every access unit of an Annex-B stream, checks that
+// the frames come back in format f with tight strides, and returns copies
+// in output order.
+func decodeFrames(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, stream []byte, format hwmediacodec.PixelFormat) []decodedFrame {
+	t.Helper()
+	var out []decodedFrame
 	ctx := context.Background()
 	r := annexb.NewReader(bytes.NewReader(stream), c)
 	var pts int64
@@ -40,11 +62,15 @@ func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, str
 			if err != nil {
 				t.Fatalf("Receive: %v", err)
 			}
-			if f.Format != hwmediacodec.NV12 || len(f.Planes) != 2 {
+			if f.Format != format || len(f.Planes) != format.PlaneCount() {
 				t.Fatalf("unexpected frame layout: %s planes=%d", f.Format, len(f.Planes))
 			}
-			sums = append(sums, testutil.FrameChecksum(f))
-			sizes = append(sizes, [2]int{f.Width, f.Height})
+			for i, stride := range f.Strides {
+				if _, rowBytes := format.PlaneLayout(i, f.Width, f.Height); stride != rowBytes {
+					t.Fatalf("plane %d stride %d, want tight rows of %d bytes", i, stride, rowBytes)
+				}
+			}
+			out = append(out, decodedFrame{pix: testutil.FrameBytes(f), width: f.Width, height: f.Height, pts: f.PTS})
 			f.Release()
 		}
 	}
@@ -66,7 +92,7 @@ func decodeAll(t *testing.T, dec hwmediacodec.Decoder, c hwmediacodec.Codec, str
 		t.Fatalf("Flush: %v", err)
 	}
 	drain(true)
-	return sums, sizes
+	return out
 }
 
 func compareChecksums(t *testing.T, got, want [][32]byte) {

@@ -136,3 +136,32 @@ func TestSharedOptions(t *testing.T) {
 	var _ hwmediacodec.DecoderOption = hwmediacodec.WithTimeScale(1000)
 	var _ hwmediacodec.EncoderOption = hwmediacodec.WithTimeScale(1000)
 }
+
+func TestPixelFormatLayout(t *testing.T) {
+	cases := []struct {
+		f      hwmediacodec.PixelFormat
+		planes int
+		size   int
+	}{
+		{hwmediacodec.NV12, 2, 321*241 + 322*121},
+		{hwmediacodec.RGBA, 1, 321 * 241 * 4},
+		{hwmediacodec.BGRA, 1, 321 * 241 * 4},
+	}
+	for _, c := range cases {
+		if got := c.f.PlaneCount(); got != c.planes {
+			t.Errorf("%s: PlaneCount = %d, want %d", c.f, got, c.planes)
+		}
+		if got := c.f.FrameSize(321, 241); got != c.size {
+			t.Errorf("%s: FrameSize = %d, want %d", c.f, got, c.size)
+		}
+		if rows, rowBytes := c.f.PlaneLayout(c.planes, 321, 241); rows != 0 || rowBytes != 0 {
+			t.Errorf("%s: plane %d should not exist", c.f, c.planes)
+		}
+	}
+	if rows, rowBytes := hwmediacodec.NV12.PlaneLayout(1, 321, 241); rows != 121 || rowBytes != 322 {
+		t.Errorf("NV12 chroma plane = %dx%d", rowBytes, rows)
+	}
+	if s := hwmediacodec.PixelFormat(200).String(); s != "pixelformat(200)" {
+		t.Errorf("unknown format string %q", s)
+	}
+}

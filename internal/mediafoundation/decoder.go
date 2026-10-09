@@ -58,6 +58,12 @@ type decoder struct {
 	pool sync.Pool
 }
 
+// OutputsDisplayOrder implements codec.DisplayOrderer: the Microsoft decoder
+// MFTs reorder pictures themselves, so the public API does not wrap this
+// decoder in the Go reorder layer. Decode order cannot be requested from them,
+// so WithDecodeOrder has no effect on Windows.
+func (d *decoder) OutputsDisplayOrder() bool { return true }
+
 func newDecoder(cfg codec.DecoderConfig, info codecInfo, dev *d3dDevice, t *sys.IMFTransform, name string) *decoder {
 	return &decoder{
 		cfg:          cfg,

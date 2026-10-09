@@ -251,7 +251,7 @@ verification:
       input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
     - &mf_decoder
       path: internal/mediafoundation/decoder.go
-      input_hash: c95bc9b3b09b41a876d87296e3a950dd5dcf8fbabdec5c23b6e2320648fa309f
+      input_hash: ae11d17155be5a1f185161117e7506cc31bfef03792b6875b8427cbb7c066f24
     - &mf_sys
       path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
@@ -390,6 +390,10 @@ facts:
       aperture. IMF2DBuffer2::Lock2DSize is the fallback for non-DXGI buffers.
     timestamps: inflight map from 100 ns sample time to the caller's PTS gives exact round trips;
       fromHNS rounds to nearest otherwise.
+    display_order: the Microsoft decoders reorder natively; the decoder implements codec.DisplayOrderer
+      so the public API does not wrap it in internal/reorder (milestone:display-order-rgba). Decode order
+      cannot be requested, so WithDecodeOrder has no effect on Windows. Output is NV12 only; the
+      RGBA/BGRA option of that milestone is not available on Windows yet.
     flush: MFT_MESSAGE_COMMAND_DRAIN, drain every frame into a pending queue, then
       NOTIFY_START_OF_STREAM before the next input, which is prefixed with stored VPS/SPS/PPS when
       it lacks them (annexb.ParameterSetID, shared with the VideoToolbox store).
