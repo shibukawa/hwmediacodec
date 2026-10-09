@@ -8,10 +8,11 @@
 //
 // # Status
 //
-// Milestone 1 implements H.264 and HEVC decoding on macOS (Apple Silicon)
-// through VideoToolbox. Decoded frames are returned in NV12 in CPU memory, in
-// decode order. Encoding and the Windows and Linux backends are not
-// implemented yet.
+// H.264 and HEVC decoding is implemented on macOS (Apple Silicon) through
+// VideoToolbox and on Windows (amd64 and arm64) through Media Foundation
+// decoder transforms accelerated with Direct3D 11 (DXVA). Decoded frames are
+// returned as NV12 in CPU memory: in decode order on macOS and in display
+// order on Windows. Encoding and the Linux backends are not implemented yet.
 //
 // # Usage
 //

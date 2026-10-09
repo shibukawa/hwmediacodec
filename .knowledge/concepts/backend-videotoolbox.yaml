@@ -38,7 +38,7 @@ capabilities:
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id005
       path: hwmediacodec.go
-      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+      input_hash: 8523d5bf5a21268561fbca84b9b929e0298afab276677ca714c5ccd04d3e01ed
   decode/hevc:
     state: implemented
     about: capability:hwmediacodec/decode-hevc
@@ -187,10 +187,10 @@ verification:
     - *id005
     - &id006
       path: decode_darwin_test.go
-      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+      input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - &id007
       path: probe_test.go
-      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+      input_hash: 5cd58370f7934dc23496e3e10f361c563f2ac6d564b8cb596ccc49cf4e4c6abb
     - &id008
       path: internal/testutil/ffmpeg.go
       input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b

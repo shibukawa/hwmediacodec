@@ -53,7 +53,7 @@ capabilities:
       path: hwmediacodec.go
     basis:
     - path: hwmediacodec.go
-      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+      input_hash: 8523d5bf5a21268561fbca84b9b929e0298afab276677ca714c5ccd04d3e01ed
     - path: internal/codec/codec.go
       input_hash: ad5e26bc388362cd3bc08b4fcf463e77fea7b8478762c969818638c188966a2c
   api/probe:
@@ -104,7 +104,7 @@ capabilities:
     evidence:
       path: internal/videotoolbox/backend.go
   backend/media-foundation:
-    state: planned
+    state: partial
     scope:
       platform: windows
       gpu:
@@ -113,6 +113,11 @@ capabilities:
       - nvidia
       - qualcomm
     about: capability:hwmediacodec/backend-media-foundation
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/backend.go
+      note: Decode only, written 2026-10-09 (milestone:m3-windows-mf-decode); hardware verification
+        pending.
   backend/vaapi:
     state: planned
     scope:
@@ -191,10 +196,10 @@ verification:
     basis: &id004
     - &id001
       path: decode_darwin_test.go
-      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+      input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - &id002
       path: probe_test.go
-      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+      input_hash: 5cd58370f7934dc23496e3e10f361c563f2ac6d564b8cb596ccc49cf4e4c6abb
     - &id003
       path: internal/testutil/ffmpeg.go
       input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
@@ -219,7 +224,7 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+      input_hash: 8523d5bf5a21268561fbca84b9b929e0298afab276677ca714c5ccd04d3e01ed
     - *id001
     - *id002
     - *id003
@@ -250,7 +255,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_other.go
-      input_hash: 3fddc03992092abd5b3bb27c638d0e1e94377f86dc7e72dbb1de7ed9e5deb7b3
+      input_hash: 19015bc84b6630ba3a7de46de6e7156881e46d7b43c7f590b91ef0fdcaf21aba
     - path: backends_darwin.go
       input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
   bframe-set-test:
@@ -273,11 +278,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 3595859f01e44b0cc0defdd2743c9ff435df975dee49e45824f7715f8eaeb723
+      input_hash: 8523d5bf5a21268561fbca84b9b929e0298afab276677ca714c5ccd04d3e01ed
     - path: decode_darwin_test.go
-      input_hash: 1eb7740a1757255e8cdd8a2e2bb402ea7638fd7abb855240c26dccf43576d792
+      input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - path: probe_test.go
-      input_hash: 3036e0eb03e42717508f66d24108c09ebac97d76d152e7fdd30651522f4f41e3
+      input_hash: 5cd58370f7934dc23496e3e10f361c563f2ac6d564b8cb596ccc49cf4e4c6abb
     - path: internal/testutil/ffmpeg.go
       input_hash: 43e66d50c0d82e3582a9808d380244d3a99e5029f0808095404319fb3f7c686b
 open_questions:
@@ -357,8 +362,9 @@ open_questions:
       Where do Tier 1 hardware integration tests run - the author's machines, self-hosted runners, or
       both?
     state: deferred
-    resolution: Resolve before the second backend (Windows). M1 runs on the author's Apple Silicon Mac
-      or an Apple Silicon hosted runner.
+    resolution: Still deferred. M1 runs on the author's Apple Silicon Mac. M3 (Windows) was written on
+      macOS with cross-build, vet and compile-time layout checks only; its conformance tests skip
+      without a hardware decoder and are to be run on the author's Intel Windows machine first.
   vendor-sdks:
     text: Are vendor SDKs (AMD AMF, Intel VPL/QSV) needed beyond the OS-level APIs?
     state: deferred
@@ -389,6 +395,9 @@ history:
   m1-delivered-2026-10-09:
     summary: 'M1 implemented and verified: VideoToolbox H.264/HEVC decode via purego, bit-exact against
       ffmpeg, cross-builds with CGO_ENABLED=0.'
+  m3-authored-2026-10-09:
+    summary: Windows decode backend (Media Foundation + D3D11) written for Intel/AMD/NVIDIA on
+      windows/amd64 and arm64; 32-bit excluded by the author; hardware verification pending.
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
@@ -497,12 +506,24 @@ facts:
     - M2 - H.264/HEVC encode on macOS (VTCompressionSession) with the streaming-oriented controls from
       the constraints; unlocks batch transcode end to end.
     - M3 - Windows backend (Media Foundation) to validate the API against an async MFT model.
+    m3_result:
+      started: '2026-10-09'
+      outcome: Windows decode backend (Media Foundation synchronous decoder MFTs + Direct3D 11 DXVA) for
+        H.264 and HEVC, NV12 to Go memory in display order, windows/amd64 and windows/arm64, hardware
+        only. See milestone:m3-windows-mf-decode.
+      verification: cross-build, go vet and compile-time struct layout checks pass from macOS; unit
+        tests for the pure-Go parts pass; the Windows conformance tests have not been run on hardware.
+      notes:
+      - The API needed no change for the second backend; the synchronous MFT model mapped directly to
+        Send/Receive/Flush. The async MFT model (vendor hardware MFTs) was deferred.
+      - annexb.ParameterSetID was factored out of the VideoToolbox backend and is shared.
   support_tiers: See policy:support-tiers; Tier 1 hardware must pass acceptance before release, Tier 2
     is best effort.
   capability_notes:
-    decode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
-      bit-exact against ffmpeg on 320x240 and 1080p test streams.
-    decode/hevc: implemented on darwin/apple-silicon only; bit-exact against ffmpeg (libx265 source).
+    decode/h264: implemented on darwin/apple-silicon (bit-exact against ffmpeg on 320x240 and 1080p
+      test streams) and on windows/amd64+arm64 via Media Foundation (unverified on hardware).
+    decode/hevc: implemented on darwin/apple-silicon (bit-exact against ffmpeg, libx265 source) and on
+      windows via Media Foundation when the HEVC Video Extensions are installed (unverified).
     backend/videotoolbox: decode only; encode is the next milestone candidate.
 relations:
 - relation: governed_by
@@ -545,6 +566,8 @@ relations:
   to: backend:ffmpeg-libavcodec
 - relation: next_milestone
   to: milestone:m1-darwin-h264-decode
+- relation: next_milestone
+  to: milestone:m3-windows-mf-decode
 - relation: mentions
   to: reference:go-ecosystem
 - relation: excludes

@@ -20,7 +20,8 @@ func TestProbe(t *testing.T) {
 	for _, c := range caps {
 		t.Logf("%s %s %s hardware=%v", c.Backend, c.Codec, c.Direction, c.Hardware)
 	}
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+	switch {
+	case runtime.GOOS == "darwin" && runtime.GOARCH == "arm64":
 		want := map[hwmediacodec.Codec]bool{hwmediacodec.H264: false, hwmediacodec.HEVC: false}
 		for _, c := range caps {
 			if c.Backend == "videotoolbox" && c.Direction == hwmediacodec.Decode && c.Hardware {
@@ -32,8 +33,17 @@ func TestProbe(t *testing.T) {
 				t.Errorf("expected videotoolbox hardware decode for %s on Apple Silicon", codec)
 			}
 		}
-	} else if runtime.GOOS != "darwin" && len(caps) != 0 {
-		t.Errorf("no backend exists for %s yet, but Probe returned %d capabilities", runtime.GOOS, len(caps))
+	case runtime.GOOS == "windows" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64"):
+		// Hardware depends on the machine; only the backend identity is fixed.
+		for _, c := range caps {
+			if c.Backend != "mediafoundation" || !c.Hardware {
+				t.Errorf("unexpected capability on windows: %+v", c)
+			}
+		}
+	case runtime.GOOS != "darwin":
+		if len(caps) != 0 {
+			t.Errorf("no backend exists for %s yet, but Probe returned %d capabilities", runtime.GOOS, len(caps))
+		}
 	}
 }
 

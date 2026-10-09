@@ -3,7 +3,7 @@ type: backend
 title: Media Foundation MFTs (Windows)
 summary: Windows' COM-based media pipeline. Hardware encoders/decoders are exposed as asynchronous Media
   Foundation Transforms (MFTs) bound to a D3D11 device through IMFDXGIDeviceManager.
-lifecycle: proposed
+lifecycle: active
 authority: inferred
 aliases:
 - Media Foundation
@@ -20,11 +20,21 @@ scope:
   - qualcomm
 capabilities:
   decode/h264:
-    state: planned
+    state: partial
     about: capability:hwmediacodec/decode-h264
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/decoder.go
+      note: Implemented in milestone:m3-windows-mf-decode (Microsoft H.264 decoder MFT + D3D11/DXVA);
+        not yet verified on Windows hardware.
   decode/hevc:
-    state: planned
+    state: partial
     about: capability:hwmediacodec/decode-hevc
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/decoder.go
+      note: Implemented in milestone:m3-windows-mf-decode (HEVC Video Extensions decoder MFT +
+        D3D11/DXVA, 8-bit NV12 only); not yet verified on Windows hardware.
   decode/av1:
     state: unknown
     about: capability:hwmediacodec/decode-av1
@@ -112,8 +122,24 @@ facts:
   arm64: Windows on ARM (Qualcomm Snapdragon X) exposes hardware codecs through the same MFT model; purego/x/sys
     windows/arm64 is tier 1. Codec coverage unverified.
   support_tier: tier1 for Intel/AMD/NVIDIA; tier2 for Qualcomm Snapdragon X
+  implementation:
+    status: decode implemented 2026-10-09 (milestone:m3-windows-mf-decode), unverified on hardware
+    package: internal/mediafoundation (+ sys for bindings)
+    ffi: golang.org/x/sys/windows NewLazySystemDLL for mfplat.dll/d3d11.dll flat functions;
+      COM interfaces through hand-written vtable structs and syscall.SyscallN; MFTEnumEx's by-value
+      GUID has per-architecture wrappers (pointer-to-copy on amd64, two registers on arm64).
+    model: synchronous Microsoft decoder MFTs + IMFDXGIDeviceManager; vendor async hardware MFTs are
+      enumerated but skipped (see milestone open question async-hardware-mfts).
+    arch: windows/amd64 and windows/arm64; 32-bit excluded by the author (2026-10-09).
+    not_yet: encode, software fallback, P010/10-bit, AV1, zero-copy textures.
 relations:
+- relation: implemented_by
+  to: milestone:m3-windows-mf-decode
 - relation: candidate_for
   to: requirement:hwmediacodec
 - relation: ranked_by
   to: policy:support-tiers
+history:
+  decode-implemented-2026-10-09:
+    summary: H.264/HEVC decode backend written (milestone:m3-windows-mf-decode); lifecycle moved to
+      active. Verification on Windows hardware pending.
