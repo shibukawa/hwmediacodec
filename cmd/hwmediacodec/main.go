@@ -1,11 +1,18 @@
-// Command hwmediacodec probes the hardware codecs on this machine and decodes
-// raw Annex-B elementary streams with them.
+// Command hwmediacodec probes the hardware codecs on this machine, decodes
+// raw Annex-B elementary streams, encodes raw NV12 frames and transcodes
+// between the two.
 //
 //	hwmediacodec probe
 //	hwmediacodec decode [-codec h264|hevc] [-o out.nv12] [-hash] file.h264
+//	hwmediacodec encode -size WxH [-codec h264|hevc] [encode flags] -o out.h264 in.nv12
+//	hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+//
+// Encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes
+// -lowlatency -profile baseline|main|high -software.
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -13,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +39,10 @@ func main() {
 		err = probe()
 	case "decode":
 		err = decode(os.Args[2:])
+	case "encode":
+		err = encode(os.Args[2:])
+	case "transcode":
+		err = transcode(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -42,7 +54,12 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage:\n  hwmediacodec probe\n  hwmediacodec decode [-codec h264|hevc] [-o out.nv12] [-hash] file")
+	fmt.Fprintln(os.Stderr, `usage:
+  hwmediacodec probe
+  hwmediacodec decode [-codec h264|hevc] [-o out.nv12] [-hash] file
+  hwmediacodec encode -size WxH [-codec h264|hevc] [encode flags] -o out.h264 in.nv12
+  hwmediacodec transcode [-in h264|hevc] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes -lowlatency -profile baseline|main|high -software`)
 }
 
 func probe() error {
@@ -64,6 +81,385 @@ func probe() error {
 	return nil
 }
 
+func parseCodec(name string) (hwmediacodec.Codec, error) {
+	switch strings.ToLower(name) {
+	case "h264", "avc":
+		return hwmediacodec.H264, nil
+	case "hevc", "h265":
+		return hwmediacodec.HEVC, nil
+	}
+	return 0, fmt.Errorf("unknown codec %q", name)
+}
+
+func parseSize(s string) (int, int, error) {
+	w, h, ok := strings.Cut(strings.ToLower(s), "x")
+	if !ok {
+		return 0, 0, fmt.Errorf("size must be WxH, got %q", s)
+	}
+	width, err1 := strconv.Atoi(w)
+	height, err2 := strconv.Atoi(h)
+	if err1 != nil || err2 != nil || width <= 0 || height <= 0 {
+		return 0, 0, fmt.Errorf("size must be WxH, got %q", s)
+	}
+	return width, height, nil
+}
+
+// parseBitrate accepts plain bits per second or a k/M suffix (e.g. 800k, 4M).
+func parseBitrate(s string) (int, error) {
+	if s == "" {
+		return 0, nil
+	}
+	mult := 1
+	switch s[len(s)-1] {
+	case 'k', 'K':
+		mult, s = 1000, s[:len(s)-1]
+	case 'm', 'M':
+		mult, s = 1000000, s[:len(s)-1]
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("invalid bitrate %q", s)
+	}
+	return int(v * float64(mult)), nil
+}
+
+// encodeFlags holds the encoder controls shared by encode and transcode.
+type encodeFlags struct {
+	codec      string
+	rate       float64
+	bitrate    string
+	cbr        bool
+	quality    float64
+	gop        int
+	bframes    bool
+	lowLatency bool
+	profile    string
+	software   bool
+}
+
+func addEncodeFlags(fs *flag.FlagSet) *encodeFlags {
+	f := &encodeFlags{}
+	fs.StringVar(&f.codec, "codec", "h264", "output codec: h264 or hevc")
+	fs.Float64Var(&f.rate, "rate", 30, "frame rate used for timestamps and rate control")
+	fs.StringVar(&f.bitrate, "bitrate", "", "target bitrate in bit/s (suffix k or M); default: backend choice")
+	fs.BoolVar(&f.cbr, "cbr", false, "constant bitrate instead of variable")
+	fs.Float64Var(&f.quality, "quality", 0, "constant quality in (0, 1] instead of a bitrate")
+	fs.IntVar(&f.gop, "gop", 0, "keyframe every N frames (0: backend choice)")
+	fs.BoolVar(&f.bframes, "bframes", false, "allow B-frames")
+	fs.BoolVar(&f.lowLatency, "lowlatency", false, "low-latency live streaming mode")
+	fs.StringVar(&f.profile, "profile", "", "coding profile: baseline, main or high")
+	fs.BoolVar(&f.software, "software", false, "allow the OS software encoder when no hardware engine exists")
+	return f
+}
+
+func (f *encodeFlags) options() ([]hwmediacodec.EncoderOption, error) {
+	if f.rate <= 0 {
+		return nil, errors.New("frame rate must be positive")
+	}
+	opts := []hwmediacodec.EncoderOption{hwmediacodec.WithFrameRate(f.rate)}
+	bitrate, err := parseBitrate(f.bitrate)
+	if err != nil {
+		return nil, err
+	}
+	if bitrate > 0 {
+		opts = append(opts, hwmediacodec.WithBitrate(bitrate))
+	}
+	if f.cbr {
+		opts = append(opts, hwmediacodec.WithRateControl(hwmediacodec.CBR))
+	}
+	if f.quality > 0 {
+		opts = append(opts, hwmediacodec.WithQuality(f.quality))
+	}
+	if f.gop > 0 {
+		opts = append(opts, hwmediacodec.WithKeyframeInterval(f.gop))
+	}
+	if f.bframes {
+		opts = append(opts, hwmediacodec.WithBFrames())
+	}
+	if f.lowLatency {
+		opts = append(opts, hwmediacodec.WithLowLatency())
+	}
+	switch strings.ToLower(f.profile) {
+	case "":
+	case "baseline":
+		opts = append(opts, hwmediacodec.WithProfile(hwmediacodec.ProfileBaseline))
+	case "main":
+		opts = append(opts, hwmediacodec.WithProfile(hwmediacodec.ProfileMain))
+	case "high":
+		opts = append(opts, hwmediacodec.WithProfile(hwmediacodec.ProfileHigh))
+	default:
+		return nil, fmt.Errorf("unknown profile %q", f.profile)
+	}
+	if f.software {
+		opts = append(opts, hwmediacodec.WithSoftwareFallback())
+	}
+	return opts, nil
+}
+
+// ptsStep returns the PTS increment per frame for the given rate.
+func ptsStep(rate float64) int64 {
+	return int64(float64(hwmediacodec.DefaultTimeScale)/rate + 0.5)
+}
+
+func openOutput(path string) (*bufio.Writer, func() error, error) {
+	if path == "" {
+		return bufio.NewWriter(io.Discard), func() error { return nil }, nil
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return bufio.NewWriter(f), f.Close, nil
+}
+
+// packetSink writes encoded packets and keeps statistics.
+type packetSink struct {
+	w         io.Writer
+	packets   int
+	keyframes int
+	bytes     int
+}
+
+func (s *packetSink) drain(ctx context.Context, enc hwmediacodec.Encoder) error {
+	for {
+		p, err := enc.Receive(ctx)
+		if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := s.w.Write(p.Data); err != nil {
+			return err
+		}
+		s.packets++
+		s.bytes += len(p.Data)
+		if p.Keyframe {
+			s.keyframes++
+		}
+	}
+}
+
+func (s *packetSink) report(what string, width, height int, elapsed time.Duration, rate float64) {
+	seconds := float64(s.packets) / rate
+	fmt.Fprintf(os.Stderr, "%s %d frames (%dx%d) in %s (%.1f fps); %d bytes, %d keyframes, %.0f kbit/s\n",
+		what, s.packets, width, height, elapsed.Round(time.Millisecond), float64(s.packets)/elapsed.Seconds(),
+		s.bytes, s.keyframes, float64(s.bytes)*8/seconds/1000)
+}
+
+func encode(args []string) error {
+	fs := flag.NewFlagSet("encode", flag.ExitOnError)
+	size := fs.String("size", "", "input picture size as WxH (required)")
+	out := fs.String("o", "", "write the Annex-B stream to this file")
+	ef := addEncodeFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("encode needs exactly one input file of raw NV12 frames")
+	}
+	width, height, err := parseSize(*size)
+	if err != nil {
+		return err
+	}
+	c, err := parseCodec(ef.codec)
+	if err != nil {
+		return err
+	}
+	opts, err := ef.options()
+	if err != nil {
+		return err
+	}
+	in, err := os.Open(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	w, closeOut, err := openOutput(*out)
+	if err != nil {
+		return err
+	}
+	defer closeOut()
+
+	ctx := context.Background()
+	enc, err := hwmediacodec.NewEncoder(ctx, c, width, height, opts...)
+	if err != nil {
+		return err
+	}
+	defer enc.Close()
+
+	sink := &packetSink{w: w}
+	frameSize := width*height + (width+1)/2*2*((height+1)/2)
+	buf := make([]byte, frameSize)
+	r := bufio.NewReaderSize(in, 1<<20)
+	step := ptsStep(ef.rate)
+	start := time.Now()
+	for i := 0; ; i++ {
+		if _, err := io.ReadFull(r, buf); err != nil {
+			if err == io.EOF {
+				break
+			}
+			if err == io.ErrUnexpectedEOF {
+				return fmt.Errorf("input ends inside frame %d (frame size %d bytes)", i, frameSize)
+			}
+			return err
+		}
+		f := &hwmediacodec.Frame{
+			Width: width, Height: height, Format: hwmediacodec.NV12,
+			Planes:  [][]byte{buf[:width*height], buf[width*height:]},
+			Strides: []int{width, (width + 1) / 2 * 2},
+			PTS:     int64(i) * step,
+		}
+		if err := enc.Send(ctx, f); err != nil {
+			return fmt.Errorf("send frame %d: %w", i, err)
+		}
+		if err := sink.drain(ctx, enc); err != nil {
+			return err
+		}
+	}
+	if err := enc.Flush(ctx); err != nil {
+		return err
+	}
+	if err := sink.drain(ctx, enc); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	sink.report("encoded", width, height, time.Since(start), ef.rate)
+	return nil
+}
+
+// transcode decodes an elementary stream and re-encodes it. Frames are
+// re-encoded in the order the decoder returns them (decode order), so sources
+// with B-frames come out with their pictures reordered; see the README.
+func transcode(args []string) error {
+	fs := flag.NewFlagSet("transcode", flag.ExitOnError)
+	inCodec := fs.String("in", "h264", "input codec: h264 or hevc")
+	out := fs.String("o", "", "write the Annex-B stream to this file")
+	ef := addEncodeFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("transcode needs exactly one input file")
+	}
+	ic, err := parseCodec(*inCodec)
+	if err != nil {
+		return err
+	}
+	oc, err := parseCodec(ef.codec)
+	if err != nil {
+		return err
+	}
+	opts, err := ef.options()
+	if err != nil {
+		return err
+	}
+	in, err := os.Open(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	w, closeOut, err := openOutput(*out)
+	if err != nil {
+		return err
+	}
+	defer closeOut()
+
+	ctx := context.Background()
+	var decOpts []hwmediacodec.DecoderOption
+	if ef.software {
+		decOpts = append(decOpts, hwmediacodec.WithSoftwareFallback())
+	}
+	dec, err := hwmediacodec.NewDecoder(ctx, ic, decOpts...)
+	if err != nil {
+		return err
+	}
+	defer dec.Close()
+
+	var enc hwmediacodec.Encoder
+	defer func() {
+		if enc != nil {
+			enc.Close()
+		}
+	}()
+	sink := &packetSink{w: w}
+	step := ptsStep(ef.rate)
+	var width, height, frames int
+	start := time.Now()
+	encodeFrame := func(f *hwmediacodec.Frame) error {
+		defer f.Release()
+		if enc == nil {
+			width, height = f.Width, f.Height
+			e, err := hwmediacodec.NewEncoder(ctx, oc, width, height, opts...)
+			if err != nil {
+				return err
+			}
+			enc = e
+		}
+		if f.Width != width || f.Height != height {
+			return fmt.Errorf("picture size changed from %dx%d to %dx%d; transcode needs a constant size", width, height, f.Width, f.Height)
+		}
+		f.PTS = int64(frames) * step
+		frames++
+		if err := enc.Send(ctx, f); err != nil {
+			return err
+		}
+		return sink.drain(ctx, enc)
+	}
+	drainDecoder := func() error {
+		for {
+			f, err := dec.Receive(ctx)
+			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if err := encodeFrame(f); err != nil {
+				return err
+			}
+		}
+	}
+	r := annexb.NewReader(in, ic)
+	for {
+		au, err := r.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
+			return fmt.Errorf("decode: %w", err)
+		}
+		if err := drainDecoder(); err != nil {
+			return err
+		}
+	}
+	if err := dec.Flush(ctx); err != nil {
+		return err
+	}
+	if err := drainDecoder(); err != nil {
+		return err
+	}
+	if enc == nil {
+		return errors.New("the input produced no frames")
+	}
+	if err := enc.Flush(ctx); err != nil {
+		return err
+	}
+	if err := sink.drain(ctx, enc); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	sink.report("transcoded", width, height, time.Since(start), ef.rate)
+	return nil
+}
+
 func decode(args []string) error {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
 	codecName := fs.String("codec", "h264", "input codec: h264 or hevc")
@@ -76,14 +472,9 @@ func decode(args []string) error {
 	if fs.NArg() != 1 {
 		return errors.New("decode needs exactly one input file")
 	}
-	var c hwmediacodec.Codec
-	switch *codecName {
-	case "h264":
-		c = hwmediacodec.H264
-	case "hevc", "h265":
-		c = hwmediacodec.HEVC
-	default:
-		return fmt.Errorf("unknown codec %q", *codecName)
+	c, err := parseCodec(*codecName)
+	if err != nil {
+		return err
 	}
 
 	in, err := os.Open(fs.Arg(0))
@@ -91,16 +482,11 @@ func decode(args []string) error {
 		return err
 	}
 	defer in.Close()
-
-	var w io.Writer = io.Discard
-	if *out != "" {
-		f, err := os.Create(*out)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		w = f
+	w, closeOut, err := openOutput(*out)
+	if err != nil {
+		return err
 	}
+	defer closeOut()
 
 	ctx := context.Background()
 	var opts []hwmediacodec.DecoderOption
@@ -188,6 +574,9 @@ func decode(args []string) error {
 		return err
 	}
 	if err := drain(); err != nil {
+		return err
+	}
+	if err := w.Flush(); err != nil {
 		return err
 	}
 	elapsed := time.Since(start)

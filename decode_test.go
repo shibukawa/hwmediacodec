@@ -14,6 +14,14 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
+// requireAppleSilicon skips tests that need VideoToolbox hardware engines.
+func requireAppleSilicon(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("test needs Apple Silicon (VideoToolbox hardware engines)")
+	}
+}
+
 // requireHardwareDecode skips the test unless Probe reports a hardware
 // decoder for c on this machine. Intel Macs are out of scope.
 func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {

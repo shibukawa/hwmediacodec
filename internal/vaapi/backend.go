@@ -87,3 +87,9 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 	}
 	return newDecoder(cfg, d), nil
 }
+
+// NewEncoder implements codec.Backend. Encoding on VA-API is not implemented
+// yet.
+func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
+	return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "encoding is not implemented on the vaapi backend yet"}
+}
