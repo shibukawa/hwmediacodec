@@ -157,7 +157,7 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 285f484feebae8e825df5ea81e6a34f0ee34057e8ac8795e400875f4e90296b0
+      input_hash: 797e6ed6e5559b4a07f0d211cce14936465873b6b050b04771356734476c1ab6
     - path: examples/hls/server.go
       input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
   record-run:
@@ -176,7 +176,7 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: 820873b7b7e57ed9148ee552d6610dcc6b3ee680d7da2c9782907d03cb9f58be
+      input_hash: adbba065ce884cd0b6ff21760e746ed8f6d156aa4bdc14ded65be5430e0e70da
     - path: examples/internal/demo/scene.go
       input_hash: 6851a53ac132ab4500c9153b5fc1f85d6ea0d3e1b093ff5f4ee8f11f9ab954ac
 open_questions:

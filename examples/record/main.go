@@ -1,5 +1,6 @@
-// Command record runs a small Ebitengine animation and records its screen
-// into an MP4 file with the hardware encoder:
+// Command record runs the fireworks show (see internal/fireworks; keys
+// launch shells) and records its screen into an MP4 file with the hardware
+// encoder:
 //
 //	go run ./record -o capture.mp4 -seconds 10
 //	go run ./record -o capture.mp4 -codec hevc -bitrate 12M -fps 60
@@ -21,17 +22,21 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/demo"
+	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
 	"github.com/shibukawa/hwmediacodec/examples/screencast"
 )
 
 type game struct {
-	scene   *demo.Scene
+	scene   *fireworks.Scene
 	rec     *screencast.Recorder
 	limit   time.Duration
 	start   time.Time
 	capTime time.Duration // time spent in Capture (ReadPixels), for the summary
 	draws   int
+
+	launch    fireworks.Kind
+	hasLaunch bool
+	ticks     int
 }
 
 func (g *game) Update() error {
@@ -44,6 +49,11 @@ func (g *game) Update() error {
 	if g.limit > 0 && time.Since(g.start) > g.limit {
 		return ebiten.Termination
 	}
+	g.scene.HandleInput()
+	if g.hasLaunch && g.ticks%(4*ebiten.TPS()) == ebiten.TPS()/2 {
+		g.scene.Launch(g.launch, 0.5)
+	}
+	g.ticks++
 	g.scene.Update()
 	return nil
 }
@@ -54,7 +64,8 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.rec.Capture(screen) // before the overlay, so the stats stay out of the file
 	g.capTime += time.Since(t0)
 	g.draws++
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("REC %s  %d frames  %d dropped  %.0f fps", g.rec.Duration().Truncate(time.Second), g.rec.Captured(), g.rec.Dropped(), ebiten.ActualFPS()), 8, g.scene.H-20)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("REC %s  %d frames  %d dropped  %.0f fps  %d stars  %s\n%s",
+		g.rec.Duration().Truncate(time.Second), g.rec.Captured(), g.rec.Dropped(), ebiten.ActualFPS(), g.scene.Particles(), g.scene.Status(), fireworks.Help()), 8, g.scene.H-32)
 }
 
 func (g *game) Layout(int, int) (int, int) { return g.scene.W, g.scene.H }
@@ -66,6 +77,7 @@ func main() {
 	fps := flag.Float64("fps", 60, "frame rate of the game and the recording")
 	size := flag.String("size", "1280x720", "screen size")
 	seconds := flag.Float64("seconds", 0, "stop after this many seconds (0 = until the window closes)")
+	launch := flag.String("launch", "", "fire this kind half a second in and every four seconds (peony, chrysanthemum, willow, ring, palm, crackle, gopher)")
 	flag.Parse()
 
 	var w, h int
@@ -84,7 +96,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	g := &game{scene: demo.NewScene(w, h, *fps), rec: rec, limit: time.Duration(*seconds * float64(time.Second))}
+	g := &game{scene: fireworks.NewScene(w, h, *fps), rec: rec, limit: time.Duration(*seconds * float64(time.Second))}
+	if *launch != "" {
+		kind, ok := fireworks.ParseKind(*launch)
+		if !ok {
+			log.Fatalf("unknown kind %q", *launch)
+		}
+		g.launch, g.hasLaunch = kind, true
+	}
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowTitle("hwmediacodec record")
 	ebiten.SetTPS(int(*fps))

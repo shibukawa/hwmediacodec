@@ -1,0 +1,125 @@
+id: milestone:examples-fireworks
+type: milestone
+title: Examples - fireworks scene with a Kage post-process for record, hls and webrtc; browser auto-open
+summary: 'The plain colour-bar demo behind the recording and streaming samples is replaced by a fireworks
+  show (examples/internal/fireworks): additive star particles in a current layer plus a fading persistence
+  buffer, a Kage shader for sky, stars, bloom, skyline and water reflection, six shell types on keys 1-6,
+  a gopher-shaped shell on G (stars aimed at a gopher silhouette with deliberate distortion) that the
+  automatic show also fires now and then, space/F/A for random, volley and auto. hls and webrtc open the
+  player page with github.com/pkg/browser (-open=false to skip).'
+lifecycle: active
+authority: authored
+aliases:
+- fireworks sample
+- gopher firework
+- 花火サンプル
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-fireworks
+constraints:
+- 'Rendering: stars are 32 px radial sprites drawn with BlendLighter into cur (full brightness, cleared
+  each frame); acc is faded by a SourceOver black at alpha 0.09 plus a ReverseSubtract of 2/255 (a pure
+  multiplicative fade leaves permanent faint ghosts in 8-bit buffers) and then receives cur at 0.14; the
+  shader reads cur, acc and the skyline mask (Images[0..2], all screen-sized as DrawRectShader requires).'
+- 'The first version drew every frame at full brightness into one accumulating buffer and saturated to
+  white blobs; the two-layer split and smaller sprites fixed it.'
+- 'Gopher shell: silhouette from ellipses (body, ears, eyes with pupil holes, snout, nose, teeth, arms,
+  feet) sampled at density 0.13 points per unit area with per-feature multipliers (body 0.55, eyes 1.3,
+  teeth 1.6) and outlines; star velocity v0 = (target - gravityFall)/travel where travel and fall are
+  integrated with the scene''s own particle.step at the scene TPS (a closed-form exponential was 2.5 % off
+  the discrete integration); tilt +-0.15 rad, scale 0.92-1.08 per axis, 2.5-unit jitter; forms in 1.1 s,
+  then sinks.'
+- 'Shells: v = sqrt(2 g h) for a chosen apex, trail sparks every tick, burst when vy >= 0; Crackle stars
+  carry splitAt and explode into six sparks; all sizes scale with height/720.'
+- Scene cost at 720p on the M3 with the record sample capturing is about 5-7 ms per draw including ReadPixels;
+  60 fps is kept.
+- The window keeps the keyboard; browsers only watch. browser.OpenURL is called after the HTTP server starts;
+  failures are printed, not fatal.
+non_goals:
+- Sound, mouse aiming, perspective/3D bursts beyond the sphere projection, physically based smoke, multiple
+  gopher poses.
+acceptance:
+  gopher-shape:
+    text: gopherPoints yields 500-1600 points inside the box, none inside the pupils, all colour classes
+      present with at least 100 white (eye/teeth) points; after 1.1 s of integration at 60 TPS a burst at
+      (600, 300) spans about 280x290 px centred within 25/40 px, white stars sitting in the upper half.
+    scope:
+      milestone: examples-fireworks
+    verified_by:
+    - fireworks-unit-test
+  solver-exact:
+    text: A star aimed with displacementForUnitVelocity lands within 1 px of its target after the formation
+      time.
+    scope:
+      milestone: examples-fireworks
+    verified_by:
+    - fireworks-unit-test
+  looks:
+    text: Recorded through the record sample, frames show distinct shell types with trails, the skyline with
+      lit windows and a rippled reflection, and the gopher shell forms a recognisable gopher (ears, round
+      body, white eyes) that then fades.
+    scope:
+      milestone: examples-fireworks
+    verified_by:
+    - fireworks-record-run
+verification:
+  fireworks-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-fireworks
+    test: TestGopherPointsCoverTheFigure, TestGopherBurstFormsTheFigure, TestDisplacementMatchesIntegration,
+      TestBurstsHaveStars
+    evidence:
+      path: examples/internal/fireworks/fireworks_test.go
+      locator: TestGopherBurstFormsTheFigure
+    basis:
+    - path: examples/internal/fireworks/gopher.go
+      input_hash: a0947a56704deb3b0ea7c99e53d6decd643ddb7b79695db053ef2930634fe7a8
+    - path: examples/internal/fireworks/particles.go
+      input_hash: 55c393727ac5806fb999d8018240c54e122906ee3c5c2192422a0b14fbcb93bc
+    - path: examples/internal/fireworks/fireworks_test.go
+      input_hash: 73ef3f02b253d3494e945a92ecfdd2c86c1b94752f69ecc1c312fcc7a7410693
+  fireworks-record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o fw.mp4 -seconds 9 -launch gopher, frames extracted with ffmpeg and inspected
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 720p60 without drops, capture 5-7 ms per draw; frames at 2.6 s (forming
+        gopher), 3.4 s (gopher with eyes, chrysanthemum, peony) and 7 s (ring, willow, fading gopher) inspected
+    basis:
+    - path: examples/internal/fireworks/scene.go
+      input_hash: 3df1e66e2d85870d25d71e9deb34b78d14dcc82adfcfee1407d620a53c25bdda
+    - path: examples/internal/fireworks/shader.go
+      input_hash: fdd60fd3e663e55eefd7b11ac81b3dfde8430578eec9291e8e8d5f8d7c37c3ec
+    - path: examples/record/main.go
+      input_hash: adbba065ce884cd0b6ff21760e746ed8f6d156aa4bdc14ded65be5430e0e70da
+facts:
+  api:
+    fireworks: 'NewScene(w, h, tps) -> Scene{HandleInput, Update, Draw, Launch(kind, x), Particles, Status,
+      Auto}; Help(); Kind (Peony..Gopher), ParseKind'
+    flags: 'record -launch <kind>; hls/webrtc -open (default true)'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: Requested mid-session by the author (good-looking Kage-based fireworks with an occasional gopher,
+      keyboard-selectable shells, browser auto-open) after the WebRTC/HLS samples existed.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:ebitenvideo-seek
+- relation: depends_on
+  to: milestone:examples-screencast-hls
+- relation: depends_on
+  to: milestone:examples-webrtc

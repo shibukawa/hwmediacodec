@@ -10,6 +10,7 @@ require (
 	github.com/pion/rtcp v1.2.19
 	github.com/pion/rtp v1.10.5
 	github.com/pion/webrtc/v4 v4.2.23
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/shibukawa/hwmediacodec v0.0.0
 	github.com/shibukawa/hwmediacodec/ebitenvideo v0.0.0
 )

@@ -16,10 +16,11 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`screencast/`](screencast/) | Captures an Ebitengine screen into the hardware encoder on a background goroutine; sinks for MP4 files and anything else |
-| [`record/`](record/) | Ebitengine game whose screen is recorded to an MP4 file |
-| [`hls/`](hls/) | Ebitengine game streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server) |
+| [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
+| [`record/`](record/) | The fireworks show recorded to an MP4 file |
+| [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server); opens the player page |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning cube with `DrawTriangles`, and through a Kage shader; plays MP4 files directly |
-| [`webrtc/`](webrtc/) | Ebitengine game streamed to browsers over WebRTC with pion, about 100 ms of latency |
+| [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`heif/`](heif/), [`heifconv/`](heifconv/) | HEIC and AVIF still images: decode (single pictures, grids, rotation, clean aperture) and encode HEIC with the HEVC encoder, AVIF where an AV1 encoder exists |
 
 ## container
@@ -127,27 +128,52 @@ rec.Close()                  // flushes the encoder, finishes the file
   container muxer, `Funcs` adapts closures, and the HLS and WebRTC samples
   plug their own in.
 
+## The fireworks scene
+
+`internal/fireworks` is what `record`, `hls` and `webrtc` show. It is
+written to look good on a stream and to give the encoder real work:
+
+- Shells rise from the shore with a spark trail and burst at their apex into
+  one of six types: peony, chrysanthemum, willow, ring (a circle in a
+  random plane), palm and crackle (stars that pop into sparks). Keys `1`
+  to `6` launch them, `space` a random one, `F` a volley, `A` toggles the
+  automatic show.
+- `G` launches the gopher shell: about 900 stars whose velocities are
+  solved so that they land on a gopher silhouette (body, ears, eyes with
+  pupil holes, snout, teeth, arms, feet) 1.1 s after the burst, with a
+  random tilt, non-uniform scale and per-star jitter, and gravity bending
+  the figure afterwards. The automatic show fires one every 10 to 16 s.
+- Stars are additive sprites drawn into a full-brightness layer for the
+  current frame and, dimmed, into a persistence buffer that fades
+  (multiply, then subtract a constant so 8-bit trails really reach black).
+- A Kage shader composes the frame: night sky gradient with a warm city
+  glow, procedural twinkling stars, the two particle layers with a cheap
+  16-tap bloom, a skyline silhouette with lit windows (a mask image), and
+  below the horizon a rippling, dimmed reflection of all of it.
+
 ## record
 
 ```sh
 cd examples
 go run ./record -o capture.mp4 -seconds 10
 go run ./record -o capture.mp4 -codec hevc -bitrate 12M -size 1920x1080
+go run ./record -o gopher.mp4 -seconds 8 -launch gopher
 ```
 
-Runs the demo animation in a window and records it until the window closes
-or `-seconds` pass; the summary line reports frames, drops and the average
+Runs the fireworks show in a window and records it until the window closes
+or `-seconds` pass; `-launch` fires a given shell type at the start and
+every four seconds. The summary line reports frames, drops and the average
 capture cost per draw.
 
 ## hls
 
 ```sh
 cd examples
-go run ./hls -addr :8080            # then open http://localhost:8080/
-go run ./hls -segment 1s -bitrate 2M
+go run ./hls -addr :8080            # opens http://localhost:8080/ in the browser
+go run ./hls -segment 1s -bitrate 2M -open=false
 ```
 
-The same animation, encoded with a keyframe interval equal to the segment
+The fireworks show, encoded with a keyframe interval equal to the segment
 length and `WithLowLatency`, cut by `container.Segmenter` into CMAF/fMP4
 segments (init segment with the parameter sets, then one `moof`+`mdat` per
 segment, each starting at a keyframe) and served from memory with a
@@ -193,9 +219,14 @@ which is how the demo recording in the repository's history was made.
 
 ```sh
 cd examples
-go run ./webrtc -addr :8080         # then open http://localhost:8080/
+go run ./webrtc -addr :8080         # opens http://localhost:8080/ in the browser
 go run ./webrtc -stun stun:stun.l.google.com:19302   # viewers outside the LAN
+go run ./webrtc -open=false         # print the URL only
 ```
+
+Both servers open the player page with `github.com/pkg/browser` unless
+`-open=false` is given; the window keeps the keyboard, so launch shells
+there and watch them in the browser.
 
 The low-latency counterpart of `hls`. The recorder encodes with
 `WithLowLatency`, Baseline profile and no B-frames; every access unit is
