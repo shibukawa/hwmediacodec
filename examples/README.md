@@ -12,6 +12,7 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 
 | Directory | What it shows |
 | --- | --- |
+| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
 | [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units and a progressive MP4 muxer fed with encoder packets |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
@@ -19,7 +20,8 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
 | [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server); opens the player page |
-| [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning cube with `DrawTriangles`, and through a Kage shader; plays MP4 files directly |
+| [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream in a window of the video's aspect ratio, with pause, seeking and a progress bar |
+| [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`heif/`](heif/), [`heifconv/`](heifconv/) | HEIC and AVIF still images: decode (single pictures, grids, rotation, clean aperture) and encode HEIC with the HEVC encoder, AVIF where an AV1 encoder exists |
 
@@ -188,28 +190,49 @@ at `/` plays natively in Safari and through hls.js (MSE) elsewhere;
 gives; the WebRTC sample is the low-latency path. HEVC (`-codec hevc`)
 plays in Safari only.
 
+## player
+
+```sh
+cd examples
+go run ./player                       # the bundled waterfall clip, looping
+go run ./player movie.mp4
+go run ./player -once -codec hevc -fps 30 stream.hevc
+```
+
+The plain video player: `ebitenvideo.NewPlayerFromSource` over
+`container.VideoTrack.PacketSource()` for MP4 files (presentation times,
+the sync-sample table for seeking, the length), `ebitenvideo.NewPlayer`
+for raw streams. The window takes the video's aspect ratio; space pauses,
+the arrow keys seek five seconds, Home restarts; a progress bar runs along
+the bottom. Audio tracks are ignored (Ebitengine has no AAC decoder). With
+no argument it plays `assets/waterfall-720p-hevc.mp4`, which is embedded
+into the binary.
+
 ## texture
 
 ```sh
 cd examples
-go run ./texture movie.mp4                      # keys: 1 flat, 2 cube, 3 shader, space pause
+go run ./texture                      # the bundled clip; keys: 1 flat, 2 box, 3 shader, space pause
+go run ./texture movie.mp4
 go run ./texture -codec hevc -fps 30 stream.hevc
-go run ./texture -seconds 12 -record demo.mp4 movie.mp4
+go run ./texture -seconds 12 -record demo.mp4
 ```
 
 `ebitenvideo.Player.Image()` is an ordinary `*ebiten.Image` that the player
 updates in place, so the video goes wherever an image goes:
 
 - **flat**: `DrawImage`, scaled to fit.
-- **cube**: `DrawTriangles` with the video as the texture of all six faces.
-  Ebitengine interpolates texture coordinates affinely, so each face is a
-  grid of 8x8 cells whose corners are projected separately (the usual trick
-  for perspective without a perspective divide); faces are culled by their
-  projected winding and shaded by a directional light through the vertex
-  colours.
-- **shader**: `DrawRectShader` with the video in `Images[0]`; the Kage shader
-  bends the picture, ripples it and adds scanlines and a vignette with
-  `imageSrc0At`.
+- **box**: `DrawTriangles` with the video as the texture of a spinning box
+  whose side faces have the video's aspect ratio (a portrait clip gives a
+  tall box). Ebitengine interpolates texture coordinates affinely, so each
+  face is a grid of 8x8 cells whose corners are projected separately (the
+  usual trick for perspective without a perspective divide); faces are
+  culled by their projected winding and shaded by a directional light
+  through the vertex colours.
+- **shader**: `DrawRectShader` with the video in `Images[0]`; the Kage
+  shader bends the picture slightly, ripples it and adds faint scanlines
+  and a vignette with `imageSrc0At`, kept gentle so real footage still
+  looks like itself.
 
 MP4 input is demuxed by the container package: `VideoTrack.PacketSource()`
 implements `ebitenvideo.Source` and `Seeker` (access units with
@@ -217,8 +240,7 @@ presentation times, the sync-sample table for seeking, the track length),
 so `ebitenvideo.NewPlayerFromSource` plays it without an `-fps` flag and
 the arrow keys seek five seconds (`Home` restarts). Raw `.h264`/`.hevc`
 files go through `NewPlayer` and seek as well, after a one-time scan for
-keyframes. `-record` turns the screencast recorder on the window itself,
-which is how the demo recording in the repository's history was made.
+keyframes. `-record` turns the screencast recorder on the window itself.
 
 ## webrtc
 
@@ -321,4 +343,5 @@ The convert, thumbnails, screencast and heif tests also need a hardware
 codec and skip otherwise; they check codec, frame count, PSNR against the source,
 copied audio, identical presentation times and the recorder's timing. The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
-test; its rendering was checked by recording the window.
+test and the player opens the bundled clip through a seek; the rendering
+was checked by recording the window.

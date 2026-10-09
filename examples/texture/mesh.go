@@ -6,10 +6,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// The cube is textured with DrawTriangles. Ebitengine interpolates texture
+// The box is textured with DrawTriangles. Ebitengine interpolates texture
 // coordinates affinely (there is no perspective divide per pixel), so every
 // face is split into a grid of small quads whose corners are projected
-// individually; with 8x8 cells the distortion is invisible.
+// individually; with 8x8 cells the distortion is invisible. The box is 2
+// units wide and deep and 2*aspect units tall, so the four side faces
+// have the video's aspect ratio.
 
 type vec3 struct{ x, y, z float64 }
 
@@ -42,17 +44,20 @@ func (c camera) project(p vec3) (x, y float64) {
 	return c.cx + c.focal*p.x/z, c.cy + c.focal*p.y/z
 }
 
-// face is one quad of the cube: four corners counter-clockwise when seen
+// face is one quad of the box: four corners counter-clockwise when seen
 // from outside, with texture coordinates (0,0) (1,0) (1,1) (0,1).
 type face [4]vec3
 
-var cubeFaces = []face{
-	{{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}}, // front (towards the camera, z = -1)
-	{{1, -1, 1}, {-1, -1, 1}, {-1, 1, 1}, {1, 1, 1}},     // back
-	{{1, -1, -1}, {1, -1, 1}, {1, 1, 1}, {1, 1, -1}},     // right
-	{{-1, -1, 1}, {-1, -1, -1}, {-1, 1, -1}, {-1, 1, 1}}, // left
-	{{-1, -1, 1}, {1, -1, 1}, {1, -1, -1}, {-1, -1, -1}}, // top (y = -1 is up on screen)
-	{{-1, 1, -1}, {1, 1, -1}, {1, 1, 1}, {-1, 1, 1}},     // bottom
+// boxFaces returns the six faces of a box of half-extents (1, a, 1).
+func boxFaces(a float64) []face {
+	return []face{
+		{{-1, -a, -1}, {1, -a, -1}, {1, a, -1}, {-1, a, -1}}, // front (towards the camera, z = -1)
+		{{1, -a, 1}, {-1, -a, 1}, {-1, a, 1}, {1, a, 1}},     // back
+		{{1, -a, -1}, {1, -a, 1}, {1, a, 1}, {1, a, -1}},     // right
+		{{-1, -a, 1}, {-1, -a, -1}, {-1, a, -1}, {-1, a, 1}}, // left
+		{{-1, -a, 1}, {1, -a, 1}, {1, -a, -1}, {-1, -a, -1}}, // top (y = -a is up on screen)
+		{{-1, a, -1}, {1, a, -1}, {1, a, 1}, {-1, a, 1}},     // bottom
+	}
 }
 
 // mesh accumulates vertices and indices for one DrawTriangles call.
@@ -109,13 +114,13 @@ func (m *mesh) addFace(f face, cam camera, ay, ax float64, texW, texH float64, g
 	return true
 }
 
-// cubeMesh builds the visible faces of the cube for the given rotation.
-func cubeMesh(cam camera, ay, ax float64, texW, texH float64, grid int) mesh {
+// boxMesh builds the visible faces of the box for the given rotation.
+func boxMesh(cam camera, ay, ax float64, texW, texH, aspect float64, grid int) mesh {
 	var m mesh
 	light := vec3{0.3, -0.5, -0.8}
 	l := math.Sqrt(light.dot(light))
 	light = light.scale(1 / l)
-	for _, f := range cubeFaces {
+	for _, f := range boxFaces(aspect) {
 		m.addFace(f, cam, ay, ax, texW, texH, grid, light)
 	}
 	return m

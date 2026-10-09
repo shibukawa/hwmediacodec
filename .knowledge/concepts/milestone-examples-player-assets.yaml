@@ -1,0 +1,150 @@
+id: milestone:examples-player-assets
+type: milestone
+title: Examples - bundled sample clip, player sample, aspect-aware box and gentler shader
+summary: 'The author added examples/assets/waterfall-720p-hevc.mp4 (own footage, 720x1280 portrait HEVC
+  with AAC, 29.67 fps, 293 frames) because the generated test patterns were too harsh to look at. It is
+  embedded (examples/assets package) and is the default input of the new examples/player (plain video
+  player with seeking and a progress bar, window in the video''s aspect) and of examples/texture, whose
+  cube became a box with the video''s aspect ratio and whose Kage shader was toned down for real footage.'
+lifecycle: active
+authority: authored
+aliases:
+- sample clip
+- waterfall clip
+- player sample
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-player-assets
+constraints:
+- 'The clip is embedded with go:embed (1.4 MB) so that go run ./player and go run ./texture work from any
+  directory; container.NewDemuxer takes the bytes.Reader. The ebitenvideo module cannot import examples
+  (it would make the two modules depend on each other), so the MP4-capable player lives in examples/player
+  and ebitenvideo/example stays a raw-stream demo.'
+- 'texture box: half-extents (1, aspect, 1) with aspect = clamp(h/w, 0.5, 2), so the four side faces keep
+  the video''s aspect; top and bottom are square. Camera focal 0.75*h, distance 4.2 to fit a 2:1 box.'
+- 'Shader amounts for real footage: barrel 0.05*r2, ripple 0.002, scanline 0.93 +- 0.07, vignette 0.25*r2
+  (were 0.10 / 0.004 / 0.85 +- 0.15 / 0.45).'
+- Audio tracks are ignored by the players (no AAC decoder in Ebitengine); the clip's AAC track is copied
+  by convert and listed by the container tests.
+non_goals:
+- Audio playback, playlists, subtitles, a landscape sample clip.
+acceptance:
+  clip-demuxes:
+    text: The embedded clip demuxes to an HEVC 720x1280 track of 293 samples at 29.6-29.7 fps with one audio
+      track, PacketSource.Length 9.8-9.9 s, keyframe 0 first, and every access unit converts to Annex-B.
+    scope:
+      milestone: examples-player-assets
+    verified_by:
+    - assets-container-test
+  player-plays-clip:
+    text: The player opens the clip the way main does, reports 720x1280 and a length of about 9.88 s, shows
+      a frame and seeks to 5 s.
+    scope:
+      milestone: examples-player-assets
+    verified_by:
+    - player-test
+  box-aspect:
+    text: boxMesh with aspect 2 projects a front face twice as tall as wide; aspect 1 keeps the earlier cube
+      checks.
+    scope:
+      milestone: examples-player-assets
+    verified_by:
+    - mesh-test
+  looks:
+    text: Recorded through the texture sample, the clip appears pillarboxed in flat mode, on a tall box in
+      box mode and with a barely visible curve and scanlines in shader mode.
+    scope:
+      milestone: examples-player-assets
+    verified_by:
+    - texture-clip-run
+verification:
+  assets-container-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+    test: TestBundledClip
+    evidence:
+      path: examples/container/assets_test.go
+      locator: TestBundledClip
+      note: no ffmpeg or hardware; run 2026-10-09
+    basis:
+    - path: examples/assets/assets.go
+      input_hash: 72a452262cd7467c601e89fdd938984c8aa8bc27758a1f9c2289cdbd149285dc
+    - path: examples/container/assets_test.go
+      input_hash: 2480c3fc67d7a27b63a1012362999e5b45ba8e0adc0e368d058d20702ab7f574
+    - path: examples/container/demux.go
+      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+  player-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlaysBundledClip
+    evidence:
+      path: examples/player/main_test.go
+      locator: TestPlaysBundledClip
+      note: Apple M3; run 2026-10-09
+    basis:
+    - path: examples/player/main.go
+      input_hash: 70aa6b8e5a7fd72770827c1559e2e50a9eecf007740485b1913196fe8476bc75
+    - path: examples/player/main_test.go
+      input_hash: 5486ee96c095ca50667c9b380fc1fe8d5e300012a61a992d3a3a7f3ac3c9aae7
+  mesh-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+    test: TestBoxMeshCullsBackFaces
+    evidence:
+      path: examples/texture/mesh_test.go
+      locator: TestBoxMeshCullsBackFaces
+    basis:
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+    - path: examples/texture/mesh_test.go
+      input_hash: 1c5cdbef5942f474cff38e9dae580fa4563070bf98d202ab2e598b6f0131af60
+  texture-clip-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -seconds 13 -record demo.mp4 (bundled clip), frames at 2, 6 and 10 s inspected
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 765 frames recorded, 0 dropped
+    basis:
+    - path: examples/texture/main.go
+      input_hash: a4241062bda628f551865250d6c9515752ef87ebd9b6eda30175db3b51a6a9ce
+    - path: examples/texture/shader.go
+      input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
+facts:
+  api:
+    assets: 'WaterfallMP4 []byte, WaterfallName, Waterfall() io.ReadSeeker'
+    player: 'flags -codec -fps (raw streams) -once -software; optional path argument'
+    texture: 'optional path argument (default the clip); boxMesh(cam, ay, ax, texW, texH, aspect, grid)'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: Author supplied the clip ("自分で撮影したものなのでライセンスは問題ありません") and asked the
+      player, texture and Kage samples to use it because the test patterns had too much contrast.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:examples-fireworks
+- relation: depends_on
+  to: milestone:ebitenvideo-seek
+- relation: depends_on
+  to: milestone:examples-texture

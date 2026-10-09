@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestCubeMeshCullsBackFaces(t *testing.T) {
+func TestBoxMeshCullsBackFaces(t *testing.T) {
 	cam := camera{cx: 640, cy: 360, focal: 600, distance: 4}
 	// Looking straight at the cube only the front face is visible.
-	m := cubeMesh(cam, 0, 0, 320, 240, 4)
+	m := boxMesh(cam, 0, 0, 320, 240, 1, 4)
 	if want := (4 + 1) * (4 + 1); len(m.vertices) != want {
 		t.Fatalf("%d vertices, want %d (one face of 4x4 cells)", len(m.vertices), want)
 	}
@@ -25,19 +25,19 @@ func TestCubeMeshCullsBackFaces(t *testing.T) {
 		t.Errorf("texture coordinates span %g..%g x %g..%g", minU, maxU, minV, maxV)
 	}
 	// The front face projects to a centred square.
-	x0, y0 := cam.project(rotate(cubeFaces[0][0], 0, 0))
-	x2, y2 := cam.project(rotate(cubeFaces[0][2], 0, 0))
+	x0, y0 := cam.project(rotate(boxFaces(1)[0][0], 0, 0))
+	x2, y2 := cam.project(rotate(boxFaces(1)[0][2], 0, 0))
 	if math.Abs((x0+x2)/2-640) > 1e-9 || math.Abs((y0+y2)/2-360) > 1e-9 || math.Abs((x2-x0)-(y2-y0)) > 1e-9 {
 		t.Errorf("front face projects to (%g,%g)-(%g,%g)", x0, y0, x2, y2)
 	}
 
 	// Turned by 45 degrees around Y, two faces show.
-	m = cubeMesh(cam, math.Pi/4, 0, 320, 240, 2)
+	m = boxMesh(cam, math.Pi/4, 0, 320, 240, 1, 2)
 	if got := len(m.vertices) / 9; got != 2 {
 		t.Errorf("%d faces visible at 45 degrees, want 2", got)
 	}
 	// Tilted as well: three faces.
-	m = cubeMesh(cam, math.Pi/4, math.Pi/5, 320, 240, 2)
+	m = boxMesh(cam, math.Pi/4, math.Pi/5, 320, 240, 1, 2)
 	if got := len(m.vertices) / 9; got != 3 {
 		t.Errorf("%d faces visible when tilted, want 3", got)
 	}
@@ -46,5 +46,13 @@ func TestCubeMeshCullsBackFaces(t *testing.T) {
 		if int(i) >= len(m.vertices) {
 			t.Fatalf("index %d out of range", i)
 		}
+	}
+	// A portrait box: the front face is twice as tall as wide.
+	m = boxMesh(cam, 0, 0, 720, 1280, 2, 1)
+	if len(m.vertices) != 4 {
+		t.Fatalf("%d vertices for one face of one cell", len(m.vertices))
+	}
+	if w, h := float64(m.vertices[1].DstX-m.vertices[0].DstX), float64(m.vertices[2].DstY-m.vertices[0].DstY); math.Abs(h/w-2) > 1e-5 {
+		t.Errorf("portrait face is %gx%g on screen", w, h)
 	}
 }

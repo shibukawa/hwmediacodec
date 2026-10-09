@@ -87,9 +87,9 @@ verification:
       locator: TestCubeMeshCullsBackFaces
     basis:
     - path: examples/texture/mesh.go
-      input_hash: d445bea6376a808459b7cb5e5ea3a1a42368b7f2fddab2398ffff40693630293
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
     - path: examples/texture/mesh_test.go
-      input_hash: e57dd16025d15aef5feaac95bde496de873f12e833c771c31c721c78bfa5c9ef
+      input_hash: 1c5cdbef5942f474cff38e9dae580fa4563070bf98d202ab2e598b6f0131af60
   texture-run:
     state: passed
     method: manual
@@ -107,11 +107,11 @@ verification:
         lit faces) and 10 s (shader) inspected
     basis:
     - path: examples/texture/main.go
-      input_hash: 3cccd00cddcf24f82b22ee6f30c4144e0490bba54dcdb0208322c5f5e3bdebc2
+      input_hash: a4241062bda628f551865250d6c9515752ef87ebd9b6eda30175db3b51a6a9ce
     - path: examples/texture/shader.go
-      input_hash: 9560b5daa393567595551b25c385c13515541fd4ccc31c3bf37d5bce5be0c7d5
+      input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
     - path: examples/texture/mesh.go
-      input_hash: d445bea6376a808459b7cb5e5ea3a1a42368b7f2fddab2398ffff40693630293
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
 facts:
   api:
     container: 'VideoTrack.ElementaryStream() io.ReadSeeker'

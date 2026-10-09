@@ -323,10 +323,11 @@ programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
 timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder
 (`examples/screencast`, `examples/record`), live HLS and WebRTC servers for
-an Ebitengine game (`examples/hls`, `examples/webrtc`), video as a texture
-on a cube and in a Kage shader (`examples/texture`, which also plays MP4
-files directly) and HEIC/AVIF still images (`examples/heif`,
-`examples/heifconv`). See [examples/README.md](examples/README.md).
+a fireworks show (`examples/hls`, `examples/webrtc`), a video player
+(`examples/player`), video as a texture on a box and in a Kage shader
+(`examples/texture`) and HEIC/AVIF still images (`examples/heif`,
+`examples/heifconv`). The players default to a bundled clip
+(`examples/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
 cd examples
@@ -335,7 +336,8 @@ go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
 go run ./record -o capture.mp4 -seconds 10
 go run ./hls -addr :8080      # then open http://localhost:8080/
 go run ./webrtc -addr :8080   # same, about 100 ms of latency
-go run ./texture input.mp4    # 1 flat, 2 cube, 3 shader
+go run ./player               # the bundled clip; space pause, arrows seek
+go run ./texture              # 1 flat, 2 box, 3 shader
 go run ./heifconv photo.heic photo.png
 go run ./heifconv -quality 0.8 picture.png picture.heic
 ```
@@ -371,11 +373,13 @@ presentation times, such as the MP4 demuxer in `examples/container`
 `io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
 once for keyframes on the first seek. `Seek(t)` restarts decoding at the
 keyframe before `t` and drops the frames up to it, so the next picture
-shown is the one at `t`; `Position` reports `t` meanwhile. A runnable
-example plays a file in a window (space pauses, the arrow keys seek):
+shown is the one at `t`; `Position` reports `t` meanwhile. A minimal
+example plays a raw stream in a window (space pauses, the arrow keys
+seek); the MP4-capable player with a bundled clip is `examples/player`:
 
 ```sh
 cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264
+cd examples && go run ./player
 ```
 
 Inside the repository `ebitenvideo/go.mod` points at the core module with a
