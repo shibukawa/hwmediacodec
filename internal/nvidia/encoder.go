@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package nvidia
 

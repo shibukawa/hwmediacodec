@@ -1,9 +1,12 @@
 // Package sys binds the NVIDIA driver libraries (libcuda, libnvcuvid and
-// libnvidia-encode) through purego so that no cgo is required. The struct
+// libnvidia-encode on Linux; nvcuda.dll, nvcuvid.dll and nvEncodeAPI64.dll
+// on Windows) through purego so that no cgo is required. The struct
 // definitions mirror the Video Codec SDK 11.1 headers as redistributed in
 // FFmpeg's nv-codec-headers; layout_test.go checks their sizes and field
-// offsets against values measured with a C compiler for linux/amd64 and
-// linux/arm64.
+// offsets against values measured with a C compiler for linux/amd64,
+// linux/arm64 and windows/amd64. The two cuvid structures that use
+// unsigned long are laid out differently on Windows (see ULong), which
+// layout_windows.go also asserts at compile time.
 package sys
 
 import "unsafe"

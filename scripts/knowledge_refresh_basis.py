@@ -11,6 +11,10 @@ RENAMES = {
     "encode_darwin_test.go": "encode_test.go",
     "internal/h264/h264.go": "internal/h264/poc.go",
     "internal/h264/h264_test.go": "internal/h264/poc_test.go",
+    "internal/nvidia/sys/cuda_linux.go": "internal/nvidia/sys/cuda.go",
+    "internal/nvidia/sys/cuvid_linux.go": "internal/nvidia/sys/cuvid.go",
+    "internal/nvidia/sys/nvenc_linux.go": "internal/nvidia/sys/nvenc.go",
+    "internal/nvidia/sys/sys_linux_test.go": "internal/nvidia/sys/sys_test.go",
 }
 root = sys.argv[1]
 apply = "--apply" in sys.argv

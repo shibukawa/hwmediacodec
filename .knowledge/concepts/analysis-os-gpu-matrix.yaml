@@ -140,10 +140,10 @@ facts:
   - os: windows
     gpu: NVIDIA
     primary:
-      api: NVENC / NVDEC (nvEncodeAPI64.dll
-      nvcuvid.dll: null
-      nvcuda.dll): null
+      api: NVENC / NVDEC (nvEncodeAPI64.dll, nvcuvid.dll, nvcuda.dll)
       status: full-api
+      notes: implemented for windows/amd64 as milestone:windows-nvidia-nvdec-nvenc (2026-10-09), tried
+        before Media Foundation; unverified on hardware
     alternatives:
     - api: Media Foundation vendor encoder MFT
       status: limited
@@ -250,9 +250,7 @@ facts:
   - os: linux
     gpu: NVIDIA (proprietary driver)
     primary:
-      api: NVDEC / NVENC (libnvcuvid.so.1
-      libnvidia-encode.so.1: null
-      libcuda.so.1): null
+      api: NVDEC / NVENC (libnvcuvid.so.1, libnvidia-encode.so.1, libcuda.so.1)
       status: full-api
     alternatives:
     - api: VA-API via nvidia-vaapi-driver

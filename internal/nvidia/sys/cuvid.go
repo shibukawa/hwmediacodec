@@ -1,11 +1,11 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package sys
 
 import "sync"
 
-// Bound NVDEC entry points (libnvcuvid.so.1). They are valid after
-// LoadCuvid returns nil.
+// Bound NVDEC entry points (libnvcuvid.so.1 on Linux, nvcuvid.dll on
+// Windows). They are valid after LoadCuvid returns nil.
 var (
 	CuvidGetDecoderCaps     func(caps *DecodeCaps) int32
 	CuvidCreateDecoder      func(decoder *uintptr, info *DecodeCreateInfo) int32
@@ -24,8 +24,8 @@ var (
 	cuvidErr  error
 )
 
-// LoadCuvid opens libnvcuvid (and libcuda) and binds the decoder and parser
-// entry points. The result is cached.
+// LoadCuvid opens the NVDEC library (and the CUDA driver) and binds the
+// decoder and parser entry points. The result is cached.
 func LoadCuvid() error {
 	cuvidOnce.Do(func() { cuvidErr = loadCuvid() })
 	return cuvidErr
@@ -35,7 +35,7 @@ func loadCuvid() error {
 	if err := LoadCUDA(); err != nil {
 		return err
 	}
-	b, err := open("libnvcuvid.so.1", "libnvcuvid.so")
+	b, err := open(cuvidLibraries)
 	if err != nil {
 		return err
 	}
