@@ -4,7 +4,7 @@ title: NVIDIA Video Codec SDK (NVENC / NVDEC)
 summary: NVIDIA's proprietary encoder (NVENC) and decoder (NVDEC/cuvid) APIs, available on Linux and Windows
   through runtime-loaded driver libraries. NVDEC includes its own bitstream parser, so it behaves like
   a full decoder.
-lifecycle: proposed
+lifecycle: active
 authority: inferred
 aliases:
 - NVENC
@@ -20,20 +20,76 @@ scope:
   gpu: nvidia
 capabilities:
   decode/h264:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/decode-h264
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/nvidia/decoder.go
+      note: Code complete 2026-10-09 (cuvid parser + NVDEC, NV12 host copy); struct layouts and symbol
+        binding verified without a GPU; hardware conformance not yet run, hence authority inferred.
+    verified_by:
+    - layout-test
+    - symbol-binding
+    - hardware-decode
   decode/hevc:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/decode-hevc
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/nvidia/decoder.go
+      note: Same path as H.264 with cudaVideoCodec_HEVC; the parser handles the HEVC DPB. Hardware
+        conformance not yet run.
+    verified_by:
+    - layout-test
+    - symbol-binding
+    - hardware-decode
   decode/av1:
     state: unknown
     about: capability:hwmediacodec/decode-av1
   encode/h264:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/encode-h264
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/nvidia/encoder.go
+      note: Code complete 2026-10-09 (NVENC session, P4 preset, NV12/RGBA/BGRA input, B-frames,
+        CBR/VBR/CQP, low latency, profiles); hardware verification pending.
+    verified_by:
+    - layout-test
+    - symbol-binding
+    - hardware-encode
   encode/hevc:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/encode-hevc
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/nvidia/encoder.go
+      note: Main profile through NV_ENC_CODEC_HEVC_GUID with the same control set as H.264; hardware
+        verification pending.
+    verified_by:
+    - layout-test
+    - symbol-binding
+    - hardware-encode
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -93,8 +149,129 @@ facts:
   - url: https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-application-note/index.html
     claim: Non-qualified GPUs are limited to 8 concurrent encode sessions per system.
   support_tier: tier1 (Linux and Windows NVIDIA)
+  implementation:
+    package: internal/nvidia (backend.go, device.go, decoder.go, encoder.go) over internal/nvidia/sys
+      (purego loaders per library, SDK 11.1 struct mirrors checked by layout_test.go against clang
+      offsetof output for linux/amd64 and linux/arm64).
+    sdk_version: Video Codec SDK 11.1 headers (nv-codec-headers n11.1.5.3); NVENC API 11.1 is the floor
+      the driver must report (470.57+), struct version tags are computed in Go from NVENCAPI_VERSION.
+    device: cuInit once per process; device ordinal from HWMEDIACODEC_NVIDIA_DEVICE (default 0);
+      cuDevicePrimaryCtxRetain per decoder/encoder; every driver call sequence runs on a locked OS thread
+      between cuCtxPushCurrent and cuCtxPopCurrent.
+    decoder: cuvidCreateVideoParser (ulMaxNumDecodeSurfaces 1, error threshold 100, display delay 0)
+      with purego callbacks created once and dispatched by user-data key; access units are fed with
+      CUVID_PKT_ENDOFPICTURE; the sequence callback checks cuvidGetDecoderCaps limits and creates
+      cuvidCreateDecoder (coded size, NV12, Weave, PreferCUVID, min_num_decode_surfaces + 2 surfaces,
+      one output surface); the decode callback rejects field pictures, calls cuvidDecodePicture, maps
+      the picture with cuvidMapVideoFrame64 and copies the display area with cuMemcpy2D (chroma at
+      pitch * coded height) into pooled NV12 buffers; a Go keyframe gate feeds only parameter sets until
+      an IDR/IRAP; Flush sends CUVID_PKT_ENDOFSTREAM and destroys the parser, the decoder is reused.
+    encoder: nvEncOpenEncodeSessionEx on the primary context; nvEncGetEncodeGUIDs for codec support;
+      nvEncGetEncodeCaps for size limits and max B-frames; nvEncGetEncodePresetConfigEx(P4, HIGH_QUALITY
+      or LOW_LATENCY); NV_ENC_CONFIG adjusted for profile GUID, gopLength/idrPeriod, frameIntervalP,
+      rcParams (CONSTQP from WithQuality or 26 by default, VBR with 2x peak, CBR), repeatSPSPPS,
+      chromaFormatIDC 1, CAVLC for Baseline, BT.601 VUI tag for RGB input; nvEncInitializeEncoder with
+      enablePTD; input buffers (NV12, ABGR for RGBA, ARGB for BGRA) and bitstream buffers created on
+      demand, filled via nvEncLockInputBuffer; nvEncEncodePicture with FORCEIDR|OUTPUT_SPSPPS for forced
+      keyframes; on NV_ENC_SUCCESS every in-flight bitstream is locked in order; EOS picture on Flush.
+    output_contract: decode order NV12 frames with the packet's PTS and reorder key; Annex-B packets
+      with Keyframe from the NAL types, SPS/PPS (and VPS) prepended from nvEncGetSequenceParams when
+      missing, DTS = input PTS of the k-th frame minus bframes * frame duration.
+    limitations:
+    - 8-bit 4:2:0 progressive only; NV12 output only (no RGBA/BGRA decode); no AV1.
+    - Synchronous per-picture decode and host copy inside Send.
+    - Parameter sets are not cached across Flush; the next IDR must carry SPS/PPS in band (the usual
+      case for streams the library's own encoders and ffmpeg produce).
+    - Linux only; the Windows DLL loader is not written yet.
+  host_verification_2026-10-09:
+    layouts: 482 sizes/offsets equal the C compiler's values for both Linux targets; version tags equal
+      the header macros.
+    symbols: all entry points bind against libcuda/libnvcuvid/libnvidia-encode 535.309.01 in a Debian
+      container (NVENC API 12.1 reported); without the libraries Probe returns an empty list.
+    pending: decode and encode conformance on real NVIDIA hardware (see milestone:linux-nvidia-h264-hevc).
 relations:
 - relation: candidate_for
   to: requirement:hwmediacodec
 - relation: ranked_by
   to: policy:support-tiers
+- relation: implemented_in
+  to: milestone:linux-nvidia-h264-hevc
+verification:
+  layout-test:
+    state: passed
+    method: unit
+    authority: observed
+    test: internal/nvidia/sys TestStructLayouts, TestVersionConstants
+    evidence:
+      path: internal/nvidia/sys/layout_test.go
+      note: see milestone:linux-nvidia-h264-hevc for the oracle recipe
+    basis:
+    - path: internal/nvidia/sys/types_cuda.go
+      input_hash: 86ef9a87d3600b8c13407e0f1a941ad2eebb026e19e28087c5a78ac6ef539575
+    - path: internal/nvidia/sys/types_cuvid.go
+      input_hash: 3198584c34bec348e132e486f3eb877dda44c6b328cc5c4ecea4d84b71d718c2
+    - path: internal/nvidia/sys/types_nvenc.go
+      input_hash: 3e4503c8c0f33953c2fbeb8c400b3eb1a0ed67db6a57ced6757eda869da208c7
+    - path: internal/nvidia/sys/layout_test.go
+      input_hash: 23c83f4699817d241020047ed7867c66569f5e13ad3cdff5054db59ca6f509f4
+  symbol-binding:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: linux
+    test: internal/nvidia/sys TestLoadCUDA, TestLoadCuvid, TestLoadNVENC in a debian:bookworm-slim
+      linux/amd64 container with the 535.309.01 user-space libraries
+    evidence:
+      path: internal/nvidia/sys/sys_linux_test.go
+    basis:
+    - path: internal/nvidia/sys/cuda_linux.go
+      input_hash: e5e9de53e593feba32b2ffdc72594bccd12963927f61364f8df35d8a04b63603
+    - path: internal/nvidia/sys/cuvid_linux.go
+      input_hash: 1b6c2fc93a1b6f3e327439f3fb6f9282f6dd02b8319c9956e5f749f3b4816e65
+    - path: internal/nvidia/sys/nvenc_linux.go
+      input_hash: 6ae9e3ec17be17fdbf22f42546040ecb804fea3d87e4796f00d5a57b42b59507
+    - path: internal/nvidia/sys/sys_linux_test.go
+      input_hash: 6bbe93a666d2f6eb3f9902bcbcaf2600a36a115ad13af400440ddfab198aa46d
+  hardware-decode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    test: go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on an NVIDIA Linux machine
+    evidence:
+      path: decode_test.go
+      note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
+    basis:
+    - path: internal/nvidia/decoder.go
+      input_hash: 79a80fbcec1b94fa8eb92999933e6f767a9c690be9d5379390e1d15cc56482db
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+    - path: internal/nvidia/device.go
+      input_hash: 7b248f20a22c2a5c5823ae4280f77ad579176a1f8e0b321353ef6e37f0783276
+  hardware-encode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: nvidia
+    test: go test -count=1 -v -run 'Encode|Transcode' . on an NVIDIA Linux machine
+    evidence:
+      path: encode_test.go
+      note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
+    basis:
+    - path: internal/nvidia/encoder.go
+      input_hash: 3aaed75e93591292e848bdb2e31e83a2e0578d371a8c522500b64acc23afd0b2
+    - path: internal/nvidia/backend.go
+      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+history:
+  researched-2026-10-08:
+    summary: Backend landscape entry written from NVIDIA documentation (libraries, API model, session
+      limits, codec support by generation).
+  implemented-2026-10-09:
+    summary: Linux backend implemented in internal/nvidia with purego (milestone:linux-nvidia-h264-hevc);
+      lifecycle moved to active; capabilities implemented with inferred authority until the hardware
+      run.

@@ -103,7 +103,7 @@ verification:
       gpu: apple-silicon
     test: TestDecodeBFramesMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeBFramesMatchesReference
       note: 60 frames 320x240; H.264 bframes 3 and 8, HEVC bframes 3 and 6; checksums equal ffmpeg's
         display-order output frame for frame
@@ -113,17 +113,17 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/videotoolbox/decoder.go
       input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   reorder-oracle-test:
@@ -145,9 +145,9 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/reorder/reorder_test.go
@@ -179,14 +179,14 @@ verification:
     test: h264 and hevc package tests (ParseSPS, ParsePPS, slice headers, POC sequences, reorder bound
       table, lsb wrap, CRA handling)
     evidence:
-      path: internal/h264/h264_test.go
+      path: internal/h264/poc_test.go
       locator: TestSliceHeadersAndPOC
       note: parameter sets and slice headers embedded from libx264/libx265 output
     basis:
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
-    - path: internal/h264/h264_test.go
-      input_hash: c25892deb133c635219456abe25c873c773429478443f4ae564ebddced44dbb0
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
+    - path: internal/h264/poc_test.go
+      input_hash: 6dd185cfb69762d9c4e1b8c489c3a42525168ad0f6e21128c84514c1d204e954
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/hevc/hevc_test.go
@@ -201,13 +201,13 @@ verification:
       gpu: apple-silicon
     test: TestDecodeOrderOption
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
   rgba-decode-test:
     state: passed
     method: integration
@@ -218,7 +218,7 @@ verification:
       gpu: apple-silicon
     test: TestDecodeRGBA
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeRGBA
       note: worst 8x8-block PSNR 35.4 dB against ffmpeg (bilinear chroma, BT.601) for H.264 and HEVC;
         plain PSNR is about 28 dB because of chroma interpolation, BT.709 would score 25 dB and swapped
@@ -232,8 +232,8 @@ verification:
       input_hash: 723e7f03975c4beb944937f1c54c17ae46323556c2fb0570cbfb1f2e1ac6a48d
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   rgb-encode-test:
@@ -246,7 +246,7 @@ verification:
       gpu: apple-silicon
     test: TestEncodeRGBAInput
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeRGBAInput
       note: 30 frames 320x240 at 1.5 Mbit/s; ffprobe color_space bt709; worst 8x8-block PSNR 39.3 dB
         (27.7 dB when decoded with BT.601)
@@ -257,8 +257,8 @@ verification:
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   timeline-unit-test:

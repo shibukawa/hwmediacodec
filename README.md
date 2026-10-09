@@ -259,4 +259,6 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ```
 
 Project knowledge (requirements, decisions, backend notes) lives in
-`.knowledge/` and is maintained with the knowledge-memory skill.
+`.knowledge/` and is maintained with the knowledge-memory skill. After
+re-running the tests a verification entry names, refresh its file hashes with
+`python3 scripts/knowledge_refresh_basis.py . --apply`.

@@ -184,9 +184,9 @@ verification:
     - path: internal/vaapi/h264fill.go
       input_hash: f9dc33284533ccafb2576c955220e9bfa0383e9339fcd8f1c86921d4fc53bd35
     - path: backends_linux.go
-      input_hash: 6d1ca44fde42ab5db095d5f985f68ba6fd2b355e77880bb082a51ad5e99eb87a
+      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
     - path: probe_test.go
-      input_hash: cf84c37f092545c38725fc8d272e988322bea279a940bc4b25e0bee60e146044
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
   hardware-conformance:
     state: not_run
     method: integration
@@ -242,7 +242,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: e7b47cb5ccff5dde22616edc25af04981d5cb5190beab95513d461f7f85ce5b1
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
   cross-build-check:
     state: passed
     method: static
@@ -256,7 +256,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_linux.go
-      input_hash: 6d1ca44fde42ab5db095d5f985f68ba6fd2b355e77880bb082a51ad5e99eb87a
+      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
     - path: backends_other.go
       input_hash: 557c578a71c6a75f496438b0ac44622f3fdbb6e0570dbc6265db95c9d3966bee
 facts:

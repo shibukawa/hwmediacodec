@@ -56,7 +56,7 @@ verification:
     test: TestDecodeH264MatchesReference
     authority: observed
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeH264MatchesReference
     basis:
     - &id004
@@ -70,13 +70,13 @@ verification:
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id007
       path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - &id001
-      path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - &id002
       path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - &id003
       path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
@@ -102,7 +102,7 @@ verification:
     test: TestDecodeParameterSetChange
     authority: observed
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeParameterSetChange
       note: 320x240 then 160x120 concatenated; 60 frames, sizes switch at frame 30, checksums equal to
         reference
@@ -134,7 +134,7 @@ verification:
       milestone: m1
     test: TestDecodeHEVCMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeHEVCMatchesReference
       note: bonus beyond the M1 scope; libx265 source, bit-exact
     basis:
@@ -153,7 +153,7 @@ verification:
       milestone: m1
     test: TestFlushResumesAtKeyframe
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestFlushResumesAtKeyframe
     basis:
     - *id004
@@ -182,7 +182,7 @@ verification:
       milestone: m1
     test: TestDecodeBFramesMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeBFramesMatchesReference
     basis:
     - path: internal/videotoolbox/decoder.go
@@ -192,11 +192,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
 open_questions:

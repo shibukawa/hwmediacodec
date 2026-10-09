@@ -54,7 +54,7 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
   api/probe:
@@ -128,7 +128,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
   encode/hevc:
@@ -143,7 +143,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
   encode/av1:
@@ -189,13 +189,18 @@ capabilities:
       gpu: intel
     about: capability:hwmediacodec/backend-intel-vpl
   backend/nvenc-nvdec:
-    state: planned
+    state: partial
     scope:
       platform:
       - linux
       - windows
       gpu: nvidia
     about: capability:hwmediacodec/backend-nvidia
+    authority: inferred
+    evidence:
+      path: internal/nvidia/backend.go
+      note: Linux NVDEC/NVENC H.264 and HEVC decode and encode implemented 2026-10-09; the Windows DLL
+        loader is not written; hardware conformance pending (see milestone:linux-nvidia-h264-hevc).
   backend/v4l2-m2m:
     state: planned
     scope:
@@ -297,12 +302,12 @@ verification:
       locator: TestProbe
       note: go test -count=1 -v . on 2026-10-09; videotoolbox h264/hevc decode and encode hardware=true
     basis:
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
     - path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
     - path: internal/videotoolbox/backend.go
@@ -317,7 +322,7 @@ verification:
     test: TestDecodeH264MatchesReference
     authority: observed
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeH264MatchesReference
       note: 60 frames 320x240, per-frame SHA-256 equal to ffmpeg software decode (nv12)
     basis:
@@ -328,11 +333,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   unsupported-test:
@@ -349,9 +354,9 @@ verification:
         direction and reason
     basis:
     - path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
   cross-build-check:
     state: passed
     method: static
@@ -369,7 +374,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_other.go
-      input_hash: 3fddc03992092abd5b3bb27c638d0e1e94377f86dc7e72dbb1de7ed9e5deb7b3
+      input_hash: 557c578a71c6a75f496438b0ac44622f3fdbb6e0570dbc6265db95c9d3966bee
     - path: backends_darwin.go
       input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
   bframe-set-test:
@@ -381,7 +386,7 @@ verification:
       gpu: apple-silicon
     test: TestDecodeBFramesMatchesReference
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeBFramesMatchesReference
       note: since milestone display-order-rgba the frames must equal ffmpeg's display order frame for
         frame (H.264 bframes 3 and 8, HEVC bframes 3 and 6); before that only the frame set was compared
@@ -393,11 +398,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
     - path: probe_test.go
-      input_hash: 0c49406ecd396dddeee91bab369ba429d536850bf62f868ebf685ba449f2e566
+      input_hash: 34007ee111b7242f6c8d60b80b20f6a9931c530897580db84f4cc398c6061615
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   encode-reference-test:
@@ -410,7 +415,7 @@ verification:
     test: TestEncodeMatchesSource
     authority: observed
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeMatchesSource
       note: 60 frames 320x240, 1 Mbit/s; ffmpeg decode count equal, worst luma PSNR ~50 dB for H.264 and
         HEVC; every keyframe carries SPS/PPS (+VPS)
@@ -424,11 +429,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   encoder-controls-test:
@@ -442,7 +447,7 @@ verification:
       TestEncodeQuality, TestEncodeLowLatency, TestEncodeProfiles
     authority: observed
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeBitrateControl
       note: see milestone:m2-darwin-encode verification entries for the measured values
     basis:
@@ -455,11 +460,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   transcode-test:
@@ -472,7 +477,7 @@ verification:
     test: TestTranscodeRoundTrip
     authority: observed
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestTranscodeRoundTrip
       note: worst luma PSNR 52.8 dB after hardware encode + hardware decode
     basis:
@@ -485,11 +490,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 772d3c5154c0f4dc77ab741a7c19524941d3b63f7d09c61fce6cf9920883030f
     - path: hwmediacodec.go
-      input_hash: 8cbf88b3332cf5ad0b1933101a9f57e4aea98ded1413a490037f68ed3e82de22
+      input_hash: 78ae83132bb77d2635eef66f702c8cae23e3bcbe2857f42f5ba3452cf9f57817
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
     - path: internal/videotoolbox/decoder.go
@@ -507,7 +512,7 @@ verification:
       note: hardware-free; see milestone:display-order-rgba for the basis and details
     basis:
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/reorder_test.go
@@ -522,13 +527,13 @@ verification:
       gpu: apple-silicon
     test: TestDecodeRGBA
     evidence:
-      path: decode_darwin_test.go
+      path: decode_test.go
       locator: TestDecodeRGBA
     basis:
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
-    - path: decode_darwin_test.go
-      input_hash: 556576b238c356ee319aa73d7b106f90c23711a2f7c137f6dfa6b5c76611da29
+    - path: decode_test.go
+      input_hash: 99d236651bd21a1f3611178a270ff7aa2d1dd89ab1294f9353c72089cc8ff1f3
   rgb-encode-test:
     state: passed
     method: integration
@@ -539,13 +544,13 @@ verification:
       gpu: apple-silicon
     test: TestEncodeRGBAInput
     evidence:
-      path: encode_darwin_test.go
+      path: encode_test.go
       locator: TestEncodeRGBAInput
     basis:
     - path: internal/videotoolbox/encoder.go
       input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
-    - path: encode_darwin_test.go
-      input_hash: cb4f6ae6909801b6df7abebc6092c40ae3af3a528d2be898aaeccfce863af091
+    - path: encode_test.go
+      input_hash: 153fdcfe0d9762818d0a91763198e2de265a5a418f3a4550e229fdb3337cbc79
   ebitenvideo-test:
     state: passed
     method: integration
@@ -620,7 +625,8 @@ open_questions:
     state: answered
     resolution: Answered 2026-10-09 by the author - Linux AMD first, decoder first. The Go H.264 parser/DPB
       and the VA-API backend were built right after M1 (before Windows, Intel VPL and NVIDIA); HEVC on VA-API
-      is the next Linux step.
+      is the next VA-API step. NVIDIA NVDEC/NVENC followed on 2026-10-09 through the driver's own parser,
+      so no Go DPB was needed for it (milestone:linux-nvidia-h264-hevc).
   hls-packaging:
     text: HLS needs MPEG-TS or fMP4 segments and playlists. Companion package in this module, a separate
       module, or leave to existing Go libraries?
@@ -699,6 +705,10 @@ history:
     summary: 'Linux AMD decoder slice (out of roadmap order, requested by the author) implemented: Go H.264 parser + DPB (internal/h264) and the
       VA-API backend (internal/vaapi) via purego; host oracle tests and a libva container smoke test
       pass; AMD hardware conformance pending.'
+  linux-nvidia-implemented-2026-10-09:
+    summary: 'Linux NVIDIA slice (requested by the author) implemented: internal/nvidia drives NVDEC through
+      the cuvid parser and NVENC through libnvidia-encode via purego, H.264 and HEVC both ways, RGBA/BGRA
+      encoder input; layouts and symbol binding verified without a GPU, hardware conformance pending.'
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
@@ -753,7 +763,8 @@ facts:
     later:
     - 'Windows backend: Media Foundation for Intel/AMD, NVENC/NVDEC for NVIDIA (in progress on a parallel
       branch).'
-    - 'Linux full-API backends: Intel VPL and NVIDIA NVDEC/NVENC (in progress on a parallel branch).'
+    - 'Linux full-API backends: NVIDIA NVDEC/NVENC delivered 2026-10-09 (milestone:linux-nvidia-h264-hevc,
+      hardware verification pending); Intel VPL still planned.'
     - Go H.264/HEVC DPB on top of the existing parsers and VA-API backend for Linux AMD (and older Intel).
     - Then AVCC output, HLS prototype, AV1 where hardware exists, pure-Go NV12<->RGBA fallback when a
       backend needs it, Tier 2 backends.
@@ -866,22 +877,26 @@ facts:
     is best effort.
   capability_notes:
     decode/h264: implemented on darwin/apple-silicon (bit-exact against ffmpeg on 320x240 and 1080p
-      test streams) and on linux via VA-API (code complete 2026-10-09, parser/DPB verified against ffmpeg,
-      hardware conformance pending); other Tier 1 platforms pending.
-    decode/hevc: implemented on darwin/apple-silicon only; bit-exact against ffmpeg (libx265 source).
+      test streams), on linux via VA-API (code complete 2026-10-09, parser/DPB verified against ffmpeg,
+      hardware conformance pending) and on linux via NVDEC (code complete 2026-10-09, driver parser,
+      hardware conformance pending); Windows on the parallel branch.
+    decode/hevc: implemented on darwin/apple-silicon (bit-exact against ffmpeg, libx265 source) and on
+      linux via NVDEC (code complete 2026-10-09, hardware conformance pending); VA-API HEVC still planned.
     backend/videotoolbox: decode and encode for H.264/HEVC in NV12/RGBA/BGRA; AV1 pending.
     api/display-order: implemented in Go for every decode-order backend (VideoToolbox and VA-API); verified
       against ffmpeg frame for frame and against MP4 timestamps without hardware. The reorder tracker uses
       the full H.264 parser (internal/h264) and so also honours memory_management_control_operation 5.
-    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); VA-API and other
-      backends pending (NV12 only there).
+    api/pixel-format-option: implemented on darwin/apple-silicon (backend conversion); on linux NVENC
+      accepts RGBA/BGRA input (converted by the hardware with BT.601 and tagged so) while NVDEC and VA-API
+      output NV12 only (RGBA/BGRA decode reports ErrUnsupported there).
     ebitengine/player: separate module ebitenvideo; verified headless on darwin/apple-silicon.
     encode/h264: implemented on darwin/apple-silicon (VBR/CBR/quality, GOP, forced keyframes, B-frames,
-      low latency, profiles; verified against ffmpeg/ffprobe) and on linux via VA-API (code complete
-      2026-10-09, I/P only, header writer verified against ffmpeg, hardware verification pending); other
-      Tier 1 platforms pending.
-    encode/hevc: implemented on darwin/apple-silicon only; Main profile; same control set and verification
-      as H.264.
+      low latency, profiles; verified against ffmpeg/ffprobe), on linux via VA-API (code complete
+      2026-10-09, I/P only, header writer verified against ffmpeg, hardware verification pending) and on
+      linux via NVENC (code complete 2026-10-09, full control set incl. B-frames and RGB input, hardware
+      verification pending); Windows on the parallel branch.
+    encode/hevc: implemented on darwin/apple-silicon (Main profile; same control set and verification as
+      H.264) and on linux via NVENC (code complete 2026-10-09, hardware verification pending).
 relations:
 - relation: governed_by
   to: policy:support-tiers
@@ -933,3 +948,5 @@ relations:
   to: milestone:display-order-rgba
 - relation: active_milestone
   to: milestone:linux-vaapi-h264-decode
+- relation: active_milestone
+  to: milestone:linux-nvidia-h264-hevc
