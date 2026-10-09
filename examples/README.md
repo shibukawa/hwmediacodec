@@ -10,20 +10,23 @@ repository the module points at the core with a `replace ../` directive.
 Everything here was written and verified on an Apple Silicon Mac; the same
 code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 
-The programs, run from the `examples` directory:
+Each program runs straight from its module path, with nothing to clone or
+install (Go 1.27 or later is needed):
 
 ```sh
-cd examples
-go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
-go run ./thumbnails -every 10s -o thumbs movie.mp4              # keyframe thumbnails
-go run ./record -o capture.mp4 -seconds 10                      # fireworks show to MP4
-go run ./hls -addr :8080                                        # fireworks show over HLS, opens the browser
-go run ./webrtc -addr :8080                                     # fireworks show over WebRTC, opens the browser
-go run ./player                                                 # video player, bundled clip
-go run ./texture                                                # video as a texture (flat, box, shader)
-go run ./heifconv photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
-go run ./heifconv -quality 0.8 picture.png picture.heic         # PNG or JPEG to HEIC
+go run github.com/shibukawa/hwmediacodec/examples/convert@latest -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
+go run github.com/shibukawa/hwmediacodec/examples/thumbnails@latest -every 10s -o thumbs movie.mp4              # keyframe thumbnails
+go run github.com/shibukawa/hwmediacodec/examples/record@latest -o capture.mp4 -seconds 10                      # fireworks show to MP4
+go run github.com/shibukawa/hwmediacodec/examples/hls@latest -addr :8080                                        # fireworks show over HLS, opens the browser
+go run github.com/shibukawa/hwmediacodec/examples/webrtc@latest -addr :8080                                     # fireworks show over WebRTC, opens the browser
+go run github.com/shibukawa/hwmediacodec/examples/player@latest                                                 # video player, bundled clip
+go run github.com/shibukawa/hwmediacodec/examples/texture@latest                                                # video as a texture (flat, box, shader)
+go run github.com/shibukawa/hwmediacodec/examples/heifconv@latest photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
+go run github.com/shibukawa/hwmediacodec/examples/heifconv@latest -quality 0.8 picture.png picture.heic         # PNG or JPEG to HEIC
 ```
+
+Inside a clone, `cd examples` and then `go run ./player` (and so on) runs the
+same programs from the working tree.
 
 Without arguments, `player` and `texture` play the bundled clip in
 `assets/`. The library-only directories (`assets`, `container`,
