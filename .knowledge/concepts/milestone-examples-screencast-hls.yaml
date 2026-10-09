@@ -95,11 +95,11 @@ verification:
       note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09
     basis:
     - path: examples/screencast/recorder.go
-      input_hash: 29414926ff7e1f80c34231e105fa9abfc095f49ba75d8aa6a20a9dbba016183f
+      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
     - path: examples/screencast/sinks.go
       input_hash: e704e00e480014d45d1bd0e43ed69fa5440eb78e3e93f4a96f214604551b17ef
     - path: examples/screencast/recorder_test.go
-      input_hash: 2444aff4ea52473f3b1ac7c15375a8c1bd46a2c7a4a089805b4e5191e2c1c740
+      input_hash: 5294d300c6b38e7f5d914383548f4d8eefc2058dba43e06e4d6eb90081c9fff9
     - path: examples/container/mux.go
       input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
   segmenter-test:

@@ -1,0 +1,152 @@
+id: milestone:examples-webrtc
+type: milestone
+title: Examples - Ebitengine game streamed to browsers over WebRTC (pion)
+summary: 'Fourth usage-sample slice: examples/webrtc fans the screencast recorder''s H.264 packets out
+  to one pion TrackLocalStaticSample per browser viewer, signals with a single HTTP POST of the SDP offer
+  (answer after ICE gathering, no trickle), turns viewer joins and RTCP PLI/FIR into Recorder.RequestKeyframe
+  calls and starts each viewer at a keyframe. Verified with pion as the viewer in tests and with a Chromium
+  browser pane playing the live 1280x720 stream.'
+lifecycle: active
+authority: authored
+aliases:
+- WebRTC sample
+- pion broadcast
+- WebRTC 配信
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-webrtc
+constraints:
+- 'pion''s H.264 payloader takes Annex-B access units as they come from hwmediacodec: it splits on start
+  codes, packs SPS/PPS into STAP-A, fragments large NAL units into FU-A and drops AUD and filler NAL units.'
+- 'The track is offered as H.264 Constrained Baseline, packetization-mode 1 (profile-level-id 42e01f);
+  the encoder is opened with ProfileBaseline, WithLowLatency and no B-frames; the keyframe interval is
+  4 s because joiners get a keyframe on demand.'
+- 'Recorder.RequestKeyframe sets ForceKeyframe on the next captured frame (atomic flag); the broadcaster
+  calls it when a peer registers and when the RTP sender reads a PictureLossIndication or FullIntraRequest.'
+- 'Sample.Duration is the PTS gap at 90 kHz (first sample 1/fps), which is how TrackLocalStaticSample advances
+  the RTP timestamp; peers that fail, disconnect or close are removed, a failed WriteSample removes the peer.'
+- 'Capture counts a frame only once it is queued (a frame that found a free buffer but no queue slot used to
+  be counted as both captured and dropped); VideoToolbox may still skip frames under bursts, so packets <=
+  captured.'
+non_goals:
+- Audio, simulcast, TURN relays, data channels, HEVC/AV1 over WebRTC, trickle ICE, authentication.
+acceptance:
+  loopback-delivery:
+    text: A pion viewer that posts an offer to /offer and receives the track gets, through pion's sample
+      builder, access units equal NAL unit by NAL unit (ignoring AUD/filler) to the ones written, in
+      order, all but possibly the last; written out as a raw stream they decode with ffmpeg to the source's
+      frame MD5s; joining triggers a keyframe request and a PLI from the viewer triggers another.
+    scope:
+      milestone: examples-webrtc
+    verified_by:
+    - broadcaster-test
+  start-at-keyframe:
+    text: A viewer connected while the stream is in the middle of a GOP receives nothing until the next
+      keyframe, which is its first access unit.
+    scope:
+      milestone: examples-webrtc
+    verified_by:
+    - broadcaster-test
+  keyframe-request:
+    text: RequestKeyframe makes the next captured frame a keyframe (keyframes at 0, 10, 20 for requests
+      before captures 10 and 20 with a 300-frame interval).
+    scope:
+      milestone: examples-webrtc
+    verified_by:
+    - recorder-keyframe-test
+  browser-playback:
+    text: A Chromium browser connects through the page at /, receives 1280x720 H.264 at the game's frame
+      rate with no packet loss, and the decoded picture shows the scene.
+    scope:
+      milestone: examples-webrtc
+    verified_by:
+    - webrtc-live-run
+verification:
+  broadcaster-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-webrtc
+    test: TestBroadcasterDeliversAccessUnits, TestBroadcasterStartsViewersAtKeyframes
+    evidence:
+      path: examples/webrtc/server_test.go
+      locator: TestBroadcasterDeliversAccessUnits
+      note: no hardware - packets from demuxing ffmpeg-made files, pion on both ends over loopback; run
+        2026-10-09
+    basis:
+    - path: examples/webrtc/server.go
+      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
+    - path: examples/webrtc/server_test.go
+      input_hash: 67200c94f010aff568fda9b47d5593b46f93385817e9d157230627b3cab67a0a
+    - path: examples/container/demux.go
+      input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
+  recorder-keyframe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
+    evidence:
+      path: examples/screencast/recorder_test.go
+      locator: TestRecorderRequestKeyframe
+      note: Apple M3; run 2026-10-09
+    basis:
+    - path: examples/screencast/recorder.go
+      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
+    - path: examples/screencast/recorder_test.go
+      input_hash: 5294d300c6b38e7f5d914383548f4d8eefc2058dba43e06e4d6eb90081c9fff9
+  webrtc-live-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./webrtc -addr 127.0.0.1:18081 with the desktop app's browser pane (Chromium 152) on the
+      page
+    evidence:
+      path: examples/webrtc/main.go
+      locator: main
+      note: '2026-10-09 - connectionState connected, inbound-rtp 1280x720, framesDecoded 317 after 6 s, jitterBufferDelay
+        7.9 ms, decode 1.26 ms per frame, 0 packets lost, 1 PLI (the join), 4 keyframes; the video drawn
+        to a canvas had 2027 of 2304 bright pixels in 41 coarse colours (the scene), while the pane itself
+        rendered black and reported dropped frames because it was a hidden tab'
+    basis:
+    - path: examples/webrtc/main.go
+      input_hash: c3512aa005701fa6c87ddf6c637e2e0f4f093a3ae739db3cfa24b954b0f9283a
+    - path: examples/webrtc/server.go
+      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
+open_questions:
+  latency-measurement:
+    text: End-to-end glass-to-glass latency was not measured (the pane could not be filmed); jitter buffer
+      and decode add about 10 ms, the encoder's low-latency path and display refresh the rest.
+    state: open
+    resolution: Measure with a timestamp overlay captured by a second camera or with the frame counter in
+      the scene when a visible browser is available.
+facts:
+  api:
+    webrtc: 'NewBroadcaster(fps, iceServers, requestKeyframe) -> Broadcaster{ServeHTTP (/, POST /offer),
+      Accept(offer) (*SessionDescription, error), WritePacket, Close, Viewers}; flags -addr -bitrate -fps
+      -size -stun'
+    screencast: 'Recorder.RequestKeyframe()'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: Fourth sample slice delivered after the texture sample; loopback tests pass without hardware,
+      the live stream played in a Chromium pane on the M3.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:examples-texture
+- relation: depends_on
+  to: milestone:examples-screencast-hls

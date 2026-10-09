@@ -259,10 +259,10 @@ programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
 (`examples/container`, on top of mp4ff), a video file converter that keeps
 timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder
-(`examples/screencast`, `examples/record`), a live HLS server for an
-Ebitengine game (`examples/hls`) and video as a texture on a cube and in a
-Kage shader (`examples/texture`, which also plays MP4 files directly). See
-[examples/README.md](examples/README.md).
+(`examples/screencast`, `examples/record`), live HLS and WebRTC servers for
+an Ebitengine game (`examples/hls`, `examples/webrtc`) and video as a
+texture on a cube and in a Kage shader (`examples/texture`, which also
+plays MP4 files directly). See [examples/README.md](examples/README.md).
 
 ```sh
 cd examples
@@ -270,6 +270,7 @@ go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
 go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
 go run ./record -o capture.mp4 -seconds 10
 go run ./hls -addr :8080      # then open http://localhost:8080/
+go run ./webrtc -addr :8080   # same, about 100 ms of latency
 go run ./texture input.mp4    # 1 flat, 2 cube, 3 shader
 ```
 

@@ -19,6 +19,7 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`record/`](record/) | Ebitengine game whose screen is recorded to an MP4 file |
 | [`hls/`](hls/) | Ebitengine game streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server) |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning cube with `DrawTriangles`, and through a Kage shader; plays MP4 files directly |
+| [`webrtc/`](webrtc/) | Ebitengine game streamed to browsers over WebRTC with pion, about 100 ms of latency |
 
 ## container
 
@@ -185,6 +186,33 @@ player needs no `-fps`. `-record` turns the screencast recorder on the
 window itself, which is how the demo recording in the repository's history
 was made.
 
+## webrtc
+
+```sh
+cd examples
+go run ./webrtc -addr :8080         # then open http://localhost:8080/
+go run ./webrtc -stun stun:stun.l.google.com:19302   # viewers outside the LAN
+```
+
+The low-latency counterpart of `hls`. The recorder encodes with
+`WithLowLatency`, Baseline profile and no B-frames; every access unit is
+handed to a [pion](https://github.com/pion/webrtc) `TrackLocalStaticSample`
+per viewer, whose H.264 payloader splits the Annex-B NAL units into RTP
+(STAP-A for the parameter sets, FU-A for large slices). Signalling is a
+single HTTP POST of the browser's SDP offer; the answer is returned once
+ICE gathering is done, so no trickle ICE and no WebSocket. A viewer joining
+or sending a picture-loss indication calls `Recorder.RequestKeyframe`, and
+a viewer only starts receiving at a keyframe.
+
+Measured in a Chromium browser on the same machine at 1280x720: jitter
+buffer delay about 8 ms, decode about 1.3 ms per frame, no packet loss;
+the end-to-end delay is dominated by the encoder's low-latency pipeline and
+the display, a few frames in total. The tests use pion as the viewer:
+access units received over the loopback RTP path are rebuilt with pion's
+sample builder, compared NAL unit by NAL unit with what was sent, and
+decoded by ffmpeg to the source's frame checksums; a PLI from the viewer
+must reach the keyframe callback.
+
 ## Testing
 
 ```sh
@@ -192,10 +220,11 @@ cd examples
 go test ./...
 ```
 
-The container, segmenter and HLS server tests need only ffmpeg and
-ffprobe: they compare sample tables, presentation times and decoded frame
-checksums with ffprobe's view of the same files, feed ffmpeg-made streams
-through the segmenter and let ffprobe play the served playlist over HTTP.
+The container, segmenter, HLS server and WebRTC broadcaster tests need
+only ffmpeg and ffprobe: they compare sample tables, presentation times and
+decoded frame checksums with ffprobe's view of the same files, feed
+ffmpeg-made streams through the segmenter and the WebRTC track and let
+ffprobe play the served playlist over HTTP.
 The convert, thumbnails and screencast tests also need a hardware codec and
 skip otherwise; they check codec, frame count, PSNR against the source,
 copied audio, identical presentation times and the recorder's timing. The

@@ -1,0 +1,109 @@
+// Command webrtc streams a small Ebitengine animation to browsers over
+// WebRTC with about a hundred milliseconds of latency:
+//
+//	go run ./webrtc -addr :8080
+//	open http://localhost:8080/
+//
+// The screen is captured and encoded by screencast.Recorder (H.264,
+// low-latency mode, no B-frames) and every access unit is written to a
+// pion track per viewer; pion packetises the Annex-B NAL units into RTP.
+// Signalling is one HTTP POST of the browser's SDP offer. A viewer joining
+// or reporting a picture loss makes the encoder emit a keyframe.
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+
+	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/examples/internal/demo"
+	"github.com/shibukawa/hwmediacodec/examples/screencast"
+)
+
+type game struct {
+	scene *demo.Scene
+	rec   *screencast.Recorder
+	bc    *Broadcaster
+	url   string
+}
+
+func (g *game) Update() error {
+	if err := g.rec.Err(); err != nil {
+		return err
+	}
+	g.scene.Update()
+	return nil
+}
+
+func (g *game) Draw(screen *ebiten.Image) {
+	g.scene.Draw(screen)
+	g.rec.Capture(screen)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("WebRTC %s  %s  %d frames  %d dropped  %.0f fps", g.url, g.bc, g.rec.Captured(), g.rec.Dropped(), ebiten.ActualFPS()), 8, g.scene.H-20)
+}
+
+func (g *game) Layout(int, int) (int, int) { return g.scene.W, g.scene.H }
+
+func main() {
+	addr := flag.String("addr", ":8080", "HTTP listen address")
+	bitrate := flag.Int("bitrate", 3_000_000, "bits per second")
+	fps := flag.Float64("fps", 60, "frame rate")
+	size := flag.String("size", "1280x720", "screen size")
+	stun := flag.String("stun", "", "STUN server URL for viewers outside the LAN, e.g. stun:stun.l.google.com:19302")
+	flag.Parse()
+
+	var w, h int
+	if _, err := fmt.Sscanf(*size, "%dx%d", &w, &h); err != nil || w <= 0 || h <= 0 {
+		log.Fatalf("bad -size %q", *size)
+	}
+	var ice []string
+	if *stun != "" {
+		ice = []string{*stun}
+	}
+	var rec *screencast.Recorder
+	bc := NewBroadcaster(*fps, ice, func() {
+		if rec != nil {
+			rec.RequestKeyframe()
+		}
+	})
+	rec, err := screencast.New(w, h, bc, screencast.Options{
+		Codec:            hwmediacodec.H264,
+		FPS:              *fps,
+		Bitrate:          *bitrate,
+		KeyframeInterval: int(*fps * 4), // viewers get one on join anyway
+		LowLatency:       true,
+		Profile:          hwmediacodec.ProfileBaseline,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		if err := http.ListenAndServe(*addr, bc); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	url := "http://" + *addr + "/"
+	if strings.HasPrefix(*addr, ":") {
+		url = "http://localhost" + *addr + "/"
+	}
+	fmt.Println("serving", url)
+
+	g := &game{scene: demo.NewScene(w, h, *fps), rec: rec, bc: bc, url: url}
+	ebiten.SetWindowSize(w, h)
+	ebiten.SetWindowTitle("hwmediacodec webrtc")
+	ebiten.SetTPS(int(*fps))
+	runErr := ebiten.RunGame(g)
+	if err := rec.Close(); err != nil {
+		fmt.Fprintln(os.Stderr, "webrtc:", err)
+		os.Exit(1)
+	}
+	if runErr != nil {
+		log.Fatal(runErr)
+	}
+}

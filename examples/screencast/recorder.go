@@ -104,6 +104,7 @@ func (o Options) encoderOptions() []hwmediacodec.EncoderOption {
 type capture struct {
 	pix []byte
 	pts int64
+	key bool
 }
 
 // Recorder encodes captured frames into a Sink.
@@ -121,6 +122,7 @@ type Recorder struct {
 
 	start    time.Time
 	lastPTS  int64
+	wantKey  atomic.Bool
 	captured atomic.Int64
 	dropped  atomic.Int64
 	encoded  atomic.Int64
@@ -194,9 +196,9 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 	}
 	src.ReadPixels(pix)
 	r.lastPTS = pts
-	r.captured.Add(1)
 	select {
-	case r.frames <- capture{pix: pix, pts: pts}:
+	case r.frames <- capture{pix: pix, pts: pts, key: r.wantKey.Swap(false)}:
+		r.captured.Add(1)
 	default:
 		// The queue filled up between the buffer check and now.
 		r.dropped.Add(1)
@@ -229,6 +231,7 @@ func (r *Recorder) run(ctx context.Context) {
 		f := &hwmediacodec.Frame{
 			Width: r.width, Height: r.height, Format: hwmediacodec.RGBA,
 			Planes: [][]byte{c.pix}, Strides: []int{4 * r.width}, PTS: c.pts,
+			ForceKeyframe: c.key,
 		}
 		err := r.enc.Send(ctx, f) // the frame is copied before Send returns
 		r.free <- c.pix
@@ -259,6 +262,11 @@ func (r *Recorder) fail(err error) {
 	}
 	r.mu.Unlock()
 }
+
+// RequestKeyframe makes the next captured frame a keyframe: what a
+// streaming sink does when a new viewer joins or a receiver reports a
+// picture loss. Safe to call from any goroutine.
+func (r *Recorder) RequestKeyframe() { r.wantKey.Store(true) }
 
 // Err returns the first error from the encoder or the sink.
 func (r *Recorder) Err() error {
