@@ -14,31 +14,33 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
-// requireAppleSilicon skips tests that need VideoToolbox hardware engines.
-func requireAppleSilicon(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
-		t.Skip("test needs Apple Silicon (VideoToolbox hardware engines)")
-	}
-}
-
-// requireHardwareDecode skips the test unless Probe reports a hardware
-// decoder for c on this machine. Intel Macs are out of scope.
-func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {
+// requireHardware skips the test unless Probe reports a hardware engine for
+// c in the given direction on this machine. Intel Macs are out of scope.
+func requireHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) {
 	t.Helper()
 	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
-		t.Skip("hardware decode tests target Apple Silicon (Intel Macs are out of scope)")
+		t.Skip("hardware tests target Apple Silicon (Intel Macs are out of scope)")
 	}
 	caps, err := hwmediacodec.Probe(context.Background())
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
 	for _, cap := range caps {
-		if cap.Codec == c && cap.Direction == hwmediacodec.Decode && cap.Hardware {
+		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
 			return
 		}
 	}
-	t.Skipf("no hardware %s decoder on this machine (%s/%s)", c, runtime.GOOS, runtime.GOARCH)
+	t.Skipf("no hardware %s %s on this machine (%s/%s)", c, dir, runtime.GOOS, runtime.GOARCH)
+}
+
+func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {
+	t.Helper()
+	requireHardware(t, c, hwmediacodec.Decode)
+}
+
+func requireHardwareEncode(t *testing.T, c hwmediacodec.Codec) {
+	t.Helper()
+	requireHardware(t, c, hwmediacodec.Encode)
 }
 
 // decodeAll feeds every access unit of an Annex-B stream and returns the

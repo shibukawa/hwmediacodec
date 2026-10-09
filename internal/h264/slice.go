@@ -337,7 +337,8 @@ func parseRefPicListModification(r *bitstream.Reader) ([]RefPicListModification,
 	if err != nil || !flag {
 		return nil, err
 	}
-	var out []RefPicListModification
+	// Non-nil even when empty, so that a set flag survives a round trip.
+	out := []RefPicListModification{}
 	for {
 		idc, err := r.ReadUE()
 		if err != nil {

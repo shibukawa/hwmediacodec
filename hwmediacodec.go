@@ -9,10 +9,10 @@
 // # Status
 //
 // H.264 and HEVC decoding and encoding on macOS (Apple Silicon) through
-// VideoToolbox, and H.264 decoding on Linux through VA-API (AMD Mesa and
-// Intel drivers). Raw frames are NV12 in CPU memory. Decoded frames are
-// returned in decode order. Encoding on Linux and the Windows backends are
-// not implemented yet.
+// VideoToolbox, and H.264 decoding and encoding on Linux through VA-API (AMD
+// Mesa and Intel drivers). Raw frames are NV12 in CPU memory. Decoded frames
+// are returned in decode order. The Windows backends are not implemented
+// yet.
 //
 // On Linux the VA-API backend opens the first usable DRM render node; set
 // HWMEDIACODEC_VAAPI_DEVICE to a /dev/dri/renderD* path to choose a GPU.

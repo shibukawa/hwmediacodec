@@ -43,8 +43,24 @@ capabilities:
     state: unknown
     about: capability:hwmediacodec/decode-av1
   encode/h264:
-    state: planned
+    state: implemented
     about: capability:hwmediacodec/encode-h264
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/encoder.go
+      note: Code complete (2026-10-09); header writer verified against the parser and ffmpeg trace_headers;
+        hardware encode test pending on an AMD machine.
+    verified_by:
+    - h264-writer-roundtrip
+    - linux-symbol-binding
+    - h264-encode-linux
   encode/hevc:
     state: unknown
     about: capability:hwmediacodec/encode-hevc
@@ -131,6 +147,24 @@ facts:
     - H.264 only (HEVC parser/RPS and VA HEVC buffers are the next step).
     - Progressive frames only; field_pic_flag=1 is rejected with ErrUnsupported (MBAFF frames are fine).
     - 8-bit 4:2:0 only (NV12); no FMO, no data partitioning, redundant slices are dropped.
+  encoder_implementation:
+    entrypoint: VAEntrypointEncSlice (VAEntrypointEncSliceLP as fallback) on H264 High > Main > ConstrainedBaseline,
+      or the requested profile; config attributes RTFormat, RateControl and EncPackedHeaders.
+    structure: I and P pictures with one short-term reference (ping-pong of two reconstructed surfaces),
+      POC type 0 with 8-bit lsb, frame_num 8 bits, IDR every KeyframeInterval frames (default two seconds
+      or 60 frames), Frame.ForceKeyframe and Flush force an IDR; no B-frames yet.
+    headers: SPS/PPS/slice headers written by internal/h264/write.go (bitstream.Writer + emulation prevention);
+      sent as packed headers (sequence = SPS+PPS, slice) when the driver's EncPackedHeaders attribute lists
+      them, like ffmpeg; the coded output is scanned and the SPS/PPS prepended to keyframes if the driver
+      wrote none.
+    rate_control: Quality -> CQP (qp = round(51 - 45*q)), Bitrate -> VBR (peak 2x target, 50%) or CBR (100%)
+      with VAEncMiscParameterRateControl/HRD (1 s buffer, frame skip disabled) and FrameRate misc params
+      at every IDR; default CQP 26 (or VBR at 0.1 bit/pixel when CQP is unsupported).
+    io: input uploaded through vaDeriveImage when it yields NV12, else vaCreateImage + vaPutImage, with
+      edge replication into the macroblock padding; one coded buffer (3 bytes/pixel) mapped after vaSyncBuffer
+      (vaSyncSurface fallback); synchronous per picture inside Send.
+    limitations:
+    - H.264 only; no B-frames; even width/height required; one slice per picture; no SEI.
   host_verification_2026-10-09:
     parser: every SPS/PPS/slice-header syntax element equals ffmpeg trace_headers on six x264 streams
       (CAVLC/CABAC, POC types 0 and 2, B-pyramid, 16 refs, weighted prediction, cqm=jvt, 3 slices,
@@ -170,7 +204,7 @@ verification:
     - path: internal/h264/scaling.go
       input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
     - path: internal/h264/slice.go
-      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/oracle_test.go
@@ -194,7 +228,7 @@ verification:
     - path: internal/h264/scaling.go
       input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
     - path: internal/h264/slice.go
-      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/dpb_oracle_test.go
@@ -210,11 +244,56 @@ verification:
       path: internal/vaapi/sys/sys_linux_test.go
     basis:
     - path: internal/vaapi/sys/sys_linux.go
-      input_hash: cbb385b426ed2fda9c4d29d65b9fa91312976ba395caf4f96b9f3dd723918552
+      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: internal/vaapi/sys/sys_linux_test.go
-      input_hash: 5f56789e1e8cfcd0d16577dd85bed09bffffdaa4e8d13f04fd5e9e9164c3010b
+      input_hash: e5ccfdee741414432a931d5769e0f28ca73953505247000f60e49e69c0f0aa52
     - path: internal/vaapi/display.go
-      input_hash: 696dc4ddd5f656ec82d8691b8243cb57024b875b9f184667574e38128cd974af
+      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+  h264-writer-roundtrip:
+    state: passed
+    method: unit
+    authority: observed
+    test: TestWriteParameterSetsRoundTrip, TestWriteSliceHeaderRoundTrip, TestWrittenHeadersMatchFFmpeg,
+      TestEncodeStructLayouts
+    evidence:
+      path: internal/h264/write_test.go
+      note: written SPS/PPS/slice headers parse back identically and match ffmpeg trace_headers element
+        by element; VA encode struct layouts equal clang offsetof values
+    basis:
+    - path: internal/bitstream/writer.go
+      input_hash: 8797eb395a5b44233efb6e91fbb82e491a9889829be9f5fc5b3fbad114acad1f
+    - path: internal/bitstream/writer_test.go
+      input_hash: 38116848b88923c5b42b57e6438b97ee44c83d6888662880395c71b2abdd2796
+    - path: internal/h264/write.go
+      input_hash: 23a5282c8f497fd47e493e98794e2c7592d981cf5839bb4b7ca266224ccd71b4
+    - path: internal/h264/write_test.go
+      input_hash: 31c5442906545fe947897c3b8b1bdf9394d4c91afe610872957d8db572c46ec0
+    - path: internal/vaapi/sys/types_enc.go
+      input_hash: ce900535f2463ba7ea70d7e8c39298e9437bfe1baaf366e10a9a4e968684778f
+    - path: internal/vaapi/sys/layout_enc_test.go
+      input_hash: 3906f214dc0e9d32a6ef4ab130ae5afa400e1aefeabac38b275bcd2ec5e791ac
+  h264-encode-linux:
+    state: not_run
+    method: integration
+    authority: inferred
+    test: TestEncodeMatchesSource/h264, TestTranscodeRoundTrip, TestEncodeKeyframeInterval, TestEncodeForceKeyframe,
+      TestEncodeBitrateControl, TestEncodeQuality, TestEncodeLowLatency, TestEncodeProfiles, TestEncodeFlushAndReuse
+      on Linux with a VA-API encoder
+    evidence:
+      path: encode_test.go
+      note: Needs an AMD (or Intel) Linux machine with ffmpeg; the PSNR and bitrate thresholds were set
+        against VideoToolbox and may need tuning for VCN.
+    basis:
+    - path: internal/vaapi/encoder.go
+      input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
+    - path: internal/vaapi/backend.go
+      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
+    - path: internal/vaapi/display.go
+      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+    - path: internal/vaapi/sys/sys_linux.go
+      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
+    - path: encode_test.go
+      input_hash: 7a8a5ff4b95acb3175c1aab0239b18ec1eb1cc08a687111548342548f21bf27a
   h264-reference-linux:
     state: not_run
     method: integration
@@ -227,3 +306,6 @@ history:
   decode-implemented-2026-10-09:
     summary: H.264 decode implemented (Go parser/DPB + purego libva bindings) at the author's request
       ("Linux AMD, decoder first"); host-side oracle tests pass, hardware conformance pending.
+  encode-implemented-2026-10-09:
+    summary: H.264 encode added (Go header writer + VA encode buffers + packed headers) at the author's
+      request ("next the encoder, same PR"); host tests pass, hardware verification pending.

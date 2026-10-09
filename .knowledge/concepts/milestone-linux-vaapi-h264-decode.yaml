@@ -1,6 +1,6 @@
 id: milestone:linux-vaapi-h264-decode
 type: milestone
-title: Linux AMD, decoder first - H.264 decode via VA-API with a Go parser/DPB (built out of roadmap order; M2 is macOS encode)
+title: Linux AMD - H.264 decode and encode via VA-API with a Go parser/DPB and header writer (built out of roadmap order; M2 is macOS encode)
 summary: 'Linux slice, requested by the author on 2026-10-09 ("Linux AMD support, starting with the
   decoder"): the VA-API backend for Linux (AMD Mesa radeonsi, also Intel iHD/i965) decoding H.264 Annex-B
   streams to NV12 frames, with the slice-level bookkeeping (SPS/PPS/slice headers, POC, reference marking,
@@ -20,7 +20,8 @@ constraints:
 - H.264 first (project codec priority); HEVC follows once H.264 is verified on hardware.
 - Progressive frames only; field pictures are reported as ErrUnsupported rather than decoded wrongly.
 non_goals:
-- HEVC/AV1 on VA-API, encoding, display-order output, zero-copy (DMA-BUF) frames, Intel VPL, NVDEC.
+- HEVC/AV1 on VA-API, B-frame encoding, display-order output, zero-copy (DMA-BUF) frames, Intel VPL,
+  NVDEC.
 acceptance:
   parser-matches-ffmpeg:
     text: Every SPS, PPS and slice-header syntax element the parser exposes equals ffmpeg's trace_headers
@@ -62,6 +63,22 @@ acceptance:
       milestone: linux-vaapi-decode
     verified_by:
     - hardware-conformance
+  header-writer-matches-parser:
+    text: SPS, PPS and slice headers written by the encoder's writer parse back identically with the
+      package's own parser and element by element with ffmpeg's trace_headers, and the writer's bit
+      count equals the parser's header length (needed for packed slice headers).
+    scope:
+      milestone: linux-vaapi-decode
+    verified_by:
+    - writer-roundtrip-test
+  encode-reference-linux:
+    text: On a Linux machine with a VA-API encoder, the encode conformance tests (PSNR against the source,
+      keyframe placement, forced keyframes, CBR/VBR sizes, CQP ordering, profiles, flush/reuse) and the
+      transcode round trip pass.
+    scope:
+      milestone: linux-vaapi-decode
+    verified_by:
+    - hardware-encode
   cross-build:
     text: CGO_ENABLED=0 builds succeed for all six targets with the new packages.
     scope:
@@ -89,7 +106,7 @@ verification:
     - path: internal/h264/scaling.go
       input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
     - path: internal/h264/slice.go
-      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/oracle_test.go
@@ -118,7 +135,7 @@ verification:
     - path: internal/h264/scaling.go
       input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
     - path: internal/h264/slice.go
-      input_hash: c71a791459c04e44f31204687bd66d62db9be23a5a32b9426bfc4d303dad83fc
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/dpb_oracle_test.go
@@ -155,13 +172,13 @@ verification:
         prints "no hardware codec backend"
     basis:
     - path: internal/vaapi/sys/sys_linux.go
-      input_hash: cbb385b426ed2fda9c4d29d65b9fa91312976ba395caf4f96b9f3dd723918552
+      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: internal/vaapi/sys/sys_linux_test.go
-      input_hash: 5f56789e1e8cfcd0d16577dd85bed09bffffdaa4e8d13f04fd5e9e9164c3010b
+      input_hash: e5ccfdee741414432a931d5769e0f28ca73953505247000f60e49e69c0f0aa52
     - path: internal/vaapi/display.go
-      input_hash: 696dc4ddd5f656ec82d8691b8243cb57024b875b9f184667574e38128cd974af
+      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
     - path: internal/vaapi/backend.go
-      input_hash: 63285b7ff8aa3aa9602232621ed5025b0eb7ae8a7403f2fbb77c7b9da4227a58
+      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
     - path: internal/vaapi/decoder.go
       input_hash: efe32365692dc17f7520c9c9f5a3d4a6816cdf93a60d26fa74d25bd3f618ad4a
     - path: internal/vaapi/h264fill.go
@@ -169,7 +186,7 @@ verification:
     - path: backends_linux.go
       input_hash: 6d1ca44fde42ab5db095d5f985f68ba6fd2b355e77880bb082a51ad5e99eb87a
     - path: probe_test.go
-      input_hash: 5a5f2f9493f704ca9c28a1e57c7be87380a955d6a2cad92bef2e040c9425e0da
+      input_hash: 5bd3f003dc94cd2baf9f10ad015b8ce366c0a59bd490376ccfd5921c6e18da67
   hardware-conformance:
     state: not_run
     method: integration
@@ -181,6 +198,51 @@ verification:
       path: decode_test.go
       note: Not yet run; the author's AMD machine is needed. If vaDeriveImage returns garbage on the
         driver, set deriveWorks to -1 (vaGetImage path) and re-test.
+  writer-roundtrip-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: linux-vaapi-decode
+    test: TestWriteParameterSetsRoundTrip, TestWriteSliceHeaderRoundTrip, TestWrittenHeadersMatchFFmpeg,
+      bitstream TestWriterRoundTrip/TestEscapeRoundTrip, sys TestEncodeStructLayouts
+    evidence:
+      path: internal/h264/write_test.go
+    basis:
+    - path: internal/bitstream/writer.go
+      input_hash: 8797eb395a5b44233efb6e91fbb82e491a9889829be9f5fc5b3fbad114acad1f
+    - path: internal/bitstream/writer_test.go
+      input_hash: 38116848b88923c5b42b57e6438b97ee44c83d6888662880395c71b2abdd2796
+    - path: internal/h264/write.go
+      input_hash: 23a5282c8f497fd47e493e98794e2c7592d981cf5839bb4b7ca266224ccd71b4
+    - path: internal/h264/write_test.go
+      input_hash: 31c5442906545fe947897c3b8b1bdf9394d4c91afe610872957d8db572c46ec0
+    - path: internal/vaapi/sys/types_enc.go
+      input_hash: ce900535f2463ba7ea70d7e8c39298e9437bfe1baaf366e10a9a4e968684778f
+    - path: internal/vaapi/sys/layout_enc_test.go
+      input_hash: 3906f214dc0e9d32a6ef4ab130ae5afa400e1aefeabac38b275bcd2ec5e791ac
+  hardware-encode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: linux-vaapi-decode
+    test: go test -count=1 -v -run 'Encode|Transcode' . on Linux AMD with ffmpeg
+    evidence:
+      path: encode_test.go
+      note: Not yet run. Thresholds (PSNR >= 30 dB, CBR within 0.6-1.4x, VBR 2M >= 2x 400k) came from
+        VideoToolbox; VCN rate control may need the window/HRD values tuned.
+    basis:
+    - path: internal/vaapi/encoder.go
+      input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
+    - path: internal/vaapi/backend.go
+      input_hash: 5ee7b4e6e4c6a3789be031e0f615a22f27b9dbde204a98452b117b5a261e24af
+    - path: internal/vaapi/display.go
+      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+    - path: internal/vaapi/sys/sys_linux.go
+      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
+    - path: encode_test.go
+      input_hash: 7a8a5ff4b95acb3175c1aab0239b18ec1eb1cc08a687111548342548f21bf27a
   cross-build-check:
     state: passed
     method: static
@@ -208,6 +270,9 @@ facts:
   - internal/vaapi - display/device selection, Probe, decoder (sequence setup, per-picture buffers, output
     copy via derive/getimage, surface pool with ErrAgain backpressure).
   - Root wiring (backends_linux.go), platform-independent conformance tests, CLI ErrAgain handling, README.
+  - Encoder (same PR, at the author's request) - internal/bitstream Writer + Escape, internal/h264/write.go
+    (SPS/PPS/slice-header writer), VA encode struct mirrors, internal/vaapi/encoder.go (I/P, one reference,
+    CQP/CBR/VBR, packed headers, synchronous per picture), encode tests made platform independent.
   oracle_recipes:
     headers: ffmpeg -i x.h264 -c copy -bsf:v trace_headers -f null - (prints every syntax element with
       bit position; the Extradata copy before the first Packet line is skipped).
@@ -227,8 +292,10 @@ facts:
     Send until the caller drains keeps the memory model simple.
   - Non-existing frames only need any valid surface id; one shared dummy surface avoids pool pressure.
   next_candidates:
-  - Run the conformance tests on the author's AMD machine; then record vendor string, Mesa version and
-    fps in this file.
+  - Run the decode and encode conformance tests on the author's AMD machine; then record vendor string,
+    Mesa version and fps in this file.
+  - B-frames in the VA-API encoder (needs reordering, L1 lists and DTS) where VAConfigAttribEncMaxRefFrames
+    reports L1 references; async pipelining of uploads and coded-buffer reads.
   - HEVC decode on VA-API (VPS/SPS/PPS parser with RPS, VAPictureParameterBufferHEVC/VASliceParameterBufferHEVC).
   - Display-order output using the POC now available (requirement open question frame-reordering).
   - Field (PAFF) pictures if a consumer needs interlaced content.
@@ -247,3 +314,6 @@ history:
   implemented-2026-10-09:
     summary: Code complete with host-side oracle tests and a Linux container smoke test; hardware conformance
       pending.
+  encoder-added-2026-10-09:
+    summary: VA-API H.264 encoder added to the same PR at the author's request; header writer verified
+      on the host, hardware encode pending.

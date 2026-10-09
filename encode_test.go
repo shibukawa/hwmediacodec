@@ -1,5 +1,3 @@
-//go:build darwin
-
 package hwmediacodec_test
 
 import (
@@ -180,7 +178,7 @@ func checkQuality(t *testing.T, path string, c hwmediacodec.Codec, src [][]byte,
 
 func newTestEncoder(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.EncoderOption) hwmediacodec.Encoder {
 	t.Helper()
-	requireAppleSilicon(t)
+	requireHardwareEncode(t, c)
 	opts = append([]hwmediacodec.EncoderOption{hwmediacodec.WithFrameRate(testFPS)}, opts...)
 	enc, err := hwmediacodec.NewEncoder(context.Background(), c, encodeWidth, encodeHeight, opts...)
 	if err != nil {
@@ -455,7 +453,6 @@ func TestEncodeProfiles(t *testing.T) {
 			}
 		})
 	}
-	requireAppleSilicon(t)
 	_, err := hwmediacodec.NewEncoder(context.Background(), hwmediacodec.HEVC, encodeWidth, encodeHeight, hwmediacodec.WithProfile(hwmediacodec.ProfileBaseline))
 	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 		t.Errorf("HEVC baseline: got %v, want ErrUnsupported", err)

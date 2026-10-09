@@ -52,7 +52,11 @@ var (
 	DeriveImage  func(dpy uintptr, surface uint32, image *Image) int32
 	CreateImage  func(dpy uintptr, format *ImageFormat, width, height int32, image *Image) int32
 	GetImage     func(dpy uintptr, surface uint32, x, y int32, width, height uint32, image uint32) int32
+	PutImage     func(dpy uintptr, surface uint32, image uint32, srcX, srcY int32, srcW, srcH uint32, dstX, dstY int32, dstW, dstH uint32) int32
 	DestroyImage func(dpy uintptr, image uint32) int32
+
+	// SyncBuffer is nil on libva builds older than 2.9.
+	SyncBuffer func(dpy uintptr, buf uint32, timeoutNS uint64) int32
 )
 
 var (
@@ -145,7 +149,9 @@ func load() error {
 	va.fn(&DeriveImage, "vaDeriveImage")
 	va.fn(&CreateImage, "vaCreateImage")
 	va.fn(&GetImage, "vaGetImage")
+	va.fn(&PutImage, "vaPutImage")
 	va.fn(&DestroyImage, "vaDestroyImage")
+	va.optional(&SyncBuffer, "vaSyncBuffer")
 
 	var missing []string
 	for _, b := range []*binder{va, drm} {

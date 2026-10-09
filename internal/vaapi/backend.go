@@ -50,8 +50,15 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	var caps []codec.Capability
 	for _, p := range h264Profiles {
 		if d.decodeProfiles[p] {
-			w, h := d.maxPictureSize(p)
+			w, h := d.maxPictureSize(p, sys.EntrypointVLD)
 			caps = append(caps, codec.Capability{Backend: Name, Codec: codec.H264, Direction: codec.Decode, Hardware: true, MaxWidth: w, MaxHeight: h})
+			break
+		}
+	}
+	for _, p := range h264Profiles {
+		if e, ok := d.encodeEntrypoint(p); ok {
+			w, h := d.maxPictureSize(p, e)
+			caps = append(caps, codec.Capability{Backend: Name, Codec: codec.H264, Direction: codec.Encode, Hardware: true, MaxWidth: w, MaxHeight: h})
 			break
 		}
 	}
@@ -88,8 +95,33 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 	return newDecoder(cfg, d), nil
 }
 
-// NewEncoder implements codec.Backend. Encoding on VA-API is not implemented
-// yet.
+func unsupportedEncode(c codec.Codec, reason string) error {
+	return &codec.UnsupportedError{Backend: Name, Codec: c, Direction: codec.Encode, Reason: reason}
+}
+
+// NewEncoder implements codec.Backend.
 func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
-	return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "encoding is not implemented on the vaapi backend yet"}
+	if cfg.Codec != codec.H264 {
+		return nil, unsupportedEncode(cfg.Codec, "only h264 encoding is implemented on the vaapi backend")
+	}
+	if cfg.InputFormat != codec.NV12 {
+		return nil, unsupportedEncode(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not supported; use NV12")
+	}
+	d, err := openDisplay()
+	if err != nil {
+		if errors.Is(err, sys.ErrNotAvailable) || errors.Is(err, errNoDevice) {
+			return nil, unsupportedEncode(cfg.Codec, err.Error())
+		}
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		d.close()
+		return nil, err
+	}
+	e, err := newEncoder(cfg, d)
+	if err != nil {
+		d.close()
+		return nil, err
+	}
+	return e, nil
 }

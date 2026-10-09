@@ -149,7 +149,7 @@ capabilities:
     authority: inferred
     evidence:
       path: internal/vaapi/backend.go
-      note: H.264 decode implemented 2026-10-09; hardware conformance pending (see milestone:linux-vaapi-h264-decode).
+      note: H.264 decode and encode implemented 2026-10-09; hardware conformance pending (see milestone:linux-vaapi-h264-decode).
   backend/intel-vpl:
     state: planned
     scope:
@@ -709,8 +709,10 @@ facts:
       hardware conformance pending); other Tier 1 platforms pending.
     decode/hevc: implemented on darwin/apple-silicon only; bit-exact against ffmpeg (libx265 source).
     backend/videotoolbox: decode and encode for H.264/HEVC; AV1 and pixel-format options pending.
-    encode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
-      VBR/CBR/quality, GOP, forced keyframes, B-frames, low latency, profiles; verified against ffmpeg/ffprobe.
+    encode/h264: implemented on darwin/apple-silicon (VBR/CBR/quality, GOP, forced keyframes, B-frames,
+      low latency, profiles; verified against ffmpeg/ffprobe) and on linux via VA-API (code complete
+      2026-10-09, I/P only, header writer verified against ffmpeg, hardware verification pending); other
+      Tier 1 platforms pending.
     encode/hevc: implemented on darwin/apple-silicon only; Main profile; same control set and verification
       as H.264.
 relations:

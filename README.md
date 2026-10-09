@@ -13,7 +13,7 @@ works and the module cross-compiles from one machine.
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC (NV12, CPU memory) | H.264, HEVC (NV12 in, Annex-B out) |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264 (NV12, CPU memory) | not yet |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264 (NV12, CPU memory) | H.264 (NV12 in, Annex-B out) |
 | Linux | Intel VPL / NVDEC | planned | planned |
 | Windows | Media Foundation / NVENC | planned | planned |
 
@@ -42,13 +42,23 @@ Known limitations:
   it does not observe context cancellation once the call has started.
 - VideoToolbox: Intel Macs are out of scope; the backend requires hardware
   engines unless `WithSoftwareFallback` is given.
-- VA-API: H.264 only for now (HEVC is next); progressive frames only
-  (interlaced field pictures are rejected with `ErrUnsupported`); 8-bit
+- VA-API decoding: H.264 only for now (HEVC is next); progressive frames
+  only (interlaced field pictures are rejected with `ErrUnsupported`); 8-bit
   4:2:0 only. VA-API is a slice-level API, so the bitstream parsing,
   picture order count, reference marking and reference list construction
   run in Go (`internal/h264`), and the driver only accelerates the slice
   data. `Send` returns `ErrAgain` when more than a few decoded frames are
   waiting for `Receive`; drain and resend.
+- VA-API encoding: H.264 only, I and P frames with one reference;
+  `WithBFrames` is accepted but no B-frames are produced yet. Pictures must
+  have even width and height. `WithQuality` maps to a constant quantiser
+  (CQP), `WithBitrate` to the driver's VBR or CBR rate control (the HRD
+  buffer is one second of the peak rate), and without either a constant
+  quantiser of 26 is used. The SPS, PPS and slice headers are written in Go
+  and handed to the driver as packed headers when it accepts them (Intel
+  requires this; Mesa generates its own otherwise), so every keyframe
+  carries in-band SPS/PPS. Each picture is encoded synchronously inside
+  `Send`.
 
 ## Usage
 
@@ -137,10 +147,12 @@ logic are checked against ffmpeg's own view of the stream (`trace_headers`,
 `-debug mmco`, `-debug pict`), so they run on any machine with ffmpeg. The
 decode conformance tests run where `Probe` reports a hardware decoder
 (Apple Silicon, or Linux with a VA-API driver) and compare every frame with
-ffmpeg's software decoder. The encode conformance tests run on Apple
-Silicon: encoded streams are decoded by ffmpeg and compared to the source by
-PSNR, and their keyframe and B-frame structure is checked with ffprobe. All
-of them are skipped when ffmpeg is not installed.
+ffmpeg's software decoder. The encode conformance tests run where `Probe`
+reports a hardware encoder: encoded streams are decoded by ffmpeg and
+compared to the source by PSNR, and their keyframe and B-frame structure is
+checked with ffprobe. The H.264 header writer used by the VA-API encoder is
+checked against the parser and against ffmpeg's `trace_headers`. All of
+them are skipped when ffmpeg is not installed.
 
 ```sh
 go test ./...

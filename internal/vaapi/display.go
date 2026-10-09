@@ -31,6 +31,23 @@ type display struct {
 	vendor string
 	// profiles with a VLD (decode) entrypoint, as reported by the driver.
 	decodeProfiles map[int32]bool
+	// entrypoints lists every entrypoint the driver offers per profile.
+	entrypoints map[int32][]int32
+}
+
+// encodeEntrypoint returns the slice-level encode entrypoint for a profile,
+// preferring the full-featured one over the low-power variant.
+func (d *display) encodeEntrypoint(profile int32) (int32, bool) {
+	found := int32(-1)
+	for _, e := range d.entrypoints[profile] {
+		switch e {
+		case sys.EntrypointEncSlice:
+			return e, true
+		case sys.EntrypointEncSliceLP:
+			found = e
+		}
+	}
+	return found, found >= 0
 }
 
 func candidateDevices() []string {
@@ -107,11 +124,13 @@ func (d *display) queryProfiles() error {
 	}
 	entrypoints := make([]int32, maxEntry)
 	d.decodeProfiles = map[int32]bool{}
+	d.entrypoints = map[int32][]int32{}
 	for _, p := range profiles {
 		var ne int32
 		if st := sys.QueryConfigEntrypoints(d.dpy, p, &entrypoints[0], &ne); st != sys.StatusSuccess {
 			continue
 		}
+		d.entrypoints[p] = append([]int32(nil), entrypoints[:ne]...)
 		for _, e := range entrypoints[:ne] {
 			if e == sys.EntrypointVLD {
 				d.decodeProfiles[p] = true
@@ -121,12 +140,33 @@ func (d *display) queryProfiles() error {
 	return nil
 }
 
-// maxPictureSize reports the largest decode surface the driver accepts for
-// the profile, or zeros when it does not say.
-func (d *display) maxPictureSize(profile int32) (w, h int) {
+// configAttrib queries one configuration attribute; ok is false when the
+// driver does not report it.
+func (d *display) configAttrib(profile, entrypoint, typ int32) (value uint32, ok bool) {
+	attr := sys.ConfigAttrib{Type: typ}
+	if st := sys.GetConfigAttributes(d.dpy, profile, entrypoint, &attr, 1); st != sys.StatusSuccess {
+		return 0, false
+	}
+	if attr.Value == sys.AttribNotSupported {
+		return 0, false
+	}
+	return attr.Value, true
+}
+
+// maxPictureSize reports the largest surface the driver accepts for the
+// profile and entrypoint, or zeros when it does not say.
+func (d *display) maxPictureSize(profile, entrypoint int32) (w, h int) {
+	if entrypoint != sys.EntrypointVLD {
+		// Encoders report limits as configuration attributes.
+		mw, okw := d.configAttrib(profile, entrypoint, sys.ConfigAttribMaxPictureWidth)
+		mh, okh := d.configAttrib(profile, entrypoint, sys.ConfigAttribMaxPictureHeight)
+		if okw && okh {
+			return int(mw), int(mh)
+		}
+	}
 	attr := sys.ConfigAttrib{Type: sys.ConfigAttribRTFormat, Value: sys.RTFormatYUV420}
 	var config uint32
-	if st := sys.CreateConfig(d.dpy, profile, sys.EntrypointVLD, &attr, 1, &config); st != sys.StatusSuccess {
+	if st := sys.CreateConfig(d.dpy, profile, entrypoint, &attr, 1, &config); st != sys.StatusSuccess {
 		return 0, 0
 	}
 	defer sys.DestroyConfig(d.dpy, config)

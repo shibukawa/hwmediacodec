@@ -17,7 +17,7 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if GetDisplayDRM == nil || Initialize == nil || CreateBuffer == nil || DeriveImage == nil {
+	if GetDisplayDRM == nil || Initialize == nil || CreateBuffer == nil || DeriveImage == nil || PutImage == nil {
 		t.Fatal("symbols not bound")
 	}
 	if s := StatusString(StatusErrorUnsupportedProfile); s == "" {
