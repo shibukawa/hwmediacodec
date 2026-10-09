@@ -133,6 +133,11 @@ rec.Close()                  // flushes the encoder, finishes the file
 `internal/fireworks` is what `record`, `hls` and `webrtc` show. It is
 written to look good on a stream and to give the encoder real work:
 
+- It opens on a title screen ("HANABI", a blinking "PRESS A FOR THE AUTO
+  SHOW" and the key list, drawn with `text/v2` and the Go font). `A`
+  starts the automatic show; any other key starts manual play, and is
+  already a launch when it is one of the keys below. `record` skips the
+  title by default (`-auto`), `hls` and `webrtc` show it unless `-auto`.
 - Shells rise from the shore with a spark trail and burst at their apex into
   one of six types: peony, chrysanthemum, willow, ring (a circle in a
   random plane), palm and crackle (stars that pop into sparks). Keys `1`
@@ -226,7 +231,13 @@ go run ./webrtc -open=false         # print the URL only
 
 Both servers open the player page with `github.com/pkg/browser` unless
 `-open=false` is given; the window keeps the keyboard, so launch shells
-there and watch them in the browser.
+there and watch them in the browser. `-auto` skips the title screen and
+`-minimized` minimizes the window a second after start: Ebitengine keeps
+rendering a minimized window (measured on macOS: 60 fps, 2 s segments
+kept coming for the whole run), so a stream can run with nothing on
+screen; Ebitengine cannot run without a window at all, so a windowless
+server would render frames some other way and feed the same recorder,
+segmenter and broadcaster, none of which touch the display.
 
 The low-latency counterpart of `hls`. The recorder encodes with
 `WithLowLatency`, Baseline profile and no B-frames; every access unit is

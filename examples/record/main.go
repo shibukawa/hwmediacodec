@@ -78,6 +78,7 @@ func main() {
 	size := flag.String("size", "1280x720", "screen size")
 	seconds := flag.Float64("seconds", 0, "stop after this many seconds (0 = until the window closes)")
 	launch := flag.String("launch", "", "fire this kind half a second in and every four seconds (peony, chrysanthemum, willow, ring, palm, crackle, gopher)")
+	auto := flag.Bool("auto", true, "skip the title screen and run the automatic show (recordings are usually unattended)")
 	flag.Parse()
 
 	var w, h int
@@ -103,6 +104,9 @@ func main() {
 			log.Fatalf("unknown kind %q", *launch)
 		}
 		g.launch, g.hasLaunch = kind, true
+		g.scene.Start(false)
+	} else if *auto {
+		g.scene.Start(true)
 	}
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowTitle("hwmediacodec record")

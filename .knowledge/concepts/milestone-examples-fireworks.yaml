@@ -36,6 +36,16 @@ constraints:
   60 fps is kept.
 - The window keeps the keyboard; browsers only watch. browser.OpenURL is called after the HTTP server starts;
   failures are printed, not fatal.
+- 'Title screen (added on the author''s request): the scene starts idle with a centred "HANABI" title, a
+  blinking "PRESS A FOR THE AUTO SHOW" and the key list, drawn with text/v2 and the Go Regular font from
+  golang.org/x/image; A starts the automatic show, any other key starts manual play and is handled as a
+  launch key when it is one; Scene.Start(auto) does the same from code. record skips the title (-auto
+  defaults to true, -launch starts manual play), hls and webrtc show it unless -auto.'
+- 'Screen-off streaming: Ebitengine needs a window to exist (no headless backend), but it keeps running
+  Update/Draw while the window is minimized on macOS - measured 2026-10-09 with hls -auto -minimized: the
+  window minimized 1 s after start and after 14 s the playlist held five 2.000 s segments at 60 fps. The
+  -minimized flag does that; a truly windowless stream would render frames without Ebitengine and feed the
+  same Recorder/Segmenter/Broadcaster, which never touch the display.'
 non_goals:
 - Sound, mouse aiming, perspective/3D bursts beyond the sphere projection, physically based smoke, multiple
   gopher poses.
@@ -98,16 +108,17 @@ verification:
         gopher), 3.4 s (gopher with eyes, chrysanthemum, peony) and 7 s (ring, willow, fading gopher) inspected
     basis:
     - path: examples/internal/fireworks/scene.go
-      input_hash: 3df1e66e2d85870d25d71e9deb34b78d14dcc82adfcfee1407d620a53c25bdda
+      input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
     - path: examples/internal/fireworks/shader.go
       input_hash: fdd60fd3e663e55eefd7b11ac81b3dfde8430578eec9291e8e8d5f8d7c37c3ec
     - path: examples/record/main.go
-      input_hash: adbba065ce884cd0b6ff21760e746ed8f6d156aa4bdc14ded65be5430e0e70da
+      input_hash: 7476b06195102e780f16aeec52645e8662f39b2dd0392d07103ffcc9c29afafa
 facts:
   api:
     fireworks: 'NewScene(w, h, tps) -> Scene{HandleInput, Update, Draw, Launch(kind, x), Particles, Status,
       Auto}; Help(); Kind (Peony..Gopher), ParseKind'
-    flags: 'record -launch <kind>; hls/webrtc -open (default true)'
+    flags: 'record -launch <kind> -auto (default true); hls/webrtc -open (default true) -auto (default
+      false) -minimized'
   result:
     status: delivered 2026-10-09
 history:

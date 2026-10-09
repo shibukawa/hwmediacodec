@@ -34,12 +34,19 @@ type game struct {
 	rec   *screencast.Recorder
 	bc    *Broadcaster
 	url   string
+
+	minimize bool
+	ticks    int
 }
 
 func (g *game) Update() error {
 	if err := g.rec.Err(); err != nil {
 		return err
 	}
+	if g.minimize && g.ticks == ebiten.TPS() {
+		ebiten.MinimizeWindow()
+	}
+	g.ticks++
 	g.scene.HandleInput()
 	g.scene.Update()
 	return nil
@@ -61,6 +68,8 @@ func main() {
 	size := flag.String("size", "1280x720", "screen size")
 	stun := flag.String("stun", "", "STUN server URL for viewers outside the LAN, e.g. stun:stun.l.google.com:19302")
 	open := flag.Bool("open", true, "open the player page in the default browser")
+	auto := flag.Bool("auto", false, "skip the title screen and run the automatic show")
+	minimized := flag.Bool("minimized", false, "minimize the window after start; rendering and the stream carry on without it on screen")
 	flag.Parse()
 
 	var w, h int
@@ -105,6 +114,10 @@ func main() {
 	}
 
 	g := &game{scene: fireworks.NewScene(w, h, *fps), rec: rec, bc: bc, url: url}
+	if *auto {
+		g.scene.Start(true)
+	}
+	g.minimize = *minimized
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowTitle("hwmediacodec webrtc")
 	ebiten.SetTPS(int(*fps))

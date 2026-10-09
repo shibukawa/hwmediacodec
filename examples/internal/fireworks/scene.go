@@ -1,6 +1,7 @@
 package fireworks
 
 import (
+	"bytes"
 	"fmt"
 	"image/color"
 	"math"
@@ -9,10 +10,14 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/image/font/gofont/goregular"
 )
 
 // Scene is the fireworks show. Create it with NewScene, call HandleInput
-// and Update once per tick and Draw once per frame.
+// and Update once per tick and Draw once per frame. It starts on a title
+// screen: A starts the automatic show, any other key starts manual play
+// (Start does the same from code).
 type Scene struct {
 	W, H    int
 	tps     float64
@@ -24,6 +29,7 @@ type Scene struct {
 	particles []particle
 	launched  int
 
+	started   bool
 	auto      bool
 	nextAuto  float64
 	nextShow  float64 // next gopher in the automatic show
@@ -37,6 +43,8 @@ type Scene struct {
 	glow   *ebiten.Image // radial sprite
 	pixel  *ebiten.Image
 	shader *ebiten.Shader
+
+	titleFace, lineFace, smallFace text.Face
 }
 
 const glowSize = 32
@@ -48,9 +56,15 @@ func NewScene(w, h int, tps float64) *Scene {
 		scale:   float32(h) / 720,
 		horizon: float32(h) * 0.8,
 		rnd:     rand.New(rand.NewPCG(uint64(w), uint64(h))),
-		auto:    true,
 	}
 	s.nextShow = 6
+	src, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
+	if err != nil {
+		panic(fmt.Sprintf("fireworks: font: %v", err))
+	}
+	s.titleFace = &text.GoTextFace{Source: src, Size: 72 * float64(s.scale)}
+	s.lineFace = &text.GoTextFace{Source: src, Size: 30 * float64(s.scale)}
+	s.smallFace = &text.GoTextFace{Source: src, Size: 20 * float64(s.scale)}
 	s.cur = ebiten.NewImage(w, h)
 	s.acc = ebiten.NewImage(w, h)
 	s.pixel = ebiten.NewImage(1, 1)
@@ -125,8 +139,34 @@ func Help() string {
 	return "[1] peony [2] chrysanthemum [3] willow [4] ring [5] palm [6] crackle [G] gopher [space] random [F] finale [A] auto on/off"
 }
 
-// HandleInput launches shells from the keyboard; call it from Update.
+// Start leaves the title screen: with auto the show runs by itself,
+// otherwise shells are launched from the keyboard only.
+func (s *Scene) Start(auto bool) {
+	s.started = true
+	s.auto = auto
+	s.nextAuto = s.time + 0.3
+	s.nextShow = s.time + float64(randRange(s.rnd, 5, 9))
+}
+
+// Started reports whether the title screen has been left.
+func (s *Scene) Started() bool { return s.started }
+
+// HandleInput launches shells from the keyboard; call it from Update. On
+// the title screen A starts the automatic show and any other key starts
+// manual play (and is handled as a launch key when it is one).
 func (s *Scene) HandleInput() {
+	if !s.started {
+		pressed := inpututil.AppendJustPressedKeys(nil)
+		if len(pressed) == 0 {
+			return
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+			s.Start(true)
+			s.lastLabel, s.lastAt = "auto show", s.time
+			return
+		}
+		s.Start(false)
+	}
 	keys := map[ebiten.Key]Kind{ebiten.Key1: Peony, ebiten.Key2: Chrysanthemum, ebiten.Key3: Willow, ebiten.Key4: Ring, ebiten.Key5: Palm, ebiten.Key6: Crackle, ebiten.KeyG: Gopher}
 	for k, kind := range keys {
 		if inpututil.IsKeyJustPressed(k) {
@@ -186,7 +226,7 @@ func (s *Scene) finale() {
 func (s *Scene) Update() {
 	dt := float32(1 / s.tps)
 	s.time += 1 / s.tps
-	if s.auto {
+	if s.started && s.auto {
 		if s.time >= s.nextAuto {
 			s.Launch(Kind(s.rnd.IntN(int(Gopher))), -1)
 			s.nextAuto = s.time + float64(randRange(s.rnd, 0.5, 1.6))
@@ -291,4 +331,38 @@ func (s *Scene) Draw(dst *ebiten.Image) {
 	post.Images[2] = s.mask
 	post.Uniforms = map[string]any{"Time": float32(s.time), "Horizon": s.horizon}
 	dst.DrawRectShader(s.W, s.H, s.shader, post)
+
+	if !s.started {
+		s.drawTitle(dst)
+	}
+}
+
+// drawTitle shows the attract screen: the name, a blinking prompt and the
+// keys.
+func (s *Scene) drawTitle(dst *ebiten.Image) {
+	cx, cy := float64(s.W)/2, float64(s.H)*0.36
+	draw := func(str string, face text.Face, y float64, c color.RGBA, alpha float32) {
+		op := &text.DrawOptions{}
+		op.PrimaryAlign = text.AlignCenter
+		op.GeoM.Translate(cx, y)
+		op.ColorScale.ScaleWithColor(c)
+		op.ColorScale.ScaleAlpha(alpha)
+		text.Draw(dst, str, face, op)
+	}
+	// Shadow then text, so it reads over the stars.
+	for _, pass := range []struct {
+		dx, dy float64
+		c      color.RGBA
+	}{{3, 3, color.RGBA{0, 0, 0, 200}}, {0, 0, color.RGBA{255, 240, 210, 255}}} {
+		op := &text.DrawOptions{}
+		op.PrimaryAlign = text.AlignCenter
+		op.GeoM.Translate(cx+pass.dx, cy+pass.dy)
+		op.ColorScale.ScaleWithColor(pass.c)
+		text.Draw(dst, "HANABI", s.titleFace, op)
+	}
+	blink := float32(0.55 + 0.45*math.Sin(s.time*4))
+	draw("PRESS  A  FOR THE AUTO SHOW", s.lineFace, cy+110*float64(s.scale), color.RGBA{255, 220, 120, 255}, blink)
+	draw("ANY OTHER KEY: LAUNCH YOUR OWN", s.lineFace, cy+150*float64(s.scale), color.RGBA{200, 220, 255, 255}, 1)
+	draw("1 PEONY   2 CHRYSANTHEMUM   3 WILLOW   4 RING   5 PALM   6 CRACKLE", s.smallFace, cy+200*float64(s.scale), color.RGBA{180, 190, 210, 255}, 1)
+	draw("G GOPHER   SPACE RANDOM   F VOLLEY   A AUTO ON/OFF", s.smallFace, cy+228*float64(s.scale), color.RGBA{180, 190, 210, 255}, 1)
 }

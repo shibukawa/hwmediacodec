@@ -30,9 +30,9 @@ constraints:
   + SetAVCDescriptor/SetHEVCDescriptor.'
 - 'VideoToolbox rejects constant bitrate for H.264 on the author''s M3 ("ConstantBitRate is not supported
   by this encoder"), so the HLS sample uses VBR; WithRateControl(CBR) is left to the user.'
-- 'The demo scene draws with DrawImage only. Ebitengine 2.10 anti-aliased vector fills (24 FillCircle +
-  StrokeCircle per frame) cost about 80 ms a frame at 720p and dragged Draw to 12 fps, which first looked
-  like a capture problem.'
+- 'The first demo scene drew with DrawImage only. Ebitengine 2.10 anti-aliased vector fills (24 FillCircle
+  + StrokeCircle per frame) cost about 80 ms a frame at 720p and dragged Draw to 12 fps, which first looked
+  like a capture problem. The scene was later replaced by the fireworks show (milestone:examples-fireworks).'
 - Live playlist with EXT-X-VERSION 7, EXT-X-MAP, EXT-X-MEDIA-SEQUENCE, EXT-X-INDEPENDENT-SEGMENTS, a sliding
   window of N segments and EXT-X-ENDLIST once the game exits; 503 until the first segment exists.
 non_goals:
@@ -157,7 +157,7 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 797e6ed6e5559b4a07f0d211cce14936465873b6b050b04771356734476c1ab6
+      input_hash: 692a5db347b184d1ea672e981be3827c53310726e54d57f610566ac228037443
     - path: examples/hls/server.go
       input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
   record-run:
@@ -176,9 +176,9 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: adbba065ce884cd0b6ff21760e746ed8f6d156aa4bdc14ded65be5430e0e70da
-    - path: examples/internal/demo/scene.go
-      input_hash: 6851a53ac132ab4500c9153b5fc1f85d6ea0d3e1b093ff5f4ee8f11f9ab954ac
+      input_hash: 7476b06195102e780f16aeec52645e8662f39b2dd0392d07103ffcc9c29afafa
+    - path: examples/internal/fireworks/scene.go
+      input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
 open_questions:
   hidpi-capture:
     text: Should the recorder capture at the device pixel size (ebiten.Monitor().DeviceScaleFactor())

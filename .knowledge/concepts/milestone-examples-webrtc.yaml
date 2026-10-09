@@ -119,7 +119,7 @@ verification:
         rendered black and reported dropped frames because it was a hidden tab'
     basis:
     - path: examples/webrtc/main.go
-      input_hash: 7e8fde4c6807451dcf88019c9a678d4171f8f7b3c6ec0f5049ba526f7e612018
+      input_hash: 0f15a661de5cb67af5fcbedb89a6bbc82163303736a587ee3cf205dcaa24c290
     - path: examples/webrtc/server.go
       input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
 open_questions:
