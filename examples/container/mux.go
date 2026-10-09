@@ -6,12 +6,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/Eyevinn/mp4ff/avc"
-	"github.com/Eyevinn/mp4ff/hevc"
 	"github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
 )
 
 const movieTimeScale = 1000
@@ -85,11 +82,7 @@ func NewMuxer(w io.WriteSeeker) (*Muxer, error) {
 // VideoWriter receives hwmediacodec packets for the video track.
 type VideoWriter struct {
 	*trackWriter
-	codec     hwmediacodec.Codec
-	vps       [][]byte
-	sps       [][]byte
-	pps       [][]byte
-	nalLength int
+	ps paramSets
 }
 
 // AddVideoTrack adds an H.264 or HEVC track whose samples are written with
@@ -101,7 +94,7 @@ func (m *Muxer) AddVideoTrack(c hwmediacodec.Codec, timeScale uint32) (*VideoWri
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
 		return nil, fmt.Errorf("container: cannot write %s samples", c)
 	}
-	v := &VideoWriter{codec: c, nalLength: 4}
+	v := &VideoWriter{ps: paramSets{codec: c}}
 	v.trackWriter = m.addTrack(timeScale, v.buildTrak)
 	return v, nil
 }
@@ -151,86 +144,20 @@ func (m *Muxer) write(t *trackWriter, data []byte, s outSample) error {
 // sets and access-unit delimiters are removed from the sample and the
 // parameter sets go to the sample description instead.
 func (v *VideoWriter) WritePacket(p hwmediacodec.Packet) error {
-	nals := annexb.Split(p.Data)
-	if len(nals) == 0 {
-		return errors.New("container: empty access unit")
+	data, sync, err := v.ps.sample(p)
+	if err != nil {
+		return err
 	}
-	var out []byte
-	sync := p.Keyframe
-	for _, nal := range nals {
-		t := annexb.NALUnitType(v.codec, nal)
-		switch {
-		case t < 0:
-			continue
-		case annexb.IsParameterSet(v.codec, t):
-			v.addParameterSet(t, nal)
-			continue
-		case v.codec == hwmediacodec.H264 && t == annexb.H264NALAUD,
-			v.codec == hwmediacodec.HEVC && t == annexb.HEVCNALAUD:
-			continue
-		case annexb.IsVCL(v.codec, t) && annexb.IsKeyframe(v.codec, t):
-			sync = true
-		}
-		n := len(nal)
-		out = append(out, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
-		out = append(out, nal...)
-	}
-	if len(out) == 0 {
+	if data == nil {
 		return nil // parameter sets only
 	}
-	if len(v.sps) == 0 || len(v.pps) == 0 {
-		return errors.New("container: the first video packet must carry SPS and PPS")
-	}
-	return v.m.write(v.trackWriter, out, outSample{dts: p.DTS, pts: p.PTS, sync: sync})
-}
-
-func (v *VideoWriter) addParameterSet(t int, nal []byte) {
-	kind, _, ok := annexb.ParameterSetID(v.codec, t, nal)
-	if !ok {
-		return
-	}
-	set := &v.sps
-	switch kind {
-	case annexb.ParamVPS:
-		set = &v.vps
-	case annexb.ParamPPS:
-		set = &v.pps
-	}
-	for _, have := range *set {
-		if string(have) == string(nal) {
-			return
-		}
-	}
-	*set = append(*set, append([]byte(nil), nal...))
+	return v.m.write(v.trackWriter, data, outSample{dts: p.DTS, pts: p.PTS, sync: sync})
 }
 
 func (v *VideoWriter) buildTrak(stbl *mp4.StblBox) (*mp4.TrakBox, error) {
-	var entry *mp4.VisualSampleEntryBox
-	var width, height int
-	switch v.codec {
-	case hwmediacodec.H264:
-		sps, err := avc.ParseSPSNALUnit(v.sps[0], false)
-		if err != nil {
-			return nil, fmt.Errorf("container: parse SPS: %w", err)
-		}
-		width, height = int(sps.Width), int(sps.Height)
-		avcC, err := mp4.CreateAvcC(v.sps, v.pps, true)
-		if err != nil {
-			return nil, err
-		}
-		entry = mp4.CreateVisualSampleEntryBox("avc1", uint16(width), uint16(height), avcC)
-	case hwmediacodec.HEVC:
-		sps, err := hevc.ParseSPSNALUnit(v.sps[0])
-		if err != nil {
-			return nil, fmt.Errorf("container: parse SPS: %w", err)
-		}
-		w, h := sps.ImageSize()
-		width, height = int(w), int(h)
-		hvcC, err := mp4.CreateHvcC(v.vps, v.sps, v.pps, true, true, true, true)
-		if err != nil {
-			return nil, err
-		}
-		entry = mp4.CreateVisualSampleEntryBox("hvc1", uint16(width), uint16(height), hvcC)
+	entry, width, height, err := v.ps.sampleEntry()
+	if err != nil {
+		return nil, err
 	}
 	stsd := mp4.NewStsdBox()
 	stsd.AddChild(entry)

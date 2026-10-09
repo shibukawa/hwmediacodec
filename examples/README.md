@@ -15,6 +15,9 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units and a progressive MP4 muxer fed with encoder packets |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
+| [`screencast/`](screencast/) | Captures an Ebitengine screen into the hardware encoder on a background goroutine; sinks for MP4 files and anything else |
+| [`record/`](record/) | Ebitengine game whose screen is recorded to an MP4 file |
+| [`hls/`](hls/) | Ebitengine game streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server) |
 
 ## container
 
@@ -93,6 +96,64 @@ buffer. `-every` picks the keyframe at or before each instant; `-all`
 takes every keyframe; `-width` downsamples with a box filter. File names
 carry the presentation time (`movie_00-01-30.000.jpg`).
 
+## screencast
+
+`screencast.Recorder` is the capture path the game samples share:
+
+```go
+sink, _ := screencast.NewMP4File("capture.mp4", hwmediacodec.H264)
+rec, _ := screencast.New(1280, 720, sink, screencast.Options{FPS: 60, Bitrate: 8_000_000})
+
+func (g *game) Draw(screen *ebiten.Image) {
+	g.scene.Draw(screen)
+	rec.Capture(screen)      // ReadPixels, then the encoder runs on its own goroutine
+}
+// on exit
+rec.Close()                  // flushes the encoder, finishes the file
+```
+
+- `Capture` calls `screen.ReadPixels` (about 2 ms at 720p on an M3; the
+  GPU has to finish the frame first, so a heavy scene shows up in this
+  number) and hands the RGBA buffer to a goroutine that feeds the encoder
+  with `WithInputFormat(RGBA)`. The game loop never waits for the encoder;
+  if the queue is full the frame is dropped and counted.
+- PTS come from the wall clock quantised to the frame rate, so a dropped
+  frame leaves a gap instead of speeding the recording up, and a 120 Hz
+  display showing a 60 fps game does not record every frame twice.
+- A `Sink` is just `WritePacket` + `Close`; `NewMP4File` writes through the
+  container muxer, `Funcs` adapts closures, and the HLS and WebRTC samples
+  plug their own in.
+
+## record
+
+```sh
+cd examples
+go run ./record -o capture.mp4 -seconds 10
+go run ./record -o capture.mp4 -codec hevc -bitrate 12M -size 1920x1080
+```
+
+Runs the demo animation in a window and records it until the window closes
+or `-seconds` pass; the summary line reports frames, drops and the average
+capture cost per draw.
+
+## hls
+
+```sh
+cd examples
+go run ./hls -addr :8080            # then open http://localhost:8080/
+go run ./hls -segment 1s -bitrate 2M
+```
+
+The same animation, encoded with a keyframe interval equal to the segment
+length and `WithLowLatency`, cut by `container.Segmenter` into CMAF/fMP4
+segments (init segment with the parameter sets, then one `moof`+`mdat` per
+segment, each starting at a keyframe) and served from memory with a
+sliding-window playlist (`#EXT-X-MAP`, `#EXT-X-MEDIA-SEQUENCE`). The page
+at `/` plays natively in Safari and through hls.js (MSE) elsewhere;
+`/?hlsjs` forces hls.js. Latency is a few seconds, which is what plain HLS
+gives; the WebRTC sample is the low-latency path. HEVC (`-codec hevc`)
+plays in Safari only.
+
 ## Testing
 
 ```sh
@@ -100,8 +161,10 @@ cd examples
 go test ./...
 ```
 
-The container tests need only ffmpeg and ffprobe (they compare sample
-tables, presentation times and decoded frame checksums with ffprobe's view
-of the same files). The convert and thumbnails tests also need a hardware
-codec and skip otherwise; they check codec, frame count, PSNR against the
-source, copied audio and that ffmpeg sees identical presentation times.
+The container, segmenter and HLS server tests need only ffmpeg and
+ffprobe: they compare sample tables, presentation times and decoded frame
+checksums with ffprobe's view of the same files, feed ffmpeg-made streams
+through the segmenter and let ffprobe play the served playlist over HTTP.
+The convert, thumbnails and screencast tests also need a hardware codec and
+skip otherwise; they check codec, frame count, PSNR against the source,
+copied audio, identical presentation times and the recorder's timing.

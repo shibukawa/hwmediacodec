@@ -1,0 +1,214 @@
+id: milestone:examples-screencast-hls
+type: milestone
+title: Examples - Ebitengine screen recording to MP4 and live HLS streaming
+summary: 'Second usage-sample slice: screencast.Recorder captures an Ebitengine screen with ReadPixels
+  on every Draw and feeds the hardware encoder (RGBA input) on a background goroutine; sinks write the
+  packets to an MP4 file (examples/record) or through container.Segmenter into CMAF/fMP4 segments
+  served by an in-memory sliding-window HLS playlist (examples/hls). Verified on the M3 with ffmpeg/ffprobe
+  as oracles and by playing the live stream in the desktop app browser pane through hls.js.'
+lifecycle: active
+authority: authored
+aliases:
+- screen recording sample
+- HLS sample
+- 画面録画
+- HLS 配信
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: examples-screencast-hls
+constraints:
+- 'Capture never blocks the game loop: ReadPixels runs in Draw (about 2 ms at 1280x720 on the M3, 3.7
+  ms including the demo scene), the RGBA buffer goes through a bounded channel to the encoder goroutine,
+  and a full queue drops the frame (counted) instead of stalling.'
+- 'PTS are wall-clock based and quantised to the frame rate (slot = round(elapsed*fps), pts = slot*90000/fps):
+  a dropped frame leaves a gap rather than speeding the recording up, and a second Draw inside one slot
+  (120 Hz display, 60 fps game) is ignored.'
+- 'The segmenter needs PTS == DTS (no B-frames) and cuts at the first keyframe after the target length,
+  so the HLS sample sets the encoder keyframe interval to fps*segment and WithLowLatency; segments are
+  styp+moof+mdat with per-sample flags, tfdt continuing across segments, init segment from mp4ff CreateEmptyInit
+  + SetAVCDescriptor/SetHEVCDescriptor.'
+- 'VideoToolbox rejects constant bitrate for H.264 on the author''s M3 ("ConstantBitRate is not supported
+  by this encoder"), so the HLS sample uses VBR; WithRateControl(CBR) is left to the user.'
+- 'The demo scene draws with DrawImage only. Ebitengine 2.10 anti-aliased vector fills (24 FillCircle +
+  StrokeCircle per frame) cost about 80 ms a frame at 720p and dragged Draw to 12 fps, which first looked
+  like a capture problem.'
+- Live playlist with EXT-X-VERSION 7, EXT-X-MAP, EXT-X-MEDIA-SEQUENCE, EXT-X-INDEPENDENT-SEGMENTS, a sliding
+  window of N segments and EXT-X-ENDLIST once the game exits; 503 until the first segment exists.
+non_goals:
+- Low-latency HLS (partial segments, blocking playlist reload), DASH manifests, audio capture.
+- Zero-copy capture (Ebitengine has no texture export); see requirement open question ebitengine-zero-copy.
+- Recording the window at HiDPI device resolution (the logical screen size from Layout is captured).
+acceptance:
+  recorder-mp4:
+    text: Sixty frames of a synthetic screen captured at 30 fps (two captures per slot) give an MP4 with
+      60 frames, PTS steps of 3000 at 90 kHz, 2.000 s duration, no drops, decodable by ffmpeg, whose
+      first frame matches the first captured image within 30 dB.
+    scope:
+      milestone: examples-screencast-hls
+    verified_by:
+    - recorder-test
+  recorder-drops:
+    text: With a queue of two frames, bursts of captures are either encoded or counted as dropped and
+      every encoded frame yields a packet.
+    scope:
+      milestone: examples-screencast-hls
+    verified_by:
+    - recorder-test
+  segmenter:
+    text: An ffmpeg-made stream with a keyframe every 10 frames at 30 fps segmented at 1 s gives three
+      1 s segments, each one fragment of 30 samples starting with a sync sample and tfdt continuing;
+      init + segments decode with ffmpeg to the source's frame MD5s; a 100 ms target cuts at every keyframe.
+    scope:
+      milestone: examples-screencast-hls
+    verified_by:
+    - segmenter-test
+  hls-server:
+    text: The playlist server answers 503 before the first segment, serves the m3u8 with the required
+      tags, init.mp4 and seg_N.m4s with the right content types, keeps a sliding window, and after End
+      ffprobe reads the whole stream over HTTP (150 frames); the live app plays in a browser.
+    scope:
+      milestone: examples-screencast-hls
+    verified_by:
+    - hls-server-test
+    - hls-live-run
+  record-app:
+    text: The record app at 1280x720 and 60 fps records 5 s without drops at about 56 fps including window
+      start-up, with ReadPixels costing a few milliseconds per draw.
+    scope:
+      milestone: examples-screencast-hls
+    verified_by:
+    - record-run
+verification:
+  recorder-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRecorderWritesMP4, TestRecorderDropsWhenBehind
+    evidence:
+      path: examples/screencast/recorder_test.go
+      locator: TestRecorderWritesMP4
+      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09
+    basis:
+    - path: examples/screencast/recorder.go
+      input_hash: 29414926ff7e1f80c34231e105fa9abfc095f49ba75d8aa6a20a9dbba016183f
+    - path: examples/screencast/sinks.go
+      input_hash: e704e00e480014d45d1bd0e43ed69fa5440eb78e3e93f4a96f214604551b17ef
+    - path: examples/screencast/recorder_test.go
+      input_hash: 2444aff4ea52473f3b1ac7c15375a8c1bd46a2c7a4a089805b4e5191e2c1c740
+    - path: examples/container/mux.go
+      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
+  segmenter-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+    test: TestSegmenter (h264, hevc), TestSegmenterShortTarget
+    evidence:
+      path: examples/container/segmenter_test.go
+      locator: TestSegmenter
+      note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
+    basis:
+    - path: examples/container/segmenter.go
+      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
+    - path: examples/container/sample.go
+      input_hash: f8a95f9be1e6ca330931967a31d66a5cbed8b67f45061bd12434ac3c5d25818a
+    - path: examples/container/segmenter_test.go
+      input_hash: 8f125617b90eaa72ed9b7628070bdbb2141ebe7ed87e9ac64106d7ce2d1f9905
+  hls-server-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+    test: TestPlaylistServesLiveHLS, TestPlaylistSlidingWindow
+    evidence:
+      path: examples/hls/server_test.go
+      locator: TestPlaylistServesLiveHLS
+      note: httptest server fed through the segmenter; ffprobe over HTTP sees h264 160x120 150 frames;
+        run 2026-10-09
+    basis:
+    - path: examples/hls/server.go
+      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
+    - path: examples/hls/server_test.go
+      input_hash: afff2b8f59b5d641a6fec60570340eeb13410c9161de654454a1801c10a8efd7
+    - path: examples/container/segmenter.go
+      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
+  hls-live-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./hls -addr 127.0.0.1:18080 -segment 2s with the window open
+    evidence:
+      path: examples/hls/main.go
+      locator: main
+      note: 2026-10-09 - playlist appeared after the first 2.1 s segment, ffmpeg read 4 s live and ffprobe
+        reported h264 1280x720 60 fps; the desktop app browser pane (Chromium 152) played the stream through
+        hls.js over MSE (107 frames decoded, scene visible in a screenshot) and, with its built-in HLS player,
+        advanced to the live edge; autoplay needed an explicit play() in that pane
+    basis:
+    - path: examples/hls/main.go
+      input_hash: 285f484feebae8e825df5ea81e6a34f0ee34057e8ac8795e400875f4e90296b0
+    - path: examples/hls/server.go
+      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
+  record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o rec.mp4 -seconds 5 -size 1280x720
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 - 278 frames, 0 dropped, 5.0 s, capture 3.74 ms per draw over 279 draws; ffprobe
+        h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
+    basis:
+    - path: examples/record/main.go
+      input_hash: 820873b7b7e57ed9148ee552d6610dcc6b3ee680d7da2c9782907d03cb9f58be
+    - path: examples/internal/demo/scene.go
+      input_hash: 6851a53ac132ab4500c9153b5fc1f85d6ea0d3e1b093ff5f4ee8f11f9ab954ac
+open_questions:
+  hidpi-capture:
+    text: Should the recorder capture at the device pixel size (ebiten.Monitor().DeviceScaleFactor())
+      instead of the logical Layout size? That needs the game to render at device resolution.
+    state: deferred
+    resolution: The logical size is what the game draws; a game that wants a sharper recording can return
+      a larger Layout.
+facts:
+  api:
+    screencast: 'New(width, height, sink, Options{Codec, FPS, Bitrate, Quality, CBR, KeyframeInterval,
+      LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
+      Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink =
+      WritePacket+Close; NewMP4File(path, codec); Funcs{Write, Done}; TimeScale 90000'
+    segmenter: 'NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
+      Data, Start, Duration}'
+    hls: 'Playlist{SetInit, Add, End, M3U8, ServeHTTP} serving /, /index.m3u8, /init.mp4, /seg_N.m4s;
+      flags -addr -codec -bitrate -fps -size -segment -window'
+    record: 'flags -o -codec -bitrate -fps -size -seconds'
+  result:
+    status: delivered 2026-10-09
+    performance: 1280x720 at 60 fps - ReadPixels about 2 ms per frame (3.7 ms with the scene render it
+      waits for), no drops; 5 s recording 278 frames
+history:
+  delivered-2026-10-09:
+    summary: Second sample slice (screen recording and HLS) delivered after the converter/thumbnails slice;
+      all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:examples-mp4-tools

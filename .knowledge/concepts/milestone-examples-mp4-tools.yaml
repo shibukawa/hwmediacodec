@@ -112,7 +112,7 @@ verification:
       note: no hardware needed; H.264 bf=2 with audio, H.264 bf=0, HEVC bf=2 with audio; run 2026-10-09
     basis:
     - path: examples/container/mux.go
-      input_hash: c2745650b06429b576c9d9f346238f17467a571a21a5e6ac202693498dcd2834
+      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
     - path: examples/container/demux.go
       input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
     - path: examples/container/container_test.go
@@ -137,7 +137,7 @@ verification:
     - path: examples/convert/main.go
       input_hash: f79da7e01c24086010077ad007aff7e4374a3a21a7ebc1b12070bb2b9713d8eb
     - path: examples/container/mux.go
-      input_hash: c2745650b06429b576c9d9f346238f17467a571a21a5e6ac202693498dcd2834
+      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
     - path: examples/container/demux.go
       input_hash: 3ce33a789c154a44a2dbf1bdc5ab284675c2d8af83088ad7f52b29a62d7cf158
     - path: examples/convert/main_test.go

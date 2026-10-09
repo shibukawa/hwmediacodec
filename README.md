@@ -255,15 +255,19 @@ timestamps wants.
 ## Examples
 
 The [`examples/`](examples/) directory is a third Go module with complete
-programs built on the library: an MP4 demuxer/muxer bridge
+programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
 (`examples/container`, on top of mp4ff), a video file converter that keeps
-timestamps and copies audio (`examples/convert`), and a keyframe thumbnail
-extractor (`examples/thumbnails`). See [examples/README.md](examples/README.md).
+timestamps and copies audio (`examples/convert`), a keyframe thumbnail
+extractor (`examples/thumbnails`), an Ebitengine screen recorder
+(`examples/screencast`, `examples/record`) and a live HLS server for an
+Ebitengine game (`examples/hls`). See [examples/README.md](examples/README.md).
 
 ```sh
 cd examples
 go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
 go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
+go run ./record -o capture.mp4 -seconds 10
+go run ./hls -addr :8080      # then open http://localhost:8080/
 ```
 
 ## Ebitengine
