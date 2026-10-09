@@ -103,11 +103,11 @@ func (t *Tracker) classifyHEVC(nals [][]byte) (codec.Order, bool) {
 		ty := hevc.Type(nal)
 		switch {
 		case ty == hevc.NALSPS:
-			if s, err := hevc.ParseSPS(nal); err == nil {
+			if s, err := hevc.ParseSPSHead(nal); err == nil {
 				t.hevcSPS[s.ID] = s
 			}
 		case ty == hevc.NALPPS:
-			if p, err := hevc.ParsePPS(nal); err == nil {
+			if p, err := hevc.ParsePPSHead(nal); err == nil {
 				t.hevcPPS[p.ID] = p
 			}
 		case ty == hevc.NALEOS || ty == hevc.NALEOB:
@@ -122,7 +122,7 @@ func (t *Tracker) classifyHEVC(nals [][]byte) (codec.Order, bool) {
 				// of the previous CRA.
 				t.skipRASL = false
 			}
-			h, err := hevc.ParseSliceHeader(nal, t.lookupHEVC)
+			h, err := hevc.ParseSliceHead(nal, t.lookupHEVC)
 			if err != nil {
 				t.seq++
 				return codec.Order{Seq: t.seq}, true

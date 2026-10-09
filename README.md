@@ -14,7 +14,7 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -66,23 +66,40 @@ Known limitations:
   it does not observe context cancellation once the call has started.
 - Intel Macs are out of scope; the VideoToolbox backend requires hardware
   engines unless `WithSoftwareFallback` is given.
-- VA-API decoding: H.264 only for now (HEVC is next); progressive frames
-  only (interlaced field pictures are rejected with `ErrUnsupported`); 8-bit
-  4:2:0 only. VA-API is a slice-level API, so the bitstream parsing,
-  picture order count, reference marking and reference list construction
-  run in Go (`internal/h264`), and the driver only accelerates the slice
-  data. `Send` returns `ErrAgain` when more than a few decoded frames are
-  waiting for `Receive`; drain and resend.
-- VA-API encoding: H.264 only, I and P frames with one reference;
-  `WithBFrames` is accepted but no B-frames are produced yet. Pictures must
-  have even width and height. `WithQuality` maps to a constant quantiser
-  (CQP), `WithBitrate` to the driver's VBR or CBR rate control (the HRD
-  buffer is one second of the peak rate), and without either a constant
-  quantiser of 26 is used. The SPS, PPS and slice headers are written in Go
-  and handed to the driver as packed headers when it accepts them (Intel
-  requires this; Mesa generates its own otherwise), so every keyframe
-  carries in-band SPS/PPS. Each picture is encoded synchronously inside
-  `Send`.
+- VA-API decoding: H.264 and HEVC, 8-bit 4:2:0 only (HEVC Main; Main 10,
+  the range extensions and screen content coding are rejected with
+  `ErrUnsupported`). H.264 is progressive frames only (interlaced field
+  pictures are rejected with `ErrUnsupported`); HEVC field sequences decode
+  as one frame per field. VA-API is a slice-level API, so the bitstream
+  parsing, picture order count, reference picture marking (H.264) or
+  reference picture sets (HEVC) and reference list construction run in Go
+  (`internal/h264`, `internal/hevc`), and the driver only accelerates the
+  slice data. An HEVC decoder that starts at a CRA picture, or is flushed
+  and resumes at one, drops the RASL pictures that follow it, as the
+  specification requires. `Send` returns `ErrAgain` when more than a few
+  decoded frames are waiting for `Receive`; drain and resend.
+- VA-API encoding: H.264 and HEVC (Main profile), I and P frames with one
+  reference; `WithBFrames` is accepted but no B-frames are produced yet.
+  Pictures must have even width and height. `WithQuality` maps to a constant
+  quantiser (CQP), `WithBitrate` to the driver's VBR or CBR rate control (the
+  HRD buffer is one second of the peak rate), and without either a constant
+  quantiser of 26 is used. The parameter sets and slice headers are written
+  in Go and handed to the driver as packed headers when it accepts them
+  (Intel requires this; Mesa generates its own otherwise), so every keyframe
+  carries in-band SPS/PPS (and VPS for HEVC). Each picture is encoded
+  synchronously inside `Send`. For HEVC the coding tree block size and the
+  coding tools (AMP, SAO) follow what the driver reports through
+  `VAConfigAttribEncHEVCBlockSizes` and `VAConfigAttribEncHEVCFeatures`.
+  When the driver writes its own SPS, the picture size it declares is checked
+  against the requested one on the first keyframe and a mismatch is an
+  error, not a wrongly sized stream. Intel encoders that have no P-frames
+  (they need "generalised B" frames) report `ErrUnsupported`; the Intel VPL
+  backend serves those GPUs.
+- The VA-API backend was written on a Mac. Everything up to the driver is
+  verified without hardware (see Testing), including complete decode and
+  encode runs through libva against a checking test driver, but no run on
+  AMD or Intel hardware has happened yet: what the GPU makes of the
+  buffers, and the pixels, are still to be confirmed.
 
 ### Windows (Media Foundation)
 
@@ -361,6 +378,32 @@ and header writer are checked against ffmpeg's own view of the stream
 (`trace_headers`, `-debug mmco`, `-debug pict`), so they run on any machine
 with ffmpeg; the reorder logic is also checked without hardware, against
 the presentation timestamps ffmpeg writes into an MP4 of the same stream.
+The HEVC side is checked the same way: every parsed syntax element and the
+position where slice data starts against `trace_headers`, picture order
+counts and both reference lists of every picture against the lists the
+`x265` command line encoder reports it used (these tests skip when `x265` is
+not installed), and inter-predicted reference picture sets against the
+reference encoder's random-access configuration. The VA-API parameter
+buffers built from HEVC streams (reference frames and their set flags,
+reference list indices, `slice_data_byte_offset`, `st_rps_bits`, prediction
+weights) are compared with the same two oracles on any platform, and the
+parameter sets and slice headers the HEVC encoder writes are read back by
+ffmpeg and ffprobe.
+
+The VA-API backend itself runs without a GPU against a fake VA driver
+(`internal/vaapi/testdata/fakedriver`, about 1,400 lines of C).
+`scripts/vaapi_fake_driver_test.sh` builds it in a container and runs the
+backend through the real libva, for H.264 and HEVC, decoding and encoding.
+The driver decodes nothing; it checks what it is handed through the libva C
+headers (buffer sizes, that every reference picture is in the surface the
+backend names, reference list indices, slice data offsets, the encoder's
+sequence, picture, slice, rate control and packed header buffers) and paints
+each decoded surface with a pattern that names its picture order count, so
+the tests can tell that the right surface is copied out for every frame,
+cropped and in display order. It runs as several driver personalities
+(packed headers as Mesa or as Intel, with and without HEVC capability
+attributes, with and without `vaDeriveImage`), and `PLATFORM=linux/amd64`
+runs it on that architecture through emulation.
 The decode and encode conformance tests run where `Probe` reports a
 hardware engine (Apple Silicon, Linux with an NVIDIA, Intel VPL or VA-API
 driver, or Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
@@ -378,6 +421,7 @@ go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
+./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
 ```
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"testing"
@@ -353,111 +355,119 @@ func TestDecodeHEVCMatchesReference(t *testing.T) {
 }
 
 func TestDecodeParameterSetChange(t *testing.T) {
-	requireHardwareDecode(t, hwmediacodec.H264)
-	s1 := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 30)
-	s2 := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 30)
-	want := append(testutil.ReferenceNV12(t, s1.Path, s1.Codec, s1.Width, s1.Height),
-		testutil.ReferenceNV12(t, s2.Path, s2.Codec, s2.Width, s2.Height)...)
-	stream := append(testutil.ReadFile(t, s1.Path), testutil.ReadFile(t, s2.Path)...)
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			requireHardwareDecode(t, c)
+			s1 := testutil.GenerateStream(t, c, 320, 240, 30)
+			s2 := testutil.GenerateStream(t, c, 160, 120, 30)
+			want := append(testutil.ReferenceNV12(t, s1.Path, s1.Codec, s1.Width, s1.Height),
+				testutil.ReferenceNV12(t, s2.Path, s2.Codec, s2.Width, s2.Height)...)
+			stream := append(testutil.ReadFile(t, s1.Path), testutil.ReadFile(t, s2.Path)...)
 
-	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
+			dec, err := hwmediacodec.NewDecoder(context.Background(), c)
+			if err != nil {
+				t.Fatalf("NewDecoder: %v", err)
+			}
+			defer dec.Close()
+			got, sizes := decodeAll(t, dec, c, stream)
+			if len(sizes) != 60 {
+				t.Fatalf("frame count: got %d want 60", len(sizes))
+			}
+			for i, sz := range sizes {
+				want := [2]int{320, 240}
+				if i >= 30 {
+					want = [2]int{160, 120}
+				}
+				if sz != want {
+					t.Fatalf("frame %d size %v want %v", i, sz, want)
+				}
+			}
+			compareChecksums(t, got, want)
+		})
 	}
-	defer dec.Close()
-	got, sizes := decodeAll(t, dec, hwmediacodec.H264, stream)
-	if len(sizes) != 60 {
-		t.Fatalf("frame count: got %d want 60", len(sizes))
-	}
-	for i, sz := range sizes {
-		want := [2]int{320, 240}
-		if i >= 30 {
-			want = [2]int{160, 120}
-		}
-		if sz != want {
-			t.Fatalf("frame %d size %v want %v", i, sz, want)
-		}
-	}
-	compareChecksums(t, got, want)
 }
 
 func TestFlushResumesAtKeyframe(t *testing.T) {
-	requireHardwareDecode(t, hwmediacodec.H264)
-	s := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 20)
-	data := testutil.ReadFile(t, s.Path)
-	r := annexb.NewReader(bytes.NewReader(data), hwmediacodec.H264)
-	var aus [][]byte
-	for {
-		au, err := r.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		aus = append(aus, au)
-	}
-	if len(aus) != 20 {
-		t.Fatalf("got %d access units, want 20", len(aus))
-	}
-
-	ctx := context.Background()
-	dec, err := hwmediacodec.NewDecoder(ctx, hwmediacodec.H264)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dec.Close()
-
-	count := func() int {
-		n := 0
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return n
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			requireHardwareDecode(t, c)
+			s := testutil.GenerateStream(t, c, 160, 120, 20)
+			data := testutil.ReadFile(t, s.Path)
+			r := annexb.NewReader(bytes.NewReader(data), c)
+			var aus [][]byte
+			for {
+				au, err := r.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				aus = append(aus, au)
 			}
+			if len(aus) != 20 {
+				t.Fatalf("got %d access units, want 20", len(aus))
+			}
+
+			ctx := context.Background()
+			dec, err := hwmediacodec.NewDecoder(ctx, c)
 			if err != nil {
 				t.Fatal(err)
 			}
-			f.Release()
-			n++
-		}
-	}
+			defer dec.Close()
 
-	// Decode the first five pictures, then flush (seek).
-	for i := 0; i < 5; i++ {
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[i]}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := dec.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if n := count(); n != 5 {
-		t.Fatalf("got %d frames before flush, want 5", n)
-	}
-	if _, err := dec.Receive(ctx); err != io.EOF {
-		t.Fatalf("after flush Receive = %v, want io.EOF", err)
-	}
+			count := func() int {
+				n := 0
+				for {
+					f, err := dec.Receive(ctx)
+					if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+						return n
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					f.Release()
+					n++
+				}
+			}
 
-	// A non-keyframe after the flush must be skipped without error.
-	if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[7]}); err != nil {
-		t.Fatalf("Send non-keyframe after flush: %v", err)
-	}
-	if n := count(); n != 0 {
-		t.Fatalf("got %d frames from a non-keyframe after flush, want 0", n)
-	}
-	// Decoding resumes at the next keyframe (the stream starts with an IDR).
-	// A backend may hold the picture until more input or a flush arrives, so
-	// drain before counting.
-	if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[0]}); err != nil {
-		t.Fatal(err)
-	}
-	n := count()
-	if err := dec.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if n += count(); n != 1 {
-		t.Fatalf("got %d frames from the keyframe after flush, want 1", n)
+			// Decode the first five pictures, then flush (seek).
+			for i := 0; i < 5; i++ {
+				if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[i]}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := dec.Flush(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if n := count(); n != 5 {
+				t.Fatalf("got %d frames before flush, want 5", n)
+			}
+			if _, err := dec.Receive(ctx); err != io.EOF {
+				t.Fatalf("after flush Receive = %v, want io.EOF", err)
+			}
+
+			// A non-keyframe after the flush must be skipped without error.
+			if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[7]}); err != nil {
+				t.Fatalf("Send non-keyframe after flush: %v", err)
+			}
+			if n := count(); n != 0 {
+				t.Fatalf("got %d frames from a non-keyframe after flush, want 0", n)
+			}
+			// Decoding resumes at the next keyframe (the stream starts with an IDR).
+			// A backend may hold the picture until more input or a flush arrives, so
+			// drain before counting.
+			if err := dec.Send(ctx, hwmediacodec.Packet{Data: aus[0]}); err != nil {
+				t.Fatal(err)
+			}
+			n := count()
+			if err := dec.Flush(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if n += count(); n != 1 {
+				t.Fatalf("got %d frames from the keyframe after flush, want 1", n)
+			}
+		})
 	}
 }
 
@@ -478,4 +488,111 @@ func TestInvalidData(t *testing.T) {
 	if _, err := dec.Receive(context.Background()); !errors.Is(err, hwmediacodec.ErrClosed) {
 		t.Fatalf("Receive after Close = %v, want ErrClosed", err)
 	}
+}
+
+// TestDecodeHEVCCodingTools decodes streams that use the parts of HEVC a
+// slice-level backend has to describe to the driver itself: several
+// references and B-pyramids (reference picture sets and lists), weighted
+// prediction tables, several slices and wavefront entry points, scaling
+// lists, and a conformance window.
+func TestDecodeHEVCCodingTools(t *testing.T) {
+	requireHardwareDecode(t, hwmediacodec.HEVC)
+	fade := []string{"-vf", "fade=t=in:st=0:d=0.8,fade=t=out:st=1.0:d=0.6"}
+	for _, tc := range []struct {
+		name   string
+		w, h   int
+		params string
+		extra  []string
+	}{
+		{"bpyramid-refs", 320, 240, "bframes=4:b-pyramid=1:ref=5:keyint=20:min-keyint=20:open-gop=0", nil},
+		{"lowdelay-refs", 320, 240, "bframes=0:ref=6:keyint=30", nil},
+		{"weights", 320, 240, "bframes=3:ref=3:weightp=1:weightb=1:keyint=48:open-gop=0", fade},
+		{"slices", 320, 240, "bframes=2:slices=3:keyint=15:min-keyint=15:open-gop=0", nil},
+		{"no-wavefront", 320, 240, "bframes=2:no-wpp=1:keyint=15:min-keyint=15:open-gop=0", nil},
+		{"scaling-list", 320, 240, "bframes=2:scaling-list=default:keyint=15:min-keyint=15:open-gop=0", nil},
+		{"tools", 320, 240, "bframes=2:rect=1:amp=1:tskip=1:no-sao=1:constrained-intra=1:cbqpoffs=2:crqpoffs=-3:deblock=2,-1:keyint=15:open-gop=0", nil},
+		{"cropped", 322, 242, "bframes=2:keyint=15:min-keyint=15:open-gop=0", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := testutil.GenerateHEVC(t, tc.w, tc.h, 48, tc.params, tc.extra...)
+			want := testutil.ReferenceNV12(t, path, hwmediacodec.HEVC, tc.w, tc.h)
+			dec := newDecoderOrSkip(t, hwmediacodec.HEVC)
+			defer dec.Close()
+			got, sizes := decodeAll(t, dec, hwmediacodec.HEVC, testutil.ReadFile(t, path))
+			for i, sz := range sizes {
+				if sz != [2]int{tc.w, tc.h} {
+					t.Fatalf("frame %d size %v, want %dx%d", i, sz, tc.w, tc.h)
+				}
+			}
+			compareChecksums(t, got, want)
+		})
+	}
+}
+
+// TestDecodeHEVCOpenGOP decodes a stream whose later keyframes are CRA
+// pictures followed by RASL pictures. From the start every picture is
+// decodable; started at a CRA (a seek), the RASL pictures that follow it
+// refer to pictures before it and must be dropped, exactly as the reference
+// decoder does.
+func TestDecodeHEVCOpenGOP(t *testing.T) {
+	requireHardwareDecode(t, hwmediacodec.HEVC)
+	const w, h = 320, 240
+	path := testutil.GenerateHEVC(t, w, h, 40, "bframes=3:b-pyramid=1:keyint=10:min-keyint=10:open-gop=1")
+	data := testutil.ReadFile(t, path)
+
+	dec := newDecoderOrSkip(t, hwmediacodec.HEVC)
+	got, _ := decodeAll(t, dec, hwmediacodec.HEVC, data)
+	dec.Close()
+	compareChecksums(t, got, testutil.ReferenceNV12(t, path, hwmediacodec.HEVC, w, h))
+
+	// Find the first CRA picture after the start and cut the stream there.
+	r := annexb.NewReader(bytes.NewReader(data), hwmediacodec.HEVC)
+	var tail []byte
+	for index := 0; ; index++ {
+		au, err := r.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tail == nil {
+			cra := false
+			for _, nal := range annexb.Split(au) {
+				if annexb.NALUnitType(hwmediacodec.HEVC, nal) == 21 { // CRA_NUT
+					cra = true
+				}
+			}
+			if !cra || index == 0 {
+				continue
+			}
+			// The cut needs the parameter sets, which the first access
+			// unit carries.
+			first, err := annexb.NewReader(bytes.NewReader(data), hwmediacodec.HEVC).Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, nal := range annexb.Split(first) {
+				if annexb.IsParameterSet(hwmediacodec.HEVC, annexb.NALUnitType(hwmediacodec.HEVC, nal)) {
+					tail = append(append(tail, 0, 0, 0, 1), nal...)
+				}
+			}
+		}
+		tail = append(tail, au...)
+	}
+	if tail == nil {
+		t.Skip("the encoder produced no CRA picture after the start")
+	}
+	cut := filepath.Join(t.TempDir(), "tail.hevc")
+	if err := os.WriteFile(cut, tail, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := testutil.ReferenceNV12(t, cut, hwmediacodec.HEVC, w, h)
+	dec = newDecoderOrSkip(t, hwmediacodec.HEVC)
+	defer dec.Close()
+	got, _ = decodeAll(t, dec, hwmediacodec.HEVC, tail)
+	if len(got) >= len(data) || len(want) == 0 {
+		t.Fatalf("decoded %d frames after the cut, reference has %d", len(got), len(want))
+	}
+	compareChecksums(t, got, want)
 }

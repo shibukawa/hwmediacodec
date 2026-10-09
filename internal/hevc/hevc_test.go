@@ -33,7 +33,7 @@ func mustHex(s string) []byte {
 }
 
 func TestParseSPS(t *testing.T) {
-	s, err := ParseSPS(x265SPS)
+	s, err := ParseSPSHead(x265SPS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestParseSPS(t *testing.T) {
 }
 
 func TestParsePPS(t *testing.T) {
-	p, err := ParsePPS(x265PPS)
+	p, err := ParsePPSHead(x265PPS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,11 +65,11 @@ func TestParsePPS(t *testing.T) {
 }
 
 func TestSliceHeadersAndPOC(t *testing.T) {
-	sps, err := ParseSPS(x265SPS)
+	sps, err := ParseSPSHead(x265SPS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pps, err := ParsePPS(x265PPS)
+	pps, err := ParsePPSHead(x265PPS)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestSliceHeadersAndPOC(t *testing.T) {
 		if tid := TemporalID(nal); tid != 0 {
 			t.Errorf("slice %d: temporal id %d", i, tid)
 		}
-		h, err := ParseSliceHeader(nal, lookup)
+		h, err := ParseSliceHead(nal, lookup)
 		if err != nil {
 			t.Fatalf("slice %d: %v", i, err)
 		}
@@ -110,18 +110,18 @@ func TestSliceHeadersAndPOC(t *testing.T) {
 }
 
 func TestSliceHeaderErrors(t *testing.T) {
-	if _, err := ParseSliceHeader(x265SPS, nil); err != ErrNotSlice {
+	if _, err := ParseSliceHead(x265SPS, nil); err != ErrNotSlice {
 		t.Errorf("SPS as slice: %v", err)
 	}
 	none := func(uint32) (*PPS, *SPS) { return nil, nil }
-	if _, err := ParseSliceHeader(mustHex(x265Slices[0]), none); err == nil {
+	if _, err := ParseSliceHead(mustHex(x265Slices[0]), none); err == nil {
 		t.Error("unknown PPS was accepted")
 	}
 	// A dependent slice segment (first_slice_segment_in_pic_flag = 0).
-	if _, err := ParseSliceHeader([]byte{0x02, 0x01, 0x40, 0x00}, none); err != ErrNotFirstSegment {
+	if _, err := ParseSliceHead([]byte{0x02, 0x01, 0x40, 0x00}, none); err != ErrNotFirstSegment {
 		t.Errorf("second segment: %v", err)
 	}
-	if _, err := ParseSPS(x265SPS[:6]); err == nil {
+	if _, err := ParseSPSHead(x265SPS[:6]); err == nil {
 		t.Error("truncated SPS was accepted")
 	}
 }

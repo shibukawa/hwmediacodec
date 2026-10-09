@@ -176,15 +176,15 @@ verification:
     - path: internal/vaapi/sys/sys_linux_test.go
       input_hash: e5ccfdee741414432a931d5769e0f28ca73953505247000f60e49e69c0f0aa52
     - path: internal/vaapi/display.go
-      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/backend.go
-      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
+      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
     - path: internal/vaapi/decoder.go
-      input_hash: bb3ac4a4d0c3e112a3806b7294fc9d9659feab28fa7477643b165cbec0585e42
+      input_hash: 072e21339ab564f3f16596ce27fb9f788f6802b0ab0392ee4cdc6b013c29de12
     - path: internal/vaapi/h264fill.go
-      input_hash: f9dc33284533ccafb2576c955220e9bfa0383e9339fcd8f1c86921d4fc53bd35
+      input_hash: cdadac163fe5168cd11d5e264cfe1bdf01b78072c3699e7e30b5f07a66a14bd6
     - path: backends_linux.go
-      input_hash: 1b87aae2a21fe6d756e32a80481a97ca51faa2fbb2fdbb88b969dc9785f3064b
+      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
     - path: probe_test.go
       input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
   hardware-conformance:
@@ -234,15 +234,15 @@ verification:
         VideoToolbox; VCN rate control may need the window/HRD values tuned.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 6f5bb0d38ccb174aca74d277a1a4b9338343e31bb25ca99c4afbca7e3b954ca2
+      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
     - path: internal/vaapi/backend.go
-      input_hash: 4d9bc4e970c1fc95f526e1719819acf4a72d8f4e267b7d149cd0c54b83ee6c66
+      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
     - path: internal/vaapi/display.go
-      input_hash: 9c7ac8c7a9cc95a22cf0c0ce161a011e9a91d6ca8069e1229a7c5fd767b2614a
+      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+      input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
   cross-build-check:
     state: passed
     method: static
@@ -256,7 +256,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_linux.go
-      input_hash: 1b87aae2a21fe6d756e32a80481a97ca51faa2fbb2fdbb88b969dc9785f3064b
+      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
     - path: backends_other.go
       input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
 facts:
@@ -296,7 +296,8 @@ facts:
     Mesa version and fps in this file.
   - B-frames in the VA-API encoder (needs reordering, L1 lists and DTS) where VAConfigAttribEncMaxRefFrames
     reports L1 references; async pipelining of uploads and coded-buffer reads.
-  - HEVC decode on VA-API (VPS/SPS/PPS parser with RPS, VAPictureParameterBufferHEVC/VASliceParameterBufferHEVC).
+  - HEVC on VA-API - delivered as milestone:linux-vaapi-hevc (2026-10-09), which also ran this slice's
+    H.264 decoder and encoder through libva for the first time, against a fake driver.
   - Display-order output using the POC now available (requirement open question frame-reordering).
   - Field (PAFF) pictures if a consumer needs interlaced content.
 relations:
@@ -321,3 +322,8 @@ history:
     summary: Merged main after the display-order/RGBA milestone; the reorder tracker now runs on the
       full H.264 parser of this slice (the lightweight parser was removed), so MMCO 5 resets are honoured,
       and VA-API decoders are wrapped by the reorder layer like VideoToolbox. RGBA/BGRA stay VideoToolbox-only.
+  hevc-followed-2026-10-09:
+    summary: milestone:linux-vaapi-hevc generalised the decoder and encoder plumbing for a second codec
+      and exercised the H.264 paths end to end against the fake VA driver (decode incl. B-pyramids,
+      six references, three slices, cropping, sequence change and seek; encode in CQP, CBR and VBR
+      with and without packed slice headers). No H.264 defect was found.
