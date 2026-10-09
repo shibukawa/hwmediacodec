@@ -68,8 +68,9 @@ func TestProbe(t *testing.T) {
 func TestUnsupportedCodec(t *testing.T) {
 	ctx := context.Background()
 	// An unknown codec value is unsupported everywhere; AV1 decoding is
-	// unsupported wherever Probe lists no hardware for it (every backend
-	// but VideoToolbox on an M3 or newer), and AV1 encoding everywhere.
+	// unsupported wherever Probe lists no hardware for it (an Apple chip
+	// older than the M3, a GPU without an AV1 decoder), and AV1 encoding
+	// everywhere.
 	unknown := hwmediacodec.Codec(200)
 	_, err := hwmediacodec.NewDecoder(ctx, unknown)
 	if err == nil {

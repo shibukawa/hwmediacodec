@@ -10,6 +10,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/vpl/sys"
 )
@@ -40,6 +41,11 @@ type decoder struct {
 	pending []*codec.Frame
 	pool    sync.Pool
 
+	// AV1: the current sequence header, parsed and as an OBU. A key frame
+	// that restarts decoding without carrying one is prefixed with it.
+	av1Seq    *av1.SequenceHeader
+	av1SeqOBU []byte
+
 	waitKeyframe bool
 	flushed      bool
 	closed       bool
@@ -65,19 +71,44 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	d.flushed = false
 
-	info := d.ps.inspect(p.Data)
-	if info.nals == 0 {
-		return codec.ErrInvalidData
-	}
 	data := p.Data
-	if d.waitKeyframe {
-		// Decoding (re)starts at a random access point. Parameter sets
-		// of skipped packets were stored by inspect.
-		if !info.keyframe {
-			return nil
+	if d.cfg.Codec == codec.AV1 {
+		// p.Data is one temporal unit in the low-overhead OBU format,
+		// which is what the runtime's AV1 decoder takes.
+		tu, err := av1.ParseTemporalUnit(p.Data, d.av1Seq)
+		if err != nil {
+			return fmt.Errorf("%w: %v", codec.ErrInvalidData, err)
 		}
-		if !d.ps.covers(info.kinds) {
-			data = append(d.ps.annexB(), p.Data...)
+		if tu.Sequence != nil {
+			d.av1Seq = tu.Sequence
+			d.av1SeqOBU = append(d.av1SeqOBU[:0], tu.SequenceHeader.Raw...)
+		}
+		if !tu.HasFrame {
+			return nil // a sequence header alone was stored above
+		}
+		if d.waitKeyframe {
+			// Decoding (re)starts at a shown key frame.
+			if !tu.Keyframe || d.av1Seq == nil {
+				return nil
+			}
+			if tu.SequenceHeader == nil {
+				data = append(append([]byte{}, d.av1SeqOBU...), p.Data...)
+			}
+		}
+	} else {
+		info := d.ps.inspect(p.Data)
+		if info.nals == 0 {
+			return codec.ErrInvalidData
+		}
+		if d.waitKeyframe {
+			// Decoding (re)starts at a random access point. Parameter
+			// sets of skipped packets were stored by inspect.
+			if !info.keyframe {
+				return nil
+			}
+			if !d.ps.covers(info.kinds) {
+				data = append(d.ps.annexB(), p.Data...)
+			}
 		}
 	}
 	if err := d.decode(ctx, data, p.PTS); err != nil {
@@ -231,6 +262,12 @@ func (d *decoder) run(ctx context.Context, bs *sys.Bitstream, mayReinit bool) er
 		}
 		switch {
 		case st == sys.ErrMoreData:
+			if d.cfg.Codec == codec.AV1 && bs != nil && bs.DataLength > 0 && bs.DataLength != before {
+				// An AV1 temporal unit can hold a frame that is decoded
+				// but not shown in front of the one that is; the decoder
+				// stops after the first and wants the rest of the unit.
+				continue
+			}
 			return nil
 		case st == sys.ErrMoreSurface:
 			// The work surface was taken; the same input continues with

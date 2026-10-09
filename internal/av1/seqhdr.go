@@ -36,12 +36,22 @@ type SequenceHeader struct {
 	LevelIdx          uint8  // seq_level_idx[0]; 31 means unconstrained
 	Tier              uint8  // seq_tier[0]
 
-	TimingInfoPresent          bool
-	NumUnitsInDisplayTick      uint32
-	TimeScale                  uint32
-	EqualPictureInterval       bool
-	NumTicksPerPictureMinus1   uint32
-	DecoderModelInfoPresent    bool
+	TimingInfoPresent        bool
+	NumUnitsInDisplayTick    uint32
+	TimeScale                uint32
+	EqualPictureInterval     bool
+	NumTicksPerPictureMinus1 uint32
+	DecoderModelInfoPresent  bool
+	// BufferRemovalTimeLength and FramePresentationTimeLength are the
+	// *_length_minus_1 fields of decoder_model_info plus one; frame headers
+	// carry fields of these widths.
+	BufferRemovalTimeLength     uint8
+	FramePresentationTimeLength uint8
+	// OperatingPointIdcs and DecoderModelPresentForOp hold
+	// operating_point_idc and decoder_model_present_for_this_op of every
+	// operating point.
+	OperatingPointIdcs         []uint16
+	DecoderModelPresentForOp   []bool
 	InitialDisplayDelayPresent bool
 	// InitialDisplayDelay is initial_display_delay_minus_1[0] + 1, or 0
 	// when the stream does not signal it for operating point 0.
@@ -114,6 +124,8 @@ func ParseSequenceHeader(payload []byte) (*SequenceHeader, error) {
 	if sh.ReducedStillPictureHeader {
 		sh.OperatingPoints = 1
 		sh.LevelIdx = uint8(u(5))
+		sh.OperatingPointIdcs = []uint16{0}
+		sh.DecoderModelPresentForOp = []bool{false}
 	} else {
 		sh.TimingInfoPresent = f()
 		bufferDelayLength := 0
@@ -128,8 +140,8 @@ func ParseSequenceHeader(payload []byte) (*SequenceHeader, error) {
 			if sh.DecoderModelInfoPresent {
 				bufferDelayLength = int(u(5)) + 1
 				u(32) // num_units_in_decoding_tick
-				u(5)  // buffer_removal_time_length_minus_1
-				u(5)  // frame_presentation_time_length_minus_1
+				sh.BufferRemovalTimeLength = uint8(u(5)) + 1
+				sh.FramePresentationTimeLength = uint8(u(5)) + 1
 			}
 		}
 		sh.InitialDisplayDelayPresent = f()
@@ -141,11 +153,14 @@ func ParseSequenceHeader(payload []byte) (*SequenceHeader, error) {
 			if level > 7 {
 				tier = uint8(u(1))
 			}
-			if sh.DecoderModelInfoPresent && f() { // decoder_model_present_for_this_op
+			model := sh.DecoderModelInfoPresent && f() // decoder_model_present_for_this_op
+			if model {
 				u(bufferDelayLength) // decoder_buffer_delay
 				u(bufferDelayLength) // encoder_buffer_delay
 				u(1)                 // low_delay_mode_flag
 			}
+			sh.OperatingPointIdcs = append(sh.OperatingPointIdcs, idc)
+			sh.DecoderModelPresentForOp = append(sh.DecoderModelPresentForOp, model)
 			delay := 0
 			if sh.InitialDisplayDelayPresent && f() {
 				delay = int(u(4)) + 1

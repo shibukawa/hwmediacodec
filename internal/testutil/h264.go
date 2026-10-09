@@ -52,7 +52,7 @@ type TraceUnit struct {
 }
 
 var (
-	traceFieldRe  = regexp.MustCompile(`^\[trace_headers @ [^\]]+\] (\d+) +([A-Za-z_0-9\[\]]+) +([01]+) = (-?\d+)\s*$`)
+	traceFieldRe  = regexp.MustCompile(`^\[trace_headers @ [^\]]+\] (\d+) +([A-Za-z_0-9\[\].]+) +([01]+) = (-?\d+)\s*$`)
 	traceKindRe   = regexp.MustCompile(`^\[trace_headers @ [^\]]+\] ([A-Za-z][A-Za-z ]+[A-Za-z])\s*$`)
 	tracePacketRe = regexp.MustCompile(`^\[trace_headers @ [^\]]+\] Packet: `)
 )

@@ -55,6 +55,59 @@ func GenerateAV1(t testing.TB, width, height, frames int, extra ...string) strin
 	return path
 }
 
+// GenerateAV1With encodes a synthetic test pattern into an IVF file with the
+// named ffmpeg AV1 encoder (libaom-av1, libsvtav1, librav1e) and the given
+// output options, for streams that exercise particular coding tools. It
+// skips the test when ffmpeg lacks the encoder.
+func GenerateAV1With(t testing.TB, encoder string, width, height, frames int, args ...string) string {
+	t.Helper()
+	ffmpeg := RequireFFmpeg(t)
+	if !HasEncoder(t, encoder) {
+		t.Skipf("ffmpeg has no %s encoder", encoder)
+	}
+	path := filepath.Join(t.TempDir(), fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
+	cmdArgs := []string{"-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
+		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", "-c:v", encoder}
+	cmdArgs = append(cmdArgs, args...)
+	cmdArgs = append(cmdArgs, "-f", "ivf", path)
+	cmd := exec.Command(ffmpeg, cmdArgs...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("ffmpeg generate failed: %v\n%s", err, stderr.String())
+	}
+	return path
+}
+
+// GenerateAV1Aomenc encodes a synthetic test pattern into an IVF file with
+// the aomenc command line encoder, which exposes libaom controls that
+// ffmpeg's wrapper does not (super-resolution, reference scaling, S-frames,
+// tile groups, forward key frames). args are aomenc options. It skips the
+// test when aomenc is not installed.
+func GenerateAV1Aomenc(t testing.TB, width, height, frames int, args ...string) string {
+	t.Helper()
+	ffmpeg := RequireFFmpeg(t)
+	aomenc, err := exec.LookPath("aomenc")
+	if err != nil {
+		t.Skip("aomenc not found in PATH")
+	}
+	dir := t.TempDir()
+	y4m := filepath.Join(dir, "source.y4m")
+	if out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
+		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", y4m).CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg generate failed: %v\n%s", err, out)
+	}
+	path := filepath.Join(dir, fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
+	cmdArgs := append([]string{"--ivf", "--passes=1", "--quiet"}, args...)
+	cmdArgs = append(cmdArgs, "-o", path, y4m)
+	if out, err := exec.Command(aomenc, cmdArgs...).CombinedOutput(); err != nil {
+		t.Fatalf("aomenc failed: %v\n%s", err, out)
+	}
+	return path
+}
+
 // containerFormat returns the ffmpeg demuxer name for the elementary stream
 // files the generators write: raw Annex-B for H.264 and HEVC, IVF for AV1.
 func containerFormat(c codec.Codec) string {

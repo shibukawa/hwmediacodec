@@ -112,7 +112,7 @@ verification:
     - path: internal/h264/oracle_test.go
       input_hash: ad9a84ac7e548d485023c1487e3b1b55ebae7bb0cff73227508dcadcf511e977
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
     - path: internal/bitstream/reader.go
       input_hash: b938130875981723695b8a1cdc4fb25d5ecd0d06ce210a0f05cfa162382e1630
   dpb-oracle-test:
@@ -143,7 +143,7 @@ verification:
     - path: internal/h264/dpb_test.go
       input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
   layout-test:
     state: passed
     method: unit
@@ -178,15 +178,15 @@ verification:
     - path: internal/vaapi/display.go
       input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/backend.go
-      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/decoder.go
-      input_hash: 072e21339ab564f3f16596ce27fb9f788f6802b0ab0392ee4cdc6b013c29de12
+      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
     - path: internal/vaapi/h264fill.go
       input_hash: cdadac163fe5168cd11d5e264cfe1bdf01b78072c3699e7e30b5f07a66a14bd6
     - path: backends_linux.go
       input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
   hardware-conformance:
     state: not_run
     method: integration
@@ -236,7 +236,7 @@ verification:
     - path: internal/vaapi/encoder.go
       input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
     - path: internal/vaapi/backend.go
-      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/display.go
       input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/sys/sys_linux.go

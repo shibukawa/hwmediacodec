@@ -17,8 +17,8 @@ import (
 const Name = "mediafoundation"
 
 // Backend is the Media Foundation backend. It drives the synchronous decoder
-// MFTs that ship with Windows (and the HEVC Video Extensions) with a
-// Direct3D 11 device attached, so the GPU's DXVA engine does the decoding
+// MFTs that ship with Windows (and the HEVC and AV1 Video Extensions) with
+// a Direct3D 11 device attached, so the GPU's DXVA engine does the decoding
 // regardless of vendor.
 type Backend struct{}
 
@@ -37,8 +37,22 @@ func mfCodec(c codec.Codec) (codecInfo, bool) {
 		return codecInfo{&sys.MFVideoFormat_H264, &sys.D3D11_DECODER_PROFILE_H264_VLD_NOFGT}, true
 	case codec.HEVC:
 		return codecInfo{&sys.MFVideoFormat_HEVC, &sys.D3D11_DECODER_PROFILE_HEVC_VLD_MAIN}, true
+	case codec.AV1:
+		return codecInfo{&sys.MFVideoFormat_AV1, &sys.D3D11_DECODER_PROFILE_AV1_VLD_PROFILE0}, true
 	}
 	return codecInfo{}, false
+}
+
+// extensionHint names the Microsoft Store package that provides the decoder
+// MFT of a codec Windows does not decode out of the box.
+func extensionHint(c codec.Codec) string {
+	switch c {
+	case codec.HEVC:
+		return " (HEVC needs the \"HEVC Video Extensions\" package)"
+	case codec.AV1:
+		return " (AV1 needs the \"AV1 Video Extension\" package)"
+	}
+	return ""
 }
 
 func unsupported(c codec.Codec, reason string) error {
@@ -221,7 +235,7 @@ func releaseCandidates(cands []candidate) {
 // Probe implements codec.Backend. A codec is reported as hardware-decodable
 // when the GPU exposes its DXVA profile and a synchronous decoder MFT exists,
 // and as hardware-encodable when the driver registers a hardware encoder MFT
-// for it.
+// for it. AV1 is decoded only.
 func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	if err := sys.Load(); err != nil {
 		// Media Foundation or Direct3D 11 is absent (Windows N without the
@@ -240,7 +254,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	}
 	defer dev.release()
 	var caps []codec.Capability
-	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
+	for _, c := range []codec.Codec{codec.H264, codec.HEVC, codec.AV1} {
 		if err := ctx.Err(); err != nil {
 			return caps, err
 		}
@@ -282,7 +296,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.Decoder, error) {
 	info, ok := mfCodec(cfg.Codec)
 	if !ok {
-		return nil, unsupported(cfg.Codec, "only h264 and hevc decoding are implemented")
+		return nil, unsupported(cfg.Codec, "only h264, hevc and av1 decoding are implemented")
 	}
 	if cfg.OutputFormat != codec.NV12 {
 		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not supported; use NV12")
@@ -319,7 +333,12 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 		return nil, err
 	}
 	d := newDecoder(cfg, info, dev, t, name)
-	if err := d.configure(); err != nil {
+	if cfg.Codec == codec.AV1 {
+		// The AV1 decoder wants the frame size in its input type, which
+		// is known once the first sequence header arrives.
+		return d, nil
+	}
+	if err := d.configure(0, 0); err != nil {
 		d.Close()
 		return nil, err
 	}
@@ -335,7 +354,7 @@ func openTransform(dev *d3dDevice, c codec.Codec, info codecInfo) (*sys.IMFTrans
 	}
 	defer releaseCandidates(cands)
 	if len(cands) == 0 {
-		return nil, "", unsupported(c, "no Media Foundation decoder is registered for "+c.String()+" (HEVC needs the \"HEVC Video Extensions\" package)")
+		return nil, "", unsupported(c, "no Media Foundation decoder is registered for "+c.String()+extensionHint(c))
 	}
 	var reasons []string
 	for _, cand := range cands {
@@ -391,8 +410,8 @@ func unsupportedEnc(c codec.Codec, reason string) error {
 // to the Microsoft software encoder.
 func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
 	info, ok := mfCodec(cfg.Codec)
-	if !ok {
-		return nil, unsupportedEnc(cfg.Codec, "only h264 and hevc encoding are implemented")
+	if !ok || cfg.Codec == codec.AV1 {
+		return nil, unsupportedEnc(cfg.Codec, "only h264 and hevc encoding are implemented (AV1 is decoded only)")
 	}
 	if cfg.InputFormat != codec.NV12 {
 		return nil, unsupportedEnc(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not supported; use NV12")

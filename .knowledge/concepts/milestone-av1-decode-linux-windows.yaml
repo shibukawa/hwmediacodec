@@ -1,0 +1,408 @@
+id: milestone:av1-decode-linux-windows
+type: milestone
+title: AV1 decoding on the Linux and Windows backends (VA-API, NVDEC, Intel VPL, Media Foundation)
+summary: 'Slice requested on 2026-10-09: AV1 decoding wherever the GPU has an AV1 decoder, after the
+  macOS slice (milestone:darwin-av1-decode). VA-API takes one frame at a time, so internal/av1 gained
+  a complete uncompressed_header parser, the reference frame state it is parsed against and the tile
+  group layout; the VA-API backend fills VADecPictureParameterBufferAV1 and one VASliceParameterBufferAV1
+  per tile, keeps the surfaces of the eight reference slots and gives film grain its own display surface.
+  NVDEC, Intel VPL and Media Foundation leave the stream to the driver''s parser and needed small additions.
+  8-bit Main profile to NV12 on all four; AV1 encoding stays out. Verified without hardware only: the
+  frame header parser against ffmpeg trace_headers on 32 stream configurations, and every VA-API buffer
+  byte for byte against ffmpeg''s own VA-API AV1 decoder through the fake VA driver. No run on a GPU yet.'
+lifecycle: active
+authority: authored
+aliases:
+- AV1 decode Linux
+- AV1 decode Windows
+- VADecPictureParameterBufferAV1
+- AV1デコード Linux Windows
+scope:
+  platform:
+  - linux
+  - windows
+  milestone: av1-decode-linux-windows
+constraints:
+- CGO_ENABLED=0; libva, cuvid, VPL and Media Foundation are called through the existing sys packages; ffmpeg,
+  aomenc and the encoders behind them are test oracles and stream generators only.
+- Packet.Data is one temporal unit in the low-overhead OBU format, as on macOS; every unit yields exactly
+  one frame with its packet's PTS; all four decoders implement codec.DisplayOrderer for AV1, so the reorder
+  layer is bypassed and WithDecodeOrder is a no-op.
+- Decoding starts and resumes after Flush at a unit with a shown key frame; the last sequence header OBU
+  is kept in Go and prepended to such a unit when it carries none (NVDEC, VPL, Media Foundation), since
+  their parsers are recreated or restarted.
+- 8-bit Main profile 4:2:0 to NV12 only on these backends; 10-bit, seq_profile 1 and 2 and monochrome
+  report ErrUnsupported (VA-API checks the sequence header itself; the others rely on the driver's answer).
+- VA-API - the render target of vaBeginPicture is the reference picture (current_frame); with film grain
+  the picture to show is a second surface named in current_display_picture. This is what ffmpeg does and
+  the fake driver now requires.
+- VA-API - shown pictures are copied to CPU memory inside Send, because a surface stays with the reference
+  slots and may be shown again by show_existing_frame; Send returns ErrAgain when four frames wait for
+  Receive.
+non_goals:
+- AV1 encoding on any backend (NVENC from RTX 40, VPL from Arc, VA-API from RDNA3/Arc, vendor encoder
+  MFTs) - a later slice.
+- 10-bit AV1 on Linux and Windows (needs P010 surfaces and a conversion; VideoToolbox converts itself).
+- RGBA/BGRA output on these backends (NV12 only, as for H.264 and HEVC there).
+- Spatial scalability (several spatial layers) and large-scale-tile streams on VA-API - ErrUnsupported.
+- The Annex B length-delimited AV1 format.
+acceptance:
+  frame-header-oracle:
+    text: Every syntax element of every frame header that ffmpeg's trace_headers prints equals the parser's
+      value, and every header has the length ffmpeg read, for 32 stream configurations written by SVT-AV1,
+      libaom (through ffmpeg and through aomenc) and rav1e, with headers parsed against the reference state
+      the parser maintains itself.
+    scope:
+      milestone: av1-decode-linux-windows
+    verified_by:
+    - frame-header-trace-test
+  vaapi-buffers-equal-ffmpeg:
+    text: For 22 stream configurations (hidden frames, show_existing_frame, forward key frames, tiles,
+      three tile groups, film grain from SVT-AV1 and libaom, super-resolution, random reference scaling,
+      S-frames with frame numbers, screen content, lossless, segmentation, delta q/lf, quantiser matrices,
+      128x128 superblocks with loop restoration, global motion) the picture parameter buffer, the tile parameters
+      and the tile data the backend submits for every frame equal those ffmpeg's VA-API AV1 decoder submits
+      to the same driver, with surfaces compared by the number of the picture they hold.
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    verified_by:
+    - fake-vaapi-av1-test
+  vaapi-short-signaling:
+    text: For two streams rewritten to use frame_refs_short_signaling the references the backend derives
+      (set_frame_refs) equal ffmpeg's for every frame, including frames whose derived references differ
+      from the ones the encoder signalled.
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    verified_by:
+    - fake-vaapi-av1-short-signaling-test
+  vaapi-output:
+    text: Through the fake driver every temporal unit yields one frame with its PTS that shows the right
+      picture (the grained surface where film grain applies) at the frame's own size; reference slots
+      match a simulation of the stream; a second sequence of another size rebuilds the surfaces; after Flush
+      non-key units are skipped and decoding resumes at a key frame; 10-bit, 4:4:4 and monochrome streams
+      report ErrUnsupported before anything reaches the driver; Probe lists av1 decode and no av1 encode.
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    verified_by:
+    - fake-vaapi-av1-test
+    - fake-vaapi-av1-sequence-test
+  struct-layouts:
+    text: The Go mirrors of VASegmentationStructAV1, VAFilmGrainStructAV1, VAWarpedMotionParamsAV1, VADecPictureParameterBufferAV1
+      (1160 bytes) and VASliceParameterBufferAV1 (40 bytes) have the sizes and offsets gcc reports for libva
+      2.22 on x86-64 and arm64, and MFX_CODEC_AV1 / MFX_PROFILE_AV1_MAIN have the header values.
+    scope:
+      milestone: av1-decode-linux-windows
+    verified_by:
+    - av1-layout-test
+  hardware-conformance:
+    text: On a GPU with an AV1 decoder the generic AV1 tests pass per backend - TestDecodeAV1MatchesReference
+      (bit-exact with libdav1d), WithoutTemporalDelimiters, DecodeOrderOption, InvalidData, TestDecodeParameterSetChange/av1
+      and TestFlushResumesAtKeyframe/av1.
+    scope:
+      milestone: av1-decode-linux-windows
+    verified_by:
+    - hardware-av1-decode
+  builds:
+    text: go vet and go test ./... pass on the Mac (including the VideoToolbox AV1 tests), scripts/crossbuild.sh
+      builds six targets, the ebitenvideo and examples modules pass, and the existing container checks of
+      the NVIDIA and VPL bindings still pass.
+    scope:
+      milestone: av1-decode-linux-windows
+    verified_by:
+    - build-check
+verification:
+  frame-header-trace-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+    test: TestFrameHeadersMatchFFmpegTrace
+    evidence:
+      path: internal/av1/header_oracle_test.go
+      locator: TestFrameHeadersMatchFFmpegTrace
+      note: 2026-10-09, linux/arm64 container hwmediacodec-vafake (Debian 13, ffmpeg 7.1.5 with libaom
+        3.12.1, libsvtav1, librav1e, plus aomenc); 32 of 32 configurations pass. On the Mac (ffmpeg 9.0.1,
+        libsvtav1 only) the three SVT-AV1 configurations pass and the rest skip. Elements never seen in
+        any stream - is_translation, film_grain_params_ref_idx, buffer_removal_time, last_frame_idx.
+    basis:
+    - path: internal/av1/header.go
+      input_hash: 3b2cd38f495d0efa24e2aa9a318ab8d47e48954c948fe6905d76122244a51270
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/header_oracle_test.go
+      input_hash: 7fcfe54cd02053cae7e2596b0f29d17cd8b4dd02c3e6c397c04ef16ec7874cd6
+    - path: internal/av1/oracle_test.go
+      input_hash: 33849e8281f5abd6c53224870b72c4f142f72aaaad686a4790cee1b443429117
+    - path: internal/testutil/av1.go
+      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
+    - path: internal/testutil/h264.go
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
+    - path: internal/vaapi/testdata/fakedriver/Dockerfile
+      input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
+  fake-vaapi-av1-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    test: TestFakeVAAPIDecodeAV1, TestFakeVAAPIDecodeAV1Unsupported, TestFakeVAAPIProbe
+    evidence:
+      path: fakevaapi_av1_linux_test.go
+      locator: TestFakeVAAPIDecodeAV1
+      note: 2026-10-09, scripts/vaapi_fake_driver_test.sh on linux/arm64, four driver personalities, exit
+        0; 22 configurations, all parameter buffers equal to those of ffmpeg 7.1.5 -hwaccel vaapi -c:v
+        av1 against the same driver (libva 2.22). The first comparison showed one real difference, which
+        was fixed - the backend rendered into the display surface, ffmpeg renders into current_frame.
+    basis:
+    - path: internal/av1/header.go
+      input_hash: 3b2cd38f495d0efa24e2aa9a318ab8d47e48954c948fe6905d76122244a51270
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/vaapi/av1dec.go
+      input_hash: 36a90c41028038072c2519c14a965d866806e991f102d01120d546cce32b8a68
+    - path: internal/vaapi/av1fill.go
+      input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
+    - path: internal/vaapi/decoder.go
+      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
+    - path: internal/vaapi/backend.go
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
+    - path: internal/vaapi/sys/types_av1.go
+      input_hash: 5811a816e5bd9cd414acbb0937c7cec85b22b96cc4baeeba039ef9b59e80957e
+    - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
+      input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
+    - path: internal/vaapi/testdata/fakedriver/Dockerfile
+      input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
+    - path: fakevaapi_av1_linux_test.go
+      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+    - path: fakevaapi_linux_test.go
+      input_hash: 71bde535c9e1c6b4d050c74550fe5f8582f88e1a26302cec9b18d99b21e88ca7
+    - path: internal/testutil/av1.go
+      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
+    - path: scripts/vaapi_fake_driver_test.sh
+      input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
+  fake-vaapi-av1-short-signaling-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    test: TestFakeVAAPIDecodeAV1ShortSignaling
+    evidence:
+      path: fakevaapi_av1_linux_test.go
+      locator: TestFakeVAAPIDecodeAV1ShortSignaling
+      note: 2026-10-09; SVT-AV1 random-access and low-delay streams rewritten in the test; 48 and 13
+        frames with derived references that differ from the encoder's, all buffers equal to ffmpeg's.
+    basis:
+    - path: internal/av1/header.go
+      input_hash: 3b2cd38f495d0efa24e2aa9a318ab8d47e48954c948fe6905d76122244a51270
+    - path: internal/vaapi/av1dec.go
+      input_hash: 36a90c41028038072c2519c14a965d866806e991f102d01120d546cce32b8a68
+    - path: internal/vaapi/av1fill.go
+      input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
+    - path: fakevaapi_av1_linux_test.go
+      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+    - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
+      input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
+  fake-vaapi-av1-sequence-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+      backend: vaapi
+    test: TestFakeVAAPIDecodeAV1SequenceChange
+    evidence:
+      path: fakevaapi_av1_linux_test.go
+      locator: TestFakeVAAPIDecodeAV1SequenceChange
+      note: 2026-10-09; 320x240 then 160x120, 60 frames, then a seek to the second key frame of the first
+        stream after Flush.
+    basis:
+    - path: internal/vaapi/av1dec.go
+      input_hash: 36a90c41028038072c2519c14a965d866806e991f102d01120d546cce32b8a68
+    - path: internal/vaapi/decoder.go
+      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
+    - path: fakevaapi_av1_linux_test.go
+      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+  av1-layout-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+    test: TestAV1StructLayouts, TestStructLayouts (internal/vpl/sys)
+    evidence:
+      path: internal/vaapi/sys/layout_av1_test.go
+      locator: TestAV1StructLayouts
+      note: 2026-10-09; expectations printed by a C program compiled with gcc against va_dec_av1.h (libva
+        2.22) in linux/arm64 and linux/amd64 containers, identical on both; bit-field positions printed
+        the same way and used in av1fill.go; MFX_CODEC_AV1 = 540104257 and MFX_PROFILE_AV1_MAIN = 1 printed
+        from vpl/mfx.h in the hwmc-vpl container.
+    basis:
+    - path: internal/vaapi/sys/types_av1.go
+      input_hash: 5811a816e5bd9cd414acbb0937c7cec85b22b96cc4baeeba039ef9b59e80957e
+    - path: internal/vaapi/sys/layout_av1_test.go
+      input_hash: 82cd6b1171661b157e4038097f24c6b4b13cd4215da317bed56fcc1de887d1ac
+    - path: internal/vpl/sys/types.go
+      input_hash: f61232720bdf423681638033bf1f609192a23528c4de750e27c84e44effdce3a
+    - path: internal/vpl/sys/layout_test.go
+      input_hash: 38c7290c61dbcc8c896b59c113158909508ab281825c4478a85519931b7d4584
+  hardware-av1-decode:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      milestone: av1-decode-linux-windows
+    test: TestDecodeAV1MatchesReference and the other AV1 tests of decode_av1_test.go and decode_test.go
+    evidence:
+      path: decode_av1_test.go
+      note: Needs a GPU with an AV1 decoder - Linux with VA-API (AMD RX 6000+, Intel Tiger Lake+), NVDEC
+        (RTX 30+) or Intel VPL, or Windows with the AV1 Video Extension. Run go test -count=1 . per backend
+        (HWMEDIACODEC_BACKENDS=vaapi|vpl|nvidia on Linux). Nothing in this slice has run on a GPU.
+  build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-09, Apple M3; go vet ./... and go test ./... ok (VideoToolbox AV1 tests included),
+        crossbuild six targets ok, ebitenvideo and examples modules ok, hwmc-nvlibs and hwmc-vpl container
+        test binaries ok (linux/amd64).
+open_questions:
+  nvdec-display-callback:
+    text: The NVDEC AV1 path assumes that the cuvid parser raises the display callback once per shown
+      frame inside the cuvidParseVideoData call of its temporal unit (ulMaxDisplayDelay 0, CUVID_PKT_ENDOFPICTURE),
+      passes the packet timestamp through, and that mapping the picture applies film grain. None of this
+      is observed.
+    state: open
+    resolution: Run the AV1 tests on an RTX 30 or newer. If frames arrive one unit late the count per Send
+      changes but PTS stay right (they travel through the parser); if CUVID_PKT_ENDOFPICTURE confuses units
+      with hidden frames, drop the flag for AV1.
+  nvdec-frame-size-change:
+    text: NVDEC frames are cropped with the display area of the sequence callback; whether the parser
+      raises a new sequence callback when a frame changes size inside a sequence (reference scaling)
+      is unknown.
+    state: open
+    resolution: Decode an aomenc --resize-mode=2 stream on NVIDIA hardware and compare frame sizes with
+      dav1d.
+  vpl-hidden-frames:
+    text: The VPL decoder is assumed to return MFX_ERR_MORE_DATA after a hidden frame with the rest of
+      the temporal unit unread, which the loop answers by calling again (ffmpeg's qsvdec re-submits the
+      remainder the same way). Not observed.
+    state: open
+    resolution: Run TestDecodeAV1MatchesReference with HWMEDIACODEC_BACKENDS=vpl on Tiger Lake or newer.
+  media-foundation-av1-mft:
+    text: The Microsoft AV1 decoder MFT is assumed to be synchronous and Direct3D 11 aware like the H.264
+      and HEVC ones, to need MF_MT_FRAME_SIZE in the input type, and to take temporal units without temporal
+      delimiters with the sequence header in band. The DXVA profile GUID b8be4ccb-cf53-46ba-8d59-d6b8a6da5d2a
+      is written from memory of dxva.h, not checked against an SDK here.
+    state: open
+    resolution: Run the AV1 tests on Windows with the AV1 Video Extension installed; if the MFT turns
+      out asynchronous the backend reports why in the UnsupportedError (candidate.usable).
+  vaapi-on-hardware:
+    text: The buffers equal ffmpeg's, so a driver sees what it sees from ffmpeg; what remains unobserved
+      is the surface handling around them - surfaces created at the sequence maximum for smaller frames,
+      vaGetImage/vaDeriveImage of a surface that is still a reference, and the surface count (8 slots +
+      6, or 17 + 6 with film grain).
+    state: open
+    resolution: Run HWMEDIACODEC_BACKENDS=vaapi go test -count=1 . on AMD (radeonsi) and Intel (iHD)
+      hardware; film grain output cannot be bit-exact with dav1d unless both apply the same grain, so
+      compare a film-grain stream by PSNR.
+  ten-bit:
+    text: 10-bit AV1 (common for HDR) is refused on Linux and Windows.
+    state: deferred
+    resolution: Deferred until a consumer needs it - P010 surfaces plus a 10-to-8-bit conversion in Go,
+      or a P010 pixel format in the public API.
+  av1-encode:
+    text: The author wants AV1 used wherever the hardware supports it; this slice is decoding only.
+    state: deferred
+    resolution: Next AV1 slice - NVENC AV1 (RTX 40) and VPL AV1 (Arc) first since both write complete
+      temporal units; VA-API AV1 encoding needs a frame header writer.
+facts:
+  implementation:
+    parser: internal/av1/header.go - State (sequence header plus eight RefFrame slots), State.ParseHeader
+      (whole uncompressed_header - frame size with superres and frame_size_with_refs, set_frame_refs, tile
+      info, quantisation, segmentation, delta q/lf, loop filter, CDEF, loop restoration, tx mode, skip mode,
+      global motion with the previous parameters of the primary reference frame and the shear validity
+      check, film grain incl. load from a reference), State.Update (reference frame update, and the reload
+      of a key frame shown by show_existing_frame), Header.ParseTileGroup (tile sizes and offsets). seqhdr.go
+      now keeps the decoder model lengths and every operating point.
+    vaapi: internal/vaapi/av1fill.go (platform neutral) fills the picture parameters and appends tile parameters;
+      av1dec.go walks the OBUs of a unit, drops OBUs outside operating point 0, begins a picture at a
+      frame header, collects tile groups until the last tile, submits (picture parameters, then per tile
+      group one parameter buffer with an element per tile and one data buffer), updates the slots and
+      copies a shown picture at once. sequence/surface pool is reused from H.264/HEVC with maxRefs 8 (17
+      with film grain).
+    nvidia: cuvidCodec maps AV1 to cudaVideoCodec_AV1; sendAV1 gates on the key frame and prepends the stored
+      sequence header OBU; the decode callback only submits, the display callback copies the picture with
+      the timestamp the parser passes through (CUVID_PKT_TIMESTAMP is set for AV1 only).
+    vpl: decodeCodecID adds MFX_CODEC_AV1; Send gates on the key frame like NVDEC; the DecodeFrameAsync
+      loop continues after MFX_ERR_MORE_DATA when the unit is not consumed (AV1 only). Film grain surfaces
+      come from the existing MFX_ERR_MORE_SURFACE handling.
+    mediafoundation: mfCodec maps AV1 to MFVideoFormat_AV1 and the AV1 profile 0 DXVA GUID; configure(width,
+      height) is deferred to the first sequence header for AV1 and sets MF_MT_FRAME_SIZE; sendAV1 strips
+      temporal delimiters and makes one sample per unit.
+    fake_driver: decode_av1 in fake_drv_video.c checks sizes, the two surfaces, reference slots, superres
+      denominator, that tile sizes add up to the coded frame, tile order/offsets/groups, and logs the
+      normalised picture parameters and tile parameters in hex; contexts without render targets (ffmpeg)
+      are accepted; AV1 has a VLD entrypoint only.
+    tests: testutil.GenerateAV1With (any ffmpeg AV1 encoder) and GenerateAV1Aomenc (aomenc via y4m); the
+      fake driver image now installs aom-tools.
+  result:
+    status: delivered 2026-10-09, hardware runs pending
+    environment:
+      host: Apple M3, macOS 26; containers through OrbStack (linux/arm64 native, linux/amd64 emulated)
+      go: go1.27.0
+      oracle: ffmpeg 7.1.5 (Debian 13) with libaom 3.12.1, SVT-AV1, rav1e, aomenc; libva 2.22; libvpl headers
+      date: '2026-10-09'
+  learned:
+  - ffmpeg's VA-API AV1 decoder renders into current_frame (the reference picture) and names the grained
+    picture in current_display_picture; rendering into the display surface is the natural reading of the
+    libva comment and is wrong by that precedent.
+  - A fake VA driver doubles as a differential oracle - run ffmpeg -hwaccel vaapi -c:v av1 against it
+    (LD_PRELOAD shim, /dev/null as the DRM device, a context without render targets) and compare the logged
+    buffers. Everything a header trace cannot show (reference slots, inherited loop filter/segmentation/global
+    motion state, set_frame_refs) is covered that way.
+  - ffmpeg's libaom wrapper has no option for super-resolution, reference scaling or S-frames (aom-params
+    rejects them); aomenc has. No available encoder writes frame_refs_short_signaling, so the test rewrites
+    headers bit by bit; a rewritten header is kept only if it parses to exactly its new length, because
+    skip_mode_present exists only when the derived references allow skip mode.
+  - ffmpeg 7.1's trace prints the coded force_integer_mv bit for intra frames, where the specification
+    (and the value sent to VA-API) is 1.
+  - trace_headers prints dotted names (delta_q_y_dc.delta_coded); the trace parser's name pattern needed
+    the dot.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:vaapi
+- relation: uses_backend
+  to: backend:nvenc-nvdec
+- relation: uses_backend
+  to: backend:intel-vpl
+- relation: uses_backend
+  to: backend:media-foundation
+- relation: follows
+  to: milestone:darwin-av1-decode
+history:
+  accepted-2026-10-09:
+    summary: The author noticed that the README named AV1 for macOS only and asked for AV1 wherever the
+      platform supports it (macOS decode only); asked which slice, chose AV1 decoding on every platform
+      on top of the merged macOS slice.
+  delivered-2026-10-09:
+    summary: Full frame header parser and reference state, VA-API AV1 decoder, AV1 on NVDEC, Intel VPL
+      and Media Foundation, fake driver AV1 support with an ffmpeg differential oracle, README. Verified
+      without hardware; GPU runs pending.

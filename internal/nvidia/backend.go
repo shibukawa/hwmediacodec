@@ -10,9 +10,10 @@
 //
 // NVDEC is a full decoder: the driver's parser handles parameter sets,
 // picture boundaries and reference management, so unlike the VA-API
-// backend no slice-level bookkeeping runs in Go. Frames are returned in
-// decode order; the public API's reorder layer turns them into display
-// order.
+// backend no slice-level bookkeeping runs in Go. H.264 and HEVC frames are
+// returned in decode order; the public API's reorder layer turns them into
+// display order. AV1 frames are taken from the parser's display callback,
+// one per temporal unit, which is presentation order already.
 package nvidia
 
 import (
@@ -32,7 +33,12 @@ type Backend struct{}
 // Name implements codec.Backend.
 func (Backend) Name() string { return Name }
 
-var probeCodecs = []codec.Codec{codec.H264, codec.HEVC}
+// probeCodecs are the codecs with both an NVDEC and an NVENC path here;
+// decodeCodecs adds AV1, which is decoded only.
+var (
+	probeCodecs  = []codec.Codec{codec.H264, codec.HEVC}
+	decodeCodecs = []codec.Codec{codec.H264, codec.HEVC, codec.AV1}
+)
 
 func cuvidCodec(c codec.Codec) (uint32, bool) {
 	switch c {
@@ -40,6 +46,8 @@ func cuvidCodec(c codec.Codec) (uint32, bool) {
 		return sys.CodecH264, true
 	case codec.HEVC:
 		return sys.CodecHEVC, true
+	case codec.AV1:
+		return sys.CodecAV1, true
 	}
 	return 0, false
 }
@@ -80,9 +88,10 @@ func decodeCaps(c codec.Codec) (sys.DecodeCaps, error) {
 	return caps, nil
 }
 
-// Probe implements codec.Backend. It reports NVDEC decode and NVENC encode
-// support for H.264 and HEVC. Without the driver, or without a GPU, it
-// yields (nil, nil).
+// Probe implements codec.Backend. It reports NVDEC decode support for
+// H.264, HEVC and AV1 (GPUs from the RTX 30 series on decode AV1) and NVENC
+// encode support for H.264 and HEVC. Without the driver, or without a GPU,
+// it yields (nil, nil).
 func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	dev, err := openDevice()
 	if err != nil {
@@ -98,9 +107,14 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	var caps []codec.Capability
 	if err := sys.LoadCuvid(); err == nil {
 		err := dev.run(func() error {
-			for _, c := range probeCodecs {
+			for _, c := range decodeCodecs {
 				dc, err := decodeCaps(c)
 				if err != nil {
+					if c == codec.AV1 {
+						// A driver older than the codec rejects the
+						// query itself.
+						continue
+					}
 					return err
 				}
 				if dc.IsSupported != 0 {
@@ -132,7 +146,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.Decoder, error) {
 	ct, ok := cuvidCodec(cfg.Codec)
 	if !ok {
-		return nil, unsupported(cfg.Codec, "only h264 and hevc decoding are implemented on the nvidia backend")
+		return nil, unsupported(cfg.Codec, "only h264, hevc and av1 decoding are implemented on the nvidia backend")
 	}
 	if cfg.OutputFormat != codec.NV12 {
 		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not available on the nvidia backend yet; use NV12")
@@ -156,6 +170,10 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 		caps, err = decodeCaps(cfg.Codec)
 		return err
 	})
+	if err != nil && cfg.Codec == codec.AV1 && !errors.Is(err, codec.ErrUnsupported) {
+		// A driver that predates AV1 fails the capability query.
+		err = unsupported(cfg.Codec, "the NVIDIA driver does not know AV1 ("+err.Error()+")")
+	}
 	if err == nil && caps.IsSupported == 0 {
 		err = unsupported(cfg.Codec, "the GPU ("+dev.name+") has no NVDEC engine for "+cfg.Codec.String()+" 8-bit 4:2:0")
 	}
@@ -172,7 +190,7 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 // NewEncoder implements codec.Backend.
 func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
 	if _, ok := encodeGUID(cfg.Codec); !ok {
-		return nil, unsupportedEncode(cfg.Codec, "only h264 and hevc encoding are implemented on the nvidia backend")
+		return nil, unsupportedEncode(cfg.Codec, "only h264 and hevc encoding are implemented on the nvidia backend (AV1 is decoded only)")
 	}
 	switch cfg.InputFormat {
 	case codec.NV12, codec.RGBA, codec.BGRA:

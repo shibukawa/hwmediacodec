@@ -155,7 +155,7 @@ verification:
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
   container-smoke-test:
     state: passed
     method: integration
@@ -174,9 +174,9 @@ verification:
     - path: backends_linux.go
       input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
   hardware-decode:
@@ -196,9 +196,9 @@ verification:
         min_num_decode_surfaces + 2 as the surface count.'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: d64ad2716a7b85081f02a2216a1c621be1f420d45f3a34f74933cdacf98c43f2
+      input_hash: ce84f432d02efc0f2da7af71d5ab1711cfaa04885d89c748cea8742f977e7880
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: decode_test.go
@@ -222,7 +222,7 @@ verification:
     - path: internal/nvidia/encoder.go
       input_hash: 6853d4aa41505e51a6cc30768b1c77db07ae97edbd74a36f65ad8cf6bf7178b3
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
   cross-build-check:
@@ -256,7 +256,7 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: encode_test.go

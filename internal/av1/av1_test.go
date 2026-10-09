@@ -3,6 +3,7 @@ package av1_test
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec/internal/av1"
@@ -38,8 +39,9 @@ func TestParseSequenceHeaderSVT(t *testing.T) {
 				OrderHintBits: 7, EnableCDEF: true,
 				BitDepth: tc.bitDepth, ColorPrimaries: 2, TransferCharacteristics: 2, MatrixCoefficients: 2,
 				SubsamplingX: 1, SubsamplingY: 1,
+				OperatingPointIdcs: []uint16{0}, DecoderModelPresentForOp: []bool{false},
 			}
-			if *sh != *want {
+			if !reflect.DeepEqual(sh, want) {
 				t.Fatalf("parsed\n%+v\nwant\n%+v", *sh, *want)
 			}
 		})
@@ -152,8 +154,10 @@ func TestParseSequenceHeaderSynthetic(t *testing.T) {
 			EnableSuperres: true, EnableRestoration: true,
 			BitDepth: 12, ColorDescriptionPresent: true, ColorPrimaries: 9, TransferCharacteristics: 16, MatrixCoefficients: 9,
 			FullRange: true, SubsamplingX: 1, SubsamplingY: 0, SeparateUVDeltaQ: true, FilmGrainParamsPresent: true,
+			BufferRemovalTimeLength: 5, FramePresentationTimeLength: 5,
+			OperatingPointIdcs: []uint16{0x123, 0x45}, DecoderModelPresentForOp: []bool{true, false},
 		}
-		if *sh != *want {
+		if !reflect.DeepEqual(sh, want) {
 			t.Fatalf("parsed\n%+v\nwant\n%+v", *sh, *want)
 		}
 	})
@@ -190,9 +194,10 @@ func TestParseSequenceHeaderSynthetic(t *testing.T) {
 			FrameWidthBits: 8, FrameHeightBits: 8, MaxFrameWidth: 100, MaxFrameHeight: 50,
 			EnableIntraEdgeFilter: true, SeqForceScreenContentTools: av1.SelectScreenContentTools, SeqForceIntegerMV: av1.SelectIntegerMV,
 			EnableCDEF: true, BitDepth: 8, ColorDescriptionPresent: true, ColorPrimaries: 1, TransferCharacteristics: 13,
-			FullRange: true,
+			FullRange:          true,
+			OperatingPointIdcs: []uint16{0}, DecoderModelPresentForOp: []bool{false},
 		}
-		if *sh != *want {
+		if !reflect.DeepEqual(sh, want) {
 			t.Fatalf("parsed\n%+v\nwant\n%+v", *sh, *want)
 		}
 	})
@@ -239,8 +244,9 @@ func TestParseSequenceHeaderSynthetic(t *testing.T) {
 			SeqForceScreenContentTools: av1.SelectScreenContentTools, SeqForceIntegerMV: av1.SelectIntegerMV,
 			BitDepth: 8, MonoChrome: true, ColorPrimaries: 2, TransferCharacteristics: 2, MatrixCoefficients: 2,
 			FullRange: true, SubsamplingX: 1, SubsamplingY: 1, FilmGrainParamsPresent: true,
+			OperatingPointIdcs: []uint16{0}, DecoderModelPresentForOp: []bool{false},
 		}
-		if *sh != *want {
+		if !reflect.DeepEqual(sh, want) {
 			t.Fatalf("parsed\n%+v\nwant\n%+v", *sh, *want)
 		}
 	})

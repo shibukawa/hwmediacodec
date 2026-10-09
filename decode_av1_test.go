@@ -171,6 +171,9 @@ func TestDecodeAV1InvalidData(t *testing.T) {
 // bar, a wrong plane layout or an unconverted frame scores far below).
 func TestDecodeAV1TenBit(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.AV1)
+	if b := decodeBackend(t, hwmediacodec.AV1); b != "videotoolbox" {
+		t.Skipf("the %s backend decodes 8-bit AV1 only and reports ErrUnsupported for 10-bit streams", b)
+	}
 	const minPSNR = 45.0
 	path := testutil.GenerateAV1(t, 320, 240, 30, "-pix_fmt", "yuv420p10le")
 	stream := testutil.ReadFile(t, path)
