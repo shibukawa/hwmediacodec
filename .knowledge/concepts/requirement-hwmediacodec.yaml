@@ -54,7 +54,7 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   api/probe:
@@ -114,8 +114,15 @@ capabilities:
     evidence:
       path: internal/videotoolbox/decoder.go
   decode/av1:
-    state: unknown
+    state: partial
     about: capability:hwmediacodec/decode-av1
+    authority: observed
+    evidence:
+      path: decode_av1_test.go
+      note: Verified on darwin/apple-silicon M3 (bit-exact against libdav1d, milestone:darwin-av1-decode).
+        Code complete on linux (VA-API, NVDEC, Intel VPL) and windows (NVDEC, Media Foundation) for 8-bit
+        Main profile in milestone:av1-decode-linux-windows; the VA-API buffers equal ffmpeg's through a fake
+        driver, no GPU run yet.
   encode/h264:
     state: partial
     about: capability:hwmediacodec/encode-h264
@@ -128,7 +135,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   encode/hevc:
@@ -143,7 +150,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   encode/av1:
@@ -321,7 +328,7 @@ verification:
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
     - path: internal/videotoolbox/backend.go
@@ -347,11 +354,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   unsupported-test:
@@ -368,9 +375,9 @@ verification:
         direction and reason
     basis:
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
   cross-build-check:
     state: passed
     method: static
@@ -412,11 +419,11 @@ verification:
     - path: annexb/annexb.go
       input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: decode_test.go
       input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   encode-reference-test:
@@ -443,7 +450,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -474,7 +481,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -504,7 +511,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -806,8 +813,10 @@ facts:
       hardware verification pending) and Intel VPL delivered 2026-10-09 (milestone:linux-intel-vpl, hardware
       verification pending).'
     - Go H.264/HEVC DPB on top of the existing parsers and VA-API backend for Linux AMD (and older Intel).
-    - Then AVCC output, HLS prototype, AV1 where hardware exists, pure-Go NV12<->RGBA fallback when a
-      backend needs it, Tier 2 backends.
+    - 'AV1 decoding delivered 2026-10-09 on every backend (milestone:darwin-av1-decode verified on an M3,
+      milestone:av1-decode-linux-windows pending hardware). AV1 encoding where hardware exists (NVENC RTX
+      40+, VPL Arc, VA-API, vendor MFTs) is the next AV1 slice; 10-bit AV1 on Linux and Windows after that.'
+    - Then AVCC output, HLS prototype, pure-Go NV12<->RGBA fallback when a backend needs it, Tier 2 backends.
     decisions:
       cgo-allowed:
         decision: Decided 2026-10-09 - no cgo; purego on darwin/linux, x/sys/windows on windows.
@@ -945,7 +954,12 @@ facts:
       when the HEVC Video Extensions are installed (unverified); on linux via VA-API for AMD and Intel
       (code complete 2026-10-09, Main 8-bit; parser, reference picture sets and VA buffers verified against
       ffmpeg and x265, the backend run through libva against a fake driver, hardware conformance pending).
-    backend/videotoolbox: decode and encode for H.264/HEVC in NV12/RGBA/BGRA; AV1 pending.
+    decode/av1: implemented on darwin/apple-silicon M3+ (bit-exact against libdav1d; 10-bit converted to
+      8-bit); code complete 2026-10-09 on linux via VA-API (frame header and reference state in Go, buffers
+      equal to ffmpeg's VA-API decoder through the fake driver), NVDEC and Intel VPL, and on windows via NVDEC
+      and Media Foundation (AV1 Video Extension) - 8-bit Main profile, hardware conformance pending everywhere
+      but macOS. AV1 encoding is not implemented on any backend.
+    backend/videotoolbox: decode and encode for H.264/HEVC in NV12/RGBA/BGRA; AV1 decode on M3 and newer.
     api/display-order: implemented in Go for every decode-order backend (VideoToolbox and VA-API); verified
       against ffmpeg frame for frame and against MP4 timestamps without hardware. The reorder tracker uses
       the full H.264 parser (internal/h264) and so also honours memory_management_control_operation 5.

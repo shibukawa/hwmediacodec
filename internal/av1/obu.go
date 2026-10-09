@@ -1,8 +1,13 @@
 // Package av1 parses the parts of an AV1 bitstream that a hardware decoder
 // backend needs in order to describe a stream to the operating system: the
 // OBU framing of a temporal unit (Section 5.3 of the AV1 specification),
-// the sequence header (5.5), the leading fields of a frame header (5.9) and
-// the ISOBMFF AV1CodecConfigurationRecord ("av1C"). It decodes nothing.
+// the sequence header (5.5), the frame header (5.9), the tile group layout
+// (5.11.1) and the ISOBMFF AV1CodecConfigurationRecord ("av1C"). Backends
+// whose decoder parses the stream itself use the leading fields of the
+// frame header only (ParseFrameHeader, ParseTemporalUnit); the VA-API
+// backend, which must describe every frame to the driver, uses the complete
+// header and the reference frame state it is parsed against (State,
+// Header). The package decodes nothing.
 package av1
 
 import (

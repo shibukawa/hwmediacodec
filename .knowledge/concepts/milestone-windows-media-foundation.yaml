@@ -248,10 +248,10 @@ verification:
       input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
     - &mf_backend
       path: internal/mediafoundation/backend.go
-      input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
+      input_hash: 7d1f296ce8e2400ca35f5fb905d31b2f9b9ac423e75bf8845d896f96e887c175
     - &mf_decoder
       path: internal/mediafoundation/decoder.go
-      input_hash: ae11d17155be5a1f185161117e7506cc31bfef03792b6875b8427cbb7c066f24
+      input_hash: 5bfbeeef2100662d00938859248c142ddebee9a978e63e66831bf04706f90262
     - &mf_sys
       path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
@@ -263,7 +263,7 @@ verification:
       input_hash: 8fa889aa62aa62e4a9e31790bac54ea00cf2ac6856a6d66cecaef6f9df837e66
     - &mf_guid
       path: internal/mediafoundation/sys/guid.go
-      input_hash: c6606cfef15d5c23f546718cd90087f1ab926cde25bd57e61291b642f9d70fef
+      input_hash: 941ba5008645e8c4f0479ac30d0820b5992ddf60ec207678811342a99d4d94b8
     - path: internal/mediafoundation/sys/mftenumex_amd64.go
       input_hash: a9b71b9f4c2e17761de291f630e221f84ab13965b627be1a4b1f03b80aaff5be
     - path: internal/mediafoundation/sys/mftenumex_arm64.go

@@ -114,6 +114,7 @@ func fourCC(a, b, c, d byte) uint32 {
 var (
 	CodecAVC  = fourCC('A', 'V', 'C', ' ')
 	CodecHEVC = fourCC('H', 'E', 'V', 'C')
+	CodecAV1  = fourCC('A', 'V', '1', ' ')
 
 	FourCCNV12 = fourCC('N', 'V', '1', '2')
 
@@ -156,6 +157,7 @@ const (
 	ProfileAVCMain                uint16 = 77
 	ProfileAVCHigh                uint16 = 100
 	ProfileHEVCMain               uint16 = 1
+	ProfileAV1Main                uint16 = 1
 
 	// mfxInfoMFX.GopOptFlag, TargetUsage and RateControlMethod.
 	GopClosed           uint16 = 1

@@ -128,7 +128,7 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: convert_test.go
       input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
   videotoolbox-comparison-test:
@@ -169,9 +169,9 @@ verification:
         GPU involved; run 2026-10-10
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 751c4b373ed8f6fc1400e22df3369b1e0eb60baa45f8784906c0ef1641a571bd
+      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
     - path: hwmediacodec.go
-      input_hash: afaa0f42cdaf5d9af3b1eb60c95673048134de0b9c4c793189f9261839454cbb
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
   hardware-run:
     state: not_run
     method: manual
