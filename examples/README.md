@@ -10,6 +10,25 @@ repository the module points at the core with a `replace ../` directive.
 Everything here was written and verified on an Apple Silicon Mac; the same
 code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 
+The programs, run from the `examples` directory:
+
+```sh
+cd examples
+go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
+go run ./thumbnails -every 10s -o thumbs movie.mp4              # keyframe thumbnails
+go run ./record -o capture.mp4 -seconds 10                      # fireworks show to MP4
+go run ./hls -addr :8080                                        # fireworks show over HLS, opens the browser
+go run ./webrtc -addr :8080                                     # fireworks show over WebRTC, opens the browser
+go run ./player                                                 # video player, bundled clip
+go run ./texture                                                # video as a texture (flat, box, shader)
+go run ./heifconv photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
+go run ./heifconv -quality 0.8 picture.png picture.heic         # PNG or JPEG to HEIC
+```
+
+Without arguments, `player` and `texture` play the bundled clip in
+`assets/`. The library-only directories (`assets`, `container`,
+`screencast`, `internal/fireworks`) have no program of their own.
+
 | Directory | What it shows |
 | --- | --- |
 | [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
