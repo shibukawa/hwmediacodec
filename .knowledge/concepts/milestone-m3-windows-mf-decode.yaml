@@ -176,7 +176,7 @@ verification:
       input_hash: 19015bc84b6630ba3a7de46de6e7156881e46d7b43c7f590b91ef0fdcaf21aba
     - &mf_backend
       path: internal/mediafoundation/backend.go
-      input_hash: 36e8c9211e93d092a2a068fc2427c0706f5bb1eb5f3709a9fc4e93fbc647348f
+      input_hash: b6c2e4ea267fc0d7247bd76905d63603a7d6d44294b711f8755b117cb588087e
     - &mf_decoder
       path: internal/mediafoundation/decoder.go
       input_hash: c95bc9b3b09b41a876d87296e3a950dd5dcf8fbabdec5c23b6e2320648fa309f

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,6 +99,18 @@ func GenerateStreamBFrames(t testing.TB, c codec.Codec, width, height, frames, b
 // the SHA-256 of every frame in NV12 layout (Y plane then interleaved CbCr).
 func ReferenceNV12(t testing.TB, path string, c codec.Codec, width, height int) [][32]byte {
 	t.Helper()
+	frames := ReferenceNV12Frames(t, path, c, width, height)
+	sums := make([][32]byte, len(frames))
+	for i, f := range frames {
+		sums[i] = sha256.Sum256(f)
+	}
+	return sums
+}
+
+// ReferenceNV12Frames decodes the stream with ffmpeg's software decoder and
+// returns every frame in NV12 layout, in display order.
+func ReferenceNV12Frames(t testing.TB, path string, c codec.Codec, width, height int) [][]byte {
+	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
 	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
 	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
@@ -109,15 +122,132 @@ func ReferenceNV12(t testing.TB, path string, c codec.Codec, width, height int) 
 	if err != nil {
 		t.Fatalf("ffmpeg reference decode failed: %v\n%s", err, stderr.String())
 	}
-	frameSize := width*height + ((width+1)/2*2)*((height+1)/2)
-	if len(out)%frameSize != 0 {
-		t.Fatalf("reference output %d bytes is not a multiple of frame size %d", len(out), frameSize)
+	return splitNV12(t, out, width, height)
+}
+
+// NV12FrameSize returns the number of bytes of one NV12 frame.
+func NV12FrameSize(width, height int) int {
+	return width*height + ((width+1)/2*2)*((height+1)/2)
+}
+
+func splitNV12(t testing.TB, data []byte, width, height int) [][]byte {
+	t.Helper()
+	frameSize := NV12FrameSize(width, height)
+	if len(data)%frameSize != 0 {
+		t.Fatalf("raw output %d bytes is not a multiple of frame size %d", len(data), frameSize)
 	}
-	sums := make([][32]byte, 0, len(out)/frameSize)
-	for i := 0; i+frameSize <= len(out); i += frameSize {
-		sums = append(sums, sha256.Sum256(out[i:i+frameSize]))
+	frames := make([][]byte, 0, len(data)/frameSize)
+	for i := 0; i+frameSize <= len(data); i += frameSize {
+		frames = append(frames, data[i:i+frameSize])
 	}
-	return sums
+	return frames
+}
+
+// GenerateNV12Frames renders the synthetic test pattern with ffmpeg and
+// returns the raw NV12 frames.
+func GenerateNV12Frames(t testing.TB, width, height, frames int) [][]byte {
+	t.Helper()
+	ffmpeg := RequireFFmpeg(t)
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
+		"-frames:v", fmt.Sprint(frames), "-f", "rawvideo", "-pix_fmt", "nv12", "-")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg generate raw frames failed: %v\n%s", err, stderr.String())
+	}
+	got := splitNV12(t, out, width, height)
+	if len(got) != frames {
+		t.Fatalf("ffmpeg produced %d raw frames, want %d", len(got), frames)
+	}
+	return got
+}
+
+// NV12Frame wraps one raw NV12 frame as a codec.Frame that aliases data.
+func NV12Frame(data []byte, width, height int, pts int64) *codec.Frame {
+	ySize := width * height
+	return &codec.Frame{
+		Width:   width,
+		Height:  height,
+		Format:  codec.NV12,
+		Planes:  [][]byte{data[:ySize], data[ySize:]},
+		Strides: []int{width, (width + 1) / 2 * 2},
+		PTS:     pts,
+	}
+}
+
+// PSNRY returns the peak signal-to-noise ratio of the luma planes of two
+// NV12 frames of the given size, in dB (+Inf for identical planes).
+func PSNRY(a, b []byte, width, height int) float64 {
+	n := width * height
+	var sum float64
+	for i := 0; i < n; i++ {
+		d := float64(a[i]) - float64(b[i])
+		sum += d * d
+	}
+	if sum == 0 {
+		return math.Inf(1)
+	}
+	mse := sum / float64(n)
+	return 10 * math.Log10(255*255/mse)
+}
+
+// FrameInfo is what ffprobe reports about one coded frame.
+type FrameInfo struct {
+	Keyframe bool
+	PictType string // "I", "P" or "B"
+}
+
+// ProbeFrames runs ffprobe over an elementary stream and returns per-frame
+// information in decode order. It skips the test when ffprobe is missing.
+func ProbeFrames(t testing.TB, path string, c codec.Codec) []FrameInfo {
+	t.Helper()
+	ffprobe, err := exec.LookPath("ffprobe")
+	if err != nil {
+		t.Skip("ffprobe not found in PATH")
+	}
+	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
+	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
+		"-f", format, "-i", path, "-select_streams", "v:0",
+		"-show_entries", "frame=key_frame,pict_type", "-of", "csv=p=0")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe failed: %v\n%s", err, stderr.String())
+	}
+	var infos []FrameInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, ",")
+		if len(fields) < 2 {
+			t.Fatalf("unexpected ffprobe line %q", line)
+		}
+		infos = append(infos, FrameInfo{Keyframe: fields[0] == "1", PictType: fields[1]})
+	}
+	return infos
+}
+
+// ProbeProfile returns the profile string ffprobe reports for the stream
+// (for example "High" or "Main").
+func ProbeProfile(t testing.TB, path string, c codec.Codec) string {
+	t.Helper()
+	ffprobe, err := exec.LookPath("ffprobe")
+	if err != nil {
+		t.Skip("ffprobe not found in PATH")
+	}
+	format := map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c]
+	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
+		"-f", format, "-i", path, "-select_streams", "v:0",
+		"-show_entries", "stream=profile", "-of", "csv=p=0")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe failed: %v", err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // ReadFile reads a whole file or fails the test.

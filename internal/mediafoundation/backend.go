@@ -339,3 +339,9 @@ func attachD3D(t *sys.IMFTransform, mgr *sys.IMFDXGIDeviceManager) string {
 	}
 	return ""
 }
+
+// NewEncoder implements codec.Backend. Encoding is not implemented by this
+// backend yet.
+func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
+	return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "encoding is not implemented by the mediafoundation backend yet"}
+}
