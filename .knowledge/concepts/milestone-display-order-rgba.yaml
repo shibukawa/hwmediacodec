@@ -179,14 +179,14 @@ verification:
     test: h264 and hevc package tests (ParseSPS, ParsePPS, slice headers, POC sequences, reorder bound
       table, lsb wrap, CRA handling)
     evidence:
-      path: internal/h264/h264_test.go
+      path: internal/h264/poc_test.go
       locator: TestSliceHeadersAndPOC
       note: parameter sets and slice headers embedded from libx264/libx265 output
     basis:
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
-    - path: internal/h264/h264_test.go
-      input_hash: c25892deb133c635219456abe25c873c773429478443f4ae564ebddced44dbb0
+    - path: internal/h264/poc_test.go
+      input_hash: 6dd185cfb69762d9c4e1b8c489c3a42525168ad0f6e21128c84514c1d204e954
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/hevc/hevc_test.go
