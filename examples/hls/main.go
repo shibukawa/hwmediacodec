@@ -28,8 +28,8 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/net/hls"
 )
 
 type game struct {

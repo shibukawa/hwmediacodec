@@ -92,16 +92,16 @@ verification:
       locator: TestEncodeHEICReadBySips
       note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
     basis:
-    - path: image/heif/encode.go
-      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
-    - path: image/heif/decode.go
-      input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
-    - path: image/heif/transform.go
-      input_hash: 96779a370c24a074175b6907d0887eae22dd55ac5d157aa79d21e615c11c8363
-    - path: image/heif/box.go
-      input_hash: db3aeb6f678435445566b1e6afb3723357bd56883b62efb05ea9b692bd9c59a2
+    - path: internal/imageitem/encode.go
+      input_hash: c198d68d366688c22d164edfd352d692189db9d10e0c3821f957db987ae413e5
+    - path: internal/imageitem/decode.go
+      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+    - path: internal/imageitem/transform.go
+      input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
+    - path: internal/imageitem/box.go
+      input_hash: 230322bb2c15cfab837dd1ee427b5c253e4ce4dba6add5dad2b222ce257d95a6
     - path: image/heif/heif_test.go
-      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
     - path: internal/mediatest/image.go
       input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
   heif-decode-test:
@@ -118,10 +118,10 @@ verification:
       locator: TestDecodeHEICFromSips
       note: run 2026-10-09
     basis:
-    - path: image/heif/decode.go
-      input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
+    - path: internal/imageitem/decode.go
+      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
     - path: image/heif/heif_test.go
-      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
   avif-decode-test:
     state: passed
     method: integration
@@ -136,10 +136,10 @@ verification:
       locator: TestDecodeAVIFFromFFmpeg
       note: ffmpeg 9.0.1 with libsvtav1 writes the AVIF; the M3 AV1 hardware decoder reads it; run 2026-10-09
     basis:
-    - path: image/heif/decode.go
-      input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
+    - path: internal/imageitem/decode.go
+      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
     - path: image/heif/heif_test.go
-      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
   avif-encode-test:
     state: passed
     method: unit
@@ -154,10 +154,10 @@ verification:
       locator: TestEncodeAVIFNeedsAnEncoder
       note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
     basis:
-    - path: image/heif/encode.go
-      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
+    - path: internal/imageitem/encode.go
+      input_hash: c198d68d366688c22d164edfd352d692189db9d10e0c3821f957db987ae413e5
     - path: image/heif/heif_test.go
-      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
 open_questions:
   encoder-odd-sizes:
     text: Should the VideoToolbox encoder (and the Encoder contract) handle odd picture sizes itself, by

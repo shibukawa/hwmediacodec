@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
+	"github.com/shibukawa/hwmediacodec/net/hls"
 )
 
 // withPage serves the player page at / and leaves everything else (the

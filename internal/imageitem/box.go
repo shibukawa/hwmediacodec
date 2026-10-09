@@ -1,23 +1,10 @@
-// Package heif reads and writes HEIF still images (HEIC with HEVC, AVIF
-// with AV1) with the hardware codecs, in the manner of image/jpeg and
-// image/png: Decode and DecodeConfig take an io.Reader, Encode an
-// image.Image, and importing the package registers the formats with the
-// image package, so that image.Decode understands HEIC and AVIF files:
-//
-//	import _ "github.com/shibukawa/hwmediacodec/image/heif"
-//
-//	img, format, err := image.Decode(file) // format is "heic", "avif" or "heif"
-//
-// Decoding needs a hardware HEVC (HEIC) or AV1 (AVIF) decoder on the
-// machine and fails with an error that wraps hwmediacodec.ErrUnsupported
-// without one; DecodeConfig and DecodeInfo only read the file structure
-// and work everywhere.
-//
-// A HEIF file is an ISOBMFF "meta" box describing items (coded pictures,
-// a "grid" that tiles them, their properties: decoder configuration, size,
-// rotation, colour) and an "mdat" holding the coded data. The codec work
-// is one keyframe per item; everything else here is the box plumbing.
-package heif
+// Package imageitem is the ISOBMFF image-item plumbing shared by the
+// image/heif (HEVC) and image/avif (AV1) packages: parsing the "meta" box
+// into items and properties, grids, clean aperture, rotation and
+// mirroring, driving the hardware decoder and encoder one keyframe per
+// item, and writing the file. The two public packages differ only in the
+// codec they accept.
+package imageitem
 
 import (
 	"encoding/binary"
@@ -38,7 +25,7 @@ func parseBoxes(data []byte, base int) ([]box, error) {
 	var out []box
 	for off := 0; off < len(data); {
 		if off+8 > len(data) {
-			return nil, errors.New("heif: truncated box header")
+			return nil, errors.New("truncated box header")
 		}
 		size := int(binary.BigEndian.Uint32(data[off:]))
 		typ := string(data[off+4 : off+8])
@@ -48,13 +35,13 @@ func parseBoxes(data []byte, base int) ([]box, error) {
 			size = len(data) - off
 		case 1:
 			if off+16 > len(data) {
-				return nil, errors.New("heif: truncated large box header")
+				return nil, errors.New("truncated large box header")
 			}
 			size = int(binary.BigEndian.Uint64(data[off+8:]))
 			hdr = 16
 		}
 		if size < hdr || off+size > len(data) {
-			return nil, fmt.Errorf("heif: box %q has size %d beyond the data", typ, size)
+			return nil, fmt.Errorf("box %q has size %d beyond the data", typ, size)
 		}
 		out = append(out, box{typ: typ, data: data[off+hdr : off+size], start: base + off + hdr})
 		off += size
@@ -75,7 +62,7 @@ func find(boxes []box, typ string) (box, bool) {
 // fullBox splits a FullBox payload into version, flags and the rest.
 func fullBox(b box) (version byte, flags uint32, payload []byte, err error) {
 	if len(b.data) < 4 {
-		return 0, 0, nil, fmt.Errorf("heif: box %q too short for a full box", b.typ)
+		return 0, 0, nil, fmt.Errorf("box %q too short for a full box", b.typ)
 	}
 	return b.data[0], binary.BigEndian.Uint32(b.data[:4]) & 0xffffff, b.data[4:], nil
 }
@@ -92,7 +79,7 @@ func (r *reader) need(n int) bool {
 		return false
 	}
 	if r.off+n > len(r.b) {
-		r.err = errors.New("heif: box payload truncated")
+		r.err = errors.New("box payload truncated")
 		return false
 	}
 	return true
@@ -144,7 +131,7 @@ func (r *reader) uint(size int) uint64 {
 	case 8:
 		return r.u64()
 	}
-	r.err = fmt.Errorf("heif: unsupported field size %d", size)
+	r.err = fmt.Errorf("unsupported field size %d", size)
 	return 0
 }
 
@@ -168,7 +155,7 @@ func (r *reader) cstring() string {
 			return s
 		}
 	}
-	r.err = errors.New("heif: unterminated string")
+	r.err = errors.New("unterminated string")
 	return ""
 }
 

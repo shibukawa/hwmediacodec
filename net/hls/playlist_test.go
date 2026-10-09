@@ -11,8 +11,8 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/internal/mediatest"
-	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/net/hls"
 )
 
 // feed runs the access units of an ffmpeg-made file through a Segmenter

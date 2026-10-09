@@ -1,4 +1,4 @@
-package heif
+package imageitem
 
 import (
 	"context"
@@ -7,11 +7,14 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"sync"
 
 	"github.com/Eyevinn/mp4ff/av1"
 	"github.com/Eyevinn/mp4ff/hevc"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	hevcps "github.com/shibukawa/hwmediacodec/internal/hevc"
 )
 
 // Info describes a decoded file.
@@ -48,29 +51,96 @@ type file struct {
 	order   []uint32
 }
 
-func init() {
-	// The major brand follows the box size and "ftyp". Files whose major
-	// brand is the generic mif1/msf1 are reported as "heif".
-	for _, b := range []string{"heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"} {
-		image.RegisterFormat("heic", "????ftyp"+b, Decode, DecodeConfig)
+// name is how a codec's files are called in messages.
+func name(c hwmediacodec.Codec) string {
+	if c == hwmediacodec.AV1 {
+		return "AVIF (AV1)"
 	}
-	for _, b := range []string{"avif", "avis"} {
-		image.RegisterFormat("avif", "????ftyp"+b, Decode, DecodeConfig)
+	return "HEIC (HEVC)"
+}
+
+// wrongCodec is the error for a file whose pictures are coded with the
+// codec of the other package.
+func wrongCodec(got, want hwmediacodec.Codec) error {
+	pkg := "image/heif"
+	if got == hwmediacodec.AV1 {
+		pkg = "image/avif"
 	}
+	return fmt.Errorf("the file is %s, not %s; use github.com/shibukawa/hwmediacodec/%s", name(got), name(want), pkg)
+}
+
+var (
+	registerMu sync.Mutex
+	registered = map[hwmediacodec.Codec]bool{}
+	genericSet bool
+)
+
+// Register is called by the public packages from init: it notes that
+// codec c is linked into the program and registers the generic brands
+// (mif1, msf1), which do not say how the pictures are coded, with the
+// image package once. Files with these brands are decoded when the
+// package for their codec is linked.
+func Register(c hwmediacodec.Codec) {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+	registered[c] = true
+	if genericSet {
+		return
+	}
+	genericSet = true
 	for _, b := range []string{"mif1", "msf1"} {
-		image.RegisterFormat("heif", "????ftyp"+b, Decode, DecodeConfig)
+		image.RegisterFormat("heif", "????ftyp"+b, decodeGeneric, decodeConfigGeneric)
 	}
 }
 
-// Decode reads a HEIC or AVIF file from r and returns its primary image
-// as an *image.RGBA. It is DecodeBytes without options, in the form the
-// image package registers.
-func Decode(r io.Reader) (image.Image, error) {
+func linked(c hwmediacodec.Codec) error {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+	if registered[c] {
+		return nil
+	}
+	pkg := "image/heif"
+	if c == hwmediacodec.AV1 {
+		pkg = "image/avif"
+	}
+	return fmt.Errorf("the file is %s; import github.com/shibukawa/hwmediacodec/%s to decode it", name(c), pkg)
+}
+
+func decodeGeneric(r io.Reader) (image.Image, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	img, _, err := DecodeBytes(data)
+	info, err := DecodeInfo(data, 0)
+	if err != nil {
+		return nil, fmt.Errorf("heif: %w", err)
+	}
+	if err := linked(info.Codec); err != nil {
+		return nil, fmt.Errorf("heif: %w", err)
+	}
+	img, _, err := DecodeBytes(data, info.Codec)
+	if err != nil {
+		return nil, fmt.Errorf("heif: %w", err)
+	}
+	return img, nil
+}
+
+func decodeConfigGeneric(r io.Reader) (image.Config, error) {
+	cfg, err := DecodeConfig(r, 0)
+	if err != nil {
+		return cfg, fmt.Errorf("heif: %w", err)
+	}
+	return cfg, nil
+}
+
+// Decode reads a file from r and returns its primary image; see
+// DecodeBytes for only.
+func Decode(r io.Reader, only hwmediacodec.Codec) (image.Image, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	img, _, err := DecodeBytes(data, only)
 	if err != nil {
 		return nil, err
 	}
@@ -78,30 +148,30 @@ func Decode(r io.Reader) (image.Image, error) {
 }
 
 // DecodeConfig returns the colour model and the dimensions of the image
-// Decode would return (after cropping and rotation) without decoding it,
-// so it needs no hardware codec.
-func DecodeConfig(r io.Reader) (image.Config, error) {
+// Decode would return, without decoding it.
+func DecodeConfig(r io.Reader, only hwmediacodec.Codec) (image.Config, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return image.Config{}, err
 	}
-	info, err := DecodeInfo(data)
+	info, err := DecodeInfo(data, only)
 	if err != nil {
 		return image.Config{}, err
 	}
 	return image.Config{ColorModel: color.RGBAModel, Width: info.Width, Height: info.Height}, nil
 }
 
-// DecodeInfo describes the primary image of a HEIC or AVIF file held in
-// data from the file structure alone: nothing is decoded.
-func DecodeInfo(data []byte) (*Info, error) {
+// DecodeInfo describes the primary image of a file held in data from the
+// file structure alone: nothing is decoded. A non-zero only rejects files
+// coded with another codec.
+func DecodeInfo(data []byte, only hwmediacodec.Codec) (*Info, error) {
 	f, err := parse(data)
 	if err != nil {
 		return nil, err
 	}
 	prim, ok := f.items[f.primary]
 	if !ok {
-		return nil, fmt.Errorf("heif: primary item %d not found", f.primary)
+		return nil, fmt.Errorf("primary item %d not found", f.primary)
 	}
 	info := &Info{Tiles: 1}
 	coded := prim
@@ -109,7 +179,7 @@ func DecodeInfo(data []byte) (*Info, error) {
 	switch prim.typ {
 	case "hvc1", "hev1", "av01":
 		if w, h, ok = prim.ispe(); !ok {
-			return nil, fmt.Errorf("heif: item %d has no ispe property", prim.id)
+			return nil, fmt.Errorf("item %d has no ispe property", prim.id)
 		}
 	case "grid":
 		g, err := f.grid(prim)
@@ -118,7 +188,7 @@ func DecodeInfo(data []byte) (*Info, error) {
 		}
 		w, h, info.Tiles, coded = g.outW, g.outH, len(g.tiles), g.tiles[0]
 	default:
-		return nil, fmt.Errorf("heif: primary item is a %q, which this decoder does not handle", prim.typ)
+		return nil, fmt.Errorf("primary item is a %q, which this decoder does not handle", prim.typ)
 	}
 	switch coded.typ {
 	case "hvc1", "hev1":
@@ -126,7 +196,7 @@ func DecodeInfo(data []byte) (*Info, error) {
 	case "av01":
 		info.Codec = hwmediacodec.AV1
 	default:
-		return nil, fmt.Errorf("heif: grid tiles are %q items, which this decoder does not handle", coded.typ)
+		return nil, fmt.Errorf("grid tiles are %q items, which this decoder does not handle", coded.typ)
 	}
 	for _, p := range prim.props {
 		switch p.typ {
@@ -150,22 +220,31 @@ func DecodeInfo(data []byte) (*Info, error) {
 			}
 		}
 	}
+	if only != 0 && info.Codec != only {
+		return nil, wrongCodec(info.Codec, only)
+	}
 	info.Width, info.Height = w, h
 	return info, nil
 }
 
-// DecodeBytes decodes the primary image of a HEIC or AVIF file held in
-// data. Grid images are decoded tile by tile and stitched; clap, irot and
-// imir are applied. The result is opaque RGBA. The options are passed to
-// the decoder (hwmediacodec.WithSoftwareFallback, for example).
-func DecodeBytes(data []byte, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+// DecodeBytes decodes the primary image of a file held in data. Grid
+// images are decoded tile by tile and stitched; clap, irot and imir are
+// applied. The result is opaque RGBA. A non-zero only rejects files coded
+// with another codec before a decoder is opened. The options are passed
+// to the decoder.
+func DecodeBytes(data []byte, only hwmediacodec.Codec, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+	if only != 0 {
+		if _, err := DecodeInfo(data, only); err != nil {
+			return nil, nil, err
+		}
+	}
 	f, err := parse(data)
 	if err != nil {
 		return nil, nil, err
 	}
 	prim, ok := f.items[f.primary]
 	if !ok {
-		return nil, nil, fmt.Errorf("heif: primary item %d not found", f.primary)
+		return nil, nil, fmt.Errorf("primary item %d not found", f.primary)
 	}
 	info := &Info{Tiles: 1}
 	var img *image.RGBA
@@ -175,7 +254,7 @@ func DecodeBytes(data []byte, opts ...hwmediacodec.DecoderOption) (*image.RGBA, 
 	case "grid":
 		img, info.Codec, info.Tiles, err = f.decodeGrid(prim, opts)
 	default:
-		return nil, nil, fmt.Errorf("heif: primary item is a %q, which this decoder does not handle", prim.typ)
+		return nil, nil, fmt.Errorf("primary item is a %q, which this decoder does not handle", prim.typ)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -213,11 +292,11 @@ func parse(data []byte) (*file, error) {
 	}
 	ftyp, ok := find(top, "ftyp")
 	if !ok || len(ftyp.data) < 8 {
-		return nil, errors.New("heif: no ftyp box")
+		return nil, errors.New("no ftyp box")
 	}
 	meta, ok := find(top, "meta")
 	if !ok {
-		return nil, errors.New("heif: no meta box")
+		return nil, errors.New("no meta box")
 	}
 	_, _, metaPayload, err := fullBox(meta)
 	if err != nil {
@@ -230,7 +309,7 @@ func parse(data []byte) (*file, error) {
 	f := &file{data: data, items: map[uint32]*item{}}
 	if hdlr, ok := find(children, "hdlr"); ok {
 		if _, _, p, err := fullBox(hdlr); err == nil && len(p) >= 8 && string(p[4:8]) != "pict" {
-			return nil, fmt.Errorf("heif: handler is %q, not a picture file", p[4:8])
+			return nil, fmt.Errorf("handler is %q, not a picture file", p[4:8])
 		}
 	}
 	if b, ok := find(children, "pitm"); ok {
@@ -269,7 +348,7 @@ func parse(data []byte) (*file, error) {
 		}
 	}
 	if len(f.items) == 0 {
-		return nil, errors.New("heif: no items")
+		return nil, errors.New("no items")
 	}
 	return f, nil
 }
@@ -319,7 +398,7 @@ func (f *file) parseIinf(b box) error {
 		case 3:
 			id = er.u32()
 		default:
-			return fmt.Errorf("heif: infe version %d is not supported", ev)
+			return fmt.Errorf("infe version %d is not supported", ev)
 		}
 		er.u16() // protection index
 		typ := string(er.bytes(4))
@@ -419,7 +498,7 @@ func (f *file) parseIprp(b box) error {
 	}
 	ipco, ok := find(children, "ipco")
 	if !ok {
-		return errors.New("heif: iprp without ipco")
+		return errors.New("iprp without ipco")
 	}
 	props, err := parseBoxes(ipco.data, 0)
 	if err != nil {
@@ -458,7 +537,7 @@ func (f *file) parseIprp(b box) error {
 					continue
 				}
 				if index > len(props) {
-					return fmt.Errorf("heif: item %d refers to property %d of %d", id, index, len(props))
+					return fmt.Errorf("item %d refers to property %d of %d", id, index, len(props))
 				}
 				pb := props[index-1]
 				it.props = append(it.props, property{typ: pb.typ, data: pb.data, essential: essential})
@@ -477,13 +556,13 @@ func (f *file) payload(it *item) ([]byte, error) {
 	if it.method == 1 {
 		src = f.idat
 	} else if it.method != 0 {
-		return nil, fmt.Errorf("heif: item %d uses construction method %d", it.id, it.method)
+		return nil, fmt.Errorf("item %d uses construction method %d", it.id, it.method)
 	}
 	var out []byte
 	for _, e := range it.extents {
 		off, n := e[0], e[1]
 		if off > uint64(len(src)) || n > uint64(len(src))-off {
-			return nil, fmt.Errorf("heif: item %d extent [%d, %d) is outside the data", it.id, off, off+n)
+			return nil, fmt.Errorf("item %d extent [%d, %d) is outside the data", it.id, off, off+n)
 		}
 		if len(it.extents) == 1 {
 			return src[off : off+n], nil
@@ -524,11 +603,11 @@ func (f *file) packet(it *item) ([]byte, hwmediacodec.Codec, error) {
 	case "hvc1", "hev1":
 		cfg, ok := it.prop("hvcC")
 		if !ok {
-			return nil, 0, fmt.Errorf("heif: item %d has no hvcC", it.id)
+			return nil, 0, fmt.Errorf("item %d has no hvcC", it.id)
 		}
 		rec, err := hevc.DecodeHEVCDecConfRec(cfg)
 		if err != nil {
-			return nil, 0, fmt.Errorf("heif: item %d hvcC: %w", it.id, err)
+			return nil, 0, fmt.Errorf("item %d hvcC: %w", it.id, err)
 		}
 		out := make([]byte, 0, len(data)+256)
 		for _, arr := range rec.NaluArrays {
@@ -545,7 +624,7 @@ func (f *file) packet(it *item) ([]byte, hwmediacodec.Codec, error) {
 			}
 			data = data[n:]
 			if size <= 0 || size > len(data) {
-				return nil, 0, fmt.Errorf("heif: item %d: NAL unit length %d out of range", it.id, size)
+				return nil, 0, fmt.Errorf("item %d: NAL unit length %d out of range", it.id, size)
 			}
 			out = append(out, 0, 0, 0, 1)
 			out = append(out, data[:size]...)
@@ -556,24 +635,24 @@ func (f *file) packet(it *item) ([]byte, hwmediacodec.Codec, error) {
 		if !hasSequenceHeader(data) {
 			cfg, ok := it.prop("av1C")
 			if !ok {
-				return nil, 0, fmt.Errorf("heif: item %d has no av1C", it.id)
+				return nil, 0, fmt.Errorf("item %d has no av1C", it.id)
 			}
 			rec, err := av1.DecodeAV1CodecConfRec(cfg)
 			if err != nil {
-				return nil, 0, fmt.Errorf("heif: item %d av1C: %w", it.id, err)
+				return nil, 0, fmt.Errorf("item %d av1C: %w", it.id, err)
 			}
 			data = append(append([]byte(nil), rec.ConfigOBUs...), data...)
 		}
 		return data, hwmediacodec.AV1, nil
 	}
-	return nil, 0, fmt.Errorf("heif: item %d is a %q, not a coded picture", it.id, it.typ)
+	return nil, 0, fmt.Errorf("item %d is a %q, not a coded picture", it.id, it.typ)
 }
 
 // decodeCoded decodes items of one codec in order and hands each frame to
 // place (or returns the single frame when place is nil).
 func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) error, opts []hwmediacodec.DecoderOption) (*image.RGBA, hwmediacodec.Codec, error) {
 	if len(items) == 0 {
-		return nil, 0, errors.New("heif: nothing to decode")
+		return nil, 0, errors.New("nothing to decode")
 	}
 	first, codec, err := f.packet(items[0])
 	if err != nil {
@@ -583,7 +662,15 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 	// Decode order: the pictures are all keyframes, and this way each one
 	// comes out as soon as it is decoded instead of waiting in the
 	// reorder buffer.
-	all := append([]hwmediacodec.DecoderOption{hwmediacodec.WithOutputFormat(hwmediacodec.RGBA), hwmediacodec.WithDecodeOrder()}, opts...)
+	// The decoder converts to RGB with the colours the bitstream declares.
+	// When the bitstream declares none and the item does, the conversion
+	// is done here from the decoder's NV12 instead.
+	format := hwmediacodec.RGBA
+	colours, convert := f.unsignalledColours(items[0])
+	if convert {
+		format = hwmediacodec.NV12
+	}
+	all := append([]hwmediacodec.DecoderOption{hwmediacodec.WithOutputFormat(format), hwmediacodec.WithDecodeOrder()}, opts...)
 	dec, err := hwmediacodec.NewDecoder(ctx, codec, all...)
 	if err != nil {
 		return nil, 0, err
@@ -601,7 +688,12 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 			if err != nil {
 				return err
 			}
-			img := frameImage(fr)
+			var img *image.RGBA
+			if convert {
+				img = nv12Image(fr, colours)
+			} else {
+				img = frameImage(fr)
+			}
 			fr.Release()
 			if place == nil {
 				single = img
@@ -618,7 +710,7 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 			if pkt, c, err = f.packet(it); err != nil {
 				return nil, 0, err
 			} else if c != codec {
-				return nil, 0, errors.New("heif: tiles use different codecs")
+				return nil, 0, errors.New("tiles use different codecs")
 			}
 		}
 		for {
@@ -630,7 +722,7 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 				continue
 			}
 			if err != nil {
-				return nil, 0, fmt.Errorf("heif: decode item %d: %w", it.id, err)
+				return nil, 0, fmt.Errorf("decode item %d: %w", it.id, err)
 			}
 			break
 		}
@@ -645,7 +737,7 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 		return nil, 0, err
 	}
 	if got != len(items) {
-		return nil, 0, fmt.Errorf("heif: decoded %d pictures for %d items", got, len(items))
+		return nil, 0, fmt.Errorf("decoded %d pictures for %d items", got, len(items))
 	}
 	return single, codec, nil
 }
@@ -665,7 +757,7 @@ func (f *file) grid(grid *item) (*gridLayout, error) {
 	}
 	r := &reader{b: data}
 	if v := r.u8(); v != 0 {
-		return nil, fmt.Errorf("heif: grid version %d", v)
+		return nil, fmt.Errorf("grid version %d", v)
 	}
 	flags := r.u8()
 	g := &gridLayout{}
@@ -679,13 +771,13 @@ func (f *file) grid(grid *item) (*gridLayout, error) {
 		return nil, r.err
 	}
 	if len(grid.dimg) != g.rows*g.cols {
-		return nil, fmt.Errorf("heif: grid of %dx%d references %d tiles", g.cols, g.rows, len(grid.dimg))
+		return nil, fmt.Errorf("grid of %dx%d references %d tiles", g.cols, g.rows, len(grid.dimg))
 	}
 	g.tiles = make([]*item, len(grid.dimg))
 	for i, id := range grid.dimg {
 		t, ok := f.items[id]
 		if !ok {
-			return nil, fmt.Errorf("heif: grid tile %d missing", id)
+			return nil, fmt.Errorf("grid tile %d missing", id)
 		}
 		g.tiles[i] = t
 	}
@@ -706,12 +798,12 @@ func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image
 		if canvas == nil {
 			tileW, tileH = img.Rect.Dx(), img.Rect.Dy()
 			if tileW*cols < outW || tileH*rows < outH {
-				return fmt.Errorf("heif: %dx%d tiles of %dx%d do not cover %dx%d", cols, rows, tileW, tileH, outW, outH)
+				return fmt.Errorf("%dx%d tiles of %dx%d do not cover %dx%d", cols, rows, tileW, tileH, outW, outH)
 			}
 			canvas = image.NewRGBA(image.Rect(0, 0, tileW*cols, tileH*rows))
 		}
 		if img.Rect.Dx() != tileW || img.Rect.Dy() != tileH {
-			return fmt.Errorf("heif: tile %d is %dx%d, others are %dx%d", i, img.Rect.Dx(), img.Rect.Dy(), tileW, tileH)
+			return fmt.Errorf("tile %d is %dx%d, others are %dx%d", i, img.Rect.Dx(), img.Rect.Dy(), tileW, tileH)
 		}
 		x0, y0 := (i%cols)*tileW, (i/cols)*tileH
 		for y := 0; y < tileH; y++ {
@@ -747,10 +839,10 @@ func clapRect(width, height int, data []byte) (image.Rectangle, error) {
 		v[i] = int64(int32(r.u32()))
 	}
 	if r.err != nil {
-		return image.Rectangle{}, fmt.Errorf("heif: clap: %w", r.err)
+		return image.Rectangle{}, fmt.Errorf("clap: %w", r.err)
 	}
 	if v[1] == 0 || v[3] == 0 || v[5] == 0 || v[7] == 0 {
-		return image.Rectangle{}, errors.New("heif: clap with a zero denominator")
+		return image.Rectangle{}, errors.New("clap with a zero denominator")
 	}
 	pw, ph := int64(width), int64(height)
 	// Integer arithmetic on doubled coordinates: left = (pw - w)/2 + off.
@@ -758,7 +850,7 @@ func clapRect(width, height int, data []byte) (image.Rectangle, error) {
 	left := ((pw-w)*v[5] + 2*v[4]) / (2 * v[5]) // (pw-w)/2 + horizOffN/horizOffD
 	top := ((ph-h)*v[7] + 2*v[6]) / (2 * v[7])
 	if w <= 0 || h <= 0 || left < 0 || top < 0 || left+w > pw || top+h > ph {
-		return image.Rectangle{}, fmt.Errorf("heif: clap %dx%d at (%d, %d) does not fit %dx%d", w, h, left, top, pw, ph)
+		return image.Rectangle{}, fmt.Errorf("clap %dx%d at (%d, %d) does not fit %dx%d", w, h, left, top, pw, ph)
 	}
 	return image.Rect(int(left), int(top), int(left+w), int(top+h)), nil
 }
@@ -769,6 +861,114 @@ func frameImage(fr *hwmediacodec.Frame) *image.RGBA {
 	src, stride := fr.Planes[0], fr.Strides[0]
 	for y := 0; y < fr.Height; y++ {
 		copy(img.Pix[y*img.Stride:(y+1)*img.Stride], src[y*stride:y*stride+fr.Width*4])
+	}
+	return img
+}
+
+// nclx is the colour description of a colr property of type nclx
+// (ISO/IEC 23091-2 code points).
+type nclx struct {
+	primaries, transfer, matrix uint16
+	fullRange                   bool
+}
+
+// nclx returns the item's colr property of type nclx. An item may carry a
+// second colr with an ICC profile, which is skipped.
+func (it *item) nclx() (nclx, bool) {
+	for _, p := range it.props {
+		if p.typ != "colr" || len(p.data) < 11 || string(p.data[:4]) != "nclx" {
+			continue
+		}
+		r := &reader{b: p.data[4:]}
+		c := nclx{primaries: r.u16(), transfer: r.u16(), matrix: r.u16()}
+		c.fullRange = r.u8()&0x80 != 0
+		return c, true
+	}
+	return nclx{}, false
+}
+
+// unsignalledColours reports the colours to convert an HEVC item with when
+// its bitstream does not describe them (no video_signal_type in the SPS,
+// as some software encoders write) while its colr property does. A decoder
+// left alone with such a stream assumes video range, which is wrong for
+// the full-range pictures still-image encoders prefer. AV1 always carries
+// its colour configuration in the sequence header.
+func (f *file) unsignalledColours(it *item) (nclx, bool) {
+	if it.typ != "hvc1" && it.typ != "hev1" {
+		return nclx{}, false
+	}
+	c, ok := it.nclx()
+	if !ok {
+		return nclx{}, false
+	}
+	cfg, ok := it.prop("hvcC")
+	if !ok {
+		return nclx{}, false
+	}
+	rec, err := hevc.DecodeHEVCDecConfRec(cfg)
+	if err != nil {
+		return nclx{}, false
+	}
+	for _, arr := range rec.NaluArrays {
+		for _, nal := range arr.Nalus {
+			if annexb.NALUnitType(hwmediacodec.HEVC, nal) != annexb.HEVCNALSPS {
+				continue
+			}
+			sps, err := hevcps.ParseSPS(nal)
+			if err != nil {
+				return nclx{}, false
+			}
+			return c, !(sps.VUIPresent && sps.VUI.VideoSignalTypePresent)
+		}
+	}
+	return nclx{}, false
+}
+
+// nv12Image converts a decoded NV12 frame to RGB with the given matrix
+// and range. Chroma is taken from the nearest sample.
+func nv12Image(fr *hwmediacodec.Frame, c nclx) *image.RGBA {
+	// BT.601, which is also what an unspecified matrix means for stills.
+	kr, kb := 0.299, 0.114
+	switch c.matrix {
+	case 1:
+		kr, kb = 0.2126, 0.0722
+	case 9:
+		kr, kb = 0.2627, 0.0593
+	}
+	kg := 1 - kr - kb
+	yOff, yScale, cScale := 0.0, 1.0, 1.0
+	if !c.fullRange {
+		yOff, yScale, cScale = 16, 255.0/219, 255.0/224
+	}
+	const one = 1 << 16
+	fix := func(v float64) int32 { return int32(v*one + 0.5) }
+	yMul := fix(yScale)
+	crR, cbB := fix(2*(1-kr)*cScale), fix(2*(1-kb)*cScale)
+	cbG, crG := fix(2*kb*(1-kb)/kg*cScale), fix(2*kr*(1-kr)/kg*cScale)
+	clamp := func(v int32) uint8 {
+		v = (v + one/2) >> 16
+		if v < 0 {
+			return 0
+		}
+		if v > 255 {
+			return 255
+		}
+		return uint8(v)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, fr.Width, fr.Height))
+	luma, chroma := fr.Planes[0], fr.Planes[1]
+	for y := 0; y < fr.Height; y++ {
+		lrow := luma[y*fr.Strides[0]:]
+		crow := chroma[(y/2)*fr.Strides[1]:]
+		out := img.Pix[y*img.Stride:]
+		for x := 0; x < fr.Width; x++ {
+			yy := (int32(lrow[x]) - int32(yOff)) * yMul
+			cb, cr := int32(crow[x&^1])-128, int32(crow[x|1])-128
+			out[4*x] = clamp(yy + crR*cr)
+			out[4*x+1] = clamp(yy - cbG*cb - crG*cr)
+			out[4*x+2] = clamp(yy + cbB*cb)
+			out[4*x+3] = 255
+		}
 	}
 	return img
 }

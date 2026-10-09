@@ -1,6 +1,6 @@
 id: milestone:package-layout
 type: milestone
-title: Package layout of the core module - encoding/, mediacontainer/, image/, capture
+title: Package layout of the core module - encoding/, mediacontainer/, image/, net/, capture
 summary: 'With sample code promoted to supported packages, the core module was regrouped by what each
   package is: the root package stays the codec API; encoding/annexb (was annexb) is the H.264/HEVC byte
   stream format; mediacontainer/{mp4,ivf,hls} are the containers (ivf was at the root); image/heif is
@@ -27,6 +27,8 @@ constraints:
   standard-library counterparts where one exists (encoding, image).'
 - 'ebitenvideo and examples remain separate modules because of Ebitengine and pion; both import the new
   paths and, like the other moves, need a core release before their go.mod can require it.'
+- 'HLS is under net/ (net/hls, first placed at mediacontainer/hls): it is an HTTP delivery protocol on
+  top of the mp4 segments, not a container; the author asked for net/hls and net/webrtc.'
 non_goals:
 - Changing any API of annexb or ivf; the move is import paths only.
 acceptance:
@@ -60,8 +62,9 @@ facts:
   layout:
     root: github.com/shibukawa/hwmediacodec - Probe, NewDecoder, NewEncoder
     encoding: encoding/annexb
-    mediacontainer: mediacontainer/mp4, mediacontainer/ivf, mediacontainer/hls
-    image: image/heif
+    mediacontainer: mediacontainer/mp4, mediacontainer/ivf
+    image: image/heif, image/avif
+    net: net/hls
     capture: capture
     separate_modules: ebitenvideo, examples
   result:

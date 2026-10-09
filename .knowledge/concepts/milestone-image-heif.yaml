@@ -1,12 +1,14 @@
 id: milestone:image-heif
 type: milestone
-title: image/heif - HEIC and AVIF as an image format package of the core module
+title: image/heif and image/avif - HEIC and AVIF as image format packages of the core module
 summary: 'The HEIF reader and writer of the samples (examples/heif) moved to the core module as github.com/shibukawa/hwmediacodec/image/heif
   and gained the conventions of the standard image packages: Decode(io.Reader) (image.Image, error), DecodeConfig(io.Reader)
   (image.Config, error), Encode(w, img, *Options) and registration with image.RegisterFormat, so a blank
   import makes image.Decode read HEIC and AVIF. The former Decode(data, opts...) is DecodeBytes; DecodeInfo
   describes a file without decoding.'
 lifecycle: active
+revision_note: 'Split the same day into image/heif (HEVC only) and image/avif (AV1 only) over internal/imageitem;
+  see the split-2026-10-10 history entry. The summary describes the first, combined form.'
 authority: authored
 aliases:
 - heif package
@@ -22,9 +24,19 @@ constraints:
 - 'The author made the image/heif path conditional on the package being usable like a standard image
   format, not only a parser; hence Decode/DecodeConfig/RegisterFormat and the *Options argument of Encode
   (nil means defaults, as jpeg.Encode).'
-- 'Formats are registered by major brand after "????ftyp": heic, heix, hevc, hevx, heim, heis, hevm,
-  hevs as "heic"; avif, avis as "avif"; mif1, msf1 as "heif". The brand does not prove the codec of the
-  primary item; Decode decides from the item type.'
+- 'Formats are registered by major brand after "????ftyp": image/heif registers heic, heix, hevc, hevx,
+  heim, heis, hevm, hevs as "heic"; image/avif registers avif, avis as "avif". The generic mif1 and msf1
+  do not name the codec: internal/imageitem registers them once as "heif" when either package is linked
+  and dispatches by the primary item''s type, answering with an error that names the missing package when
+  the codec''s package is not linked.'
+- 'Each package reads only its codec: heif.Decode of an AVIF file (and the reverse) fails with an error
+  naming the other package, checked from the boxes before a decoder is opened. Info and Options are declared
+  in both packages (no Codec field any more); the shared code is internal/imageitem.'
+- 'Colours: the hardware decoder converts to RGB from what the bitstream declares. An HEVC item whose SPS
+  has no video_signal_type while the item has a colr nclx property (gen2brain/h265 writes full-range BT.601
+  that way) is decoded to NV12 and converted in Go with the nclx matrix and range; before this such files
+  came out with stretched contrast (220 read as 234). Found by letting the hardware decoder read the pure-Go
+  encoder''s files in the imgconv tests.'
 - 'Decode has no context or option parameter (the image package signature): it uses context.Background
   and hardware codecs only. DecodeBytes takes hwmediacodec.DecoderOption values (software fallback).'
 - 'DecodeConfig and DecodeInfo use only the boxes: ispe of the primary item or the grid descriptor,
@@ -75,23 +87,33 @@ verification:
       milestone: image-heif
       platform: darwin
       gpu: apple-silicon
-    test: TestEncodeHEICReadBySips, TestDecodeHEICFromSips, TestDecodeAVIFFromFFmpeg, TestEncodeAVIFNeedsAnEncoder,
-      TestDecodeRejectsGarbage, TestEncodeDefaults, TestDecodeConfigNeedsNoDecoder
+    test: image/heif - TestEncodeHEICReadBySips, TestDecodeHEICFromSips, TestDecodeRejectsGarbage, TestEncodeDefaults,
+      TestDecodeConfigNeedsNoDecoder, TestGenericBrand, TestRejectsAVIF; image/avif - TestDecodeAVIFFromFFmpeg,
+      TestEncodeNeedsAnEncoder, TestDecodeRejectsGarbage, TestGenericBrand, TestRejectsHEIC; internal/imageitem
+      - TestNV12Image, TestItemNCLX
     evidence:
       path: image/heif/heif_test.go
       locator: checkImagePackage
       note: Apple M3, macOS 27, sips and ffmpeg with libsvtav1; run 2026-10-10
     basis:
-    - path: image/heif/decode.go
-      input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
-    - path: image/heif/encode.go
-      input_hash: ffc112226e6ef7d4afbfc0a23469a7c4d286321490e461d06fbce8107fb4b2f8
-    - path: image/heif/box.go
-      input_hash: db3aeb6f678435445566b1e6afb3723357bd56883b62efb05ea9b692bd9c59a2
-    - path: image/heif/transform.go
-      input_hash: 96779a370c24a074175b6907d0887eae22dd55ac5d157aa79d21e615c11c8363
+    - path: internal/imageitem/decode.go
+      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+    - path: internal/imageitem/encode.go
+      input_hash: c198d68d366688c22d164edfd352d692189db9d10e0c3821f957db987ae413e5
+    - path: internal/imageitem/box.go
+      input_hash: 230322bb2c15cfab837dd1ee427b5c253e4ce4dba6add5dad2b222ce257d95a6
+    - path: internal/imageitem/transform.go
+      input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: image/heif/heif_test.go
-      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+    - path: image/heif/heif.go
+      input_hash: ea9c34751fbb4c8c667e3f5277d8dbf725e0956d7c696cdab6daaa301e0b336a
+    - path: image/avif/avif.go
+      input_hash: c772dc06f4d7147bce4b3fd70e389d36bd470d2fb3ba4ec4327a592297b75945
+    - path: image/avif/avif_test.go
+      input_hash: b7c435346d40acfc9c05b4997e5b2bf815dcb901b16de23fa92e21507b169a2a
+    - path: internal/imageitem/colour_test.go
+      input_hash: f220415be385d7b9c81dec51209fb6ca926316834b330cf1ee7292fdbc96eaa9
     - path: internal/mediatest/image.go
       input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
   heifconv-run:
@@ -104,13 +126,13 @@ verification:
       gpu: apple-silicon
     test: heifconv -tile 512 -rotate 90 src.png out.heic; heifconv -info out.heic; heifconv out.heic back.png
     evidence:
-      path: examples/heifconv/main.go
+      path: examples/imgconv/main.go
       locator: run
       note: 2026-10-10 - 1000x700 gradient; -info printed hevc, 700x1000, 4 tile(s), rotation 90; back.png
         is 700x1000
     basis:
-    - path: examples/heifconv/main.go
-      input_hash: e3a857498dd9a0b8b2ed25edd3c6f78636ff61a7a8cf4a99730cbb85bace4e96
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
 open_questions:
   real-phone-photos:
     text: iPhone photos are 10-bit HDR by default on recent models and carry auxiliary items; how far
@@ -118,17 +140,21 @@ open_questions:
     state: open
 facts:
   api:
-    heif: 'import github.com/shibukawa/hwmediacodec/image/heif (blank import registers heic, avif, heif);
-      Decode(io.Reader) (image.Image, error); DecodeConfig(io.Reader) (image.Config, error); DecodeBytes(data,
-      ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error); DecodeInfo(data) (*Info, error); Encode(w,
-      img, *Options{Codec, Quality, TileSize, Rotation, Software}) error; Info{Codec, Width, Height, Tiles,
-      Rotation, Mirror}'
+    heif: 'import github.com/shibukawa/hwmediacodec/image/heif (registers heic) or .../image/avif (registers
+      avif); either also registers the generic heif. Same functions in both: Decode(io.Reader) (image.Image,
+      error); DecodeConfig(io.Reader) (image.Config, error); DecodeBytes(data, ...hwmediacodec.DecoderOption)
+      (*image.RGBA, *Info, error); DecodeInfo(data) (*Info, error); Encode(w, img, *Options{Quality, TileSize,
+      Rotation, Software}) error; Info{Width, Height, Tiles, Rotation, Mirror}'
   result:
     status: delivered 2026-10-10
 history:
   delivered-2026-10-10:
     summary: The author proposed image/heif provided the package offers image-compatible use rather than
       a parser only, then asked for the image compatibility.
+  split-2026-10-10:
+    summary: The author asked for image/avif and image/heif to be separate packages; the code moved to
+      internal/imageitem with a codec filter, and the colr-only colour signalling fix followed from the imgconv
+      fallback tests (milestone:imgconv-fallback).
 relations:
 - relation: implements_part_of
   to: requirement:hwmediacodec

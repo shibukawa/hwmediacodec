@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
+	"github.com/shibukawa/hwmediacodec/net/hls"
 )
 
 // TestPlayerPage checks the sample's own part: the page at / and that

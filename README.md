@@ -17,14 +17,15 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | `.../encoding/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
 | `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets, fMP4 segmenter |
 | `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
-| `.../mediacontainer/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
-| `.../image/heif` | HEIC and AVIF still images, registered with the standard `image` package |
+| `.../image/heif` | HEIC still images (HEVC), registered with the standard `image` package |
+| `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
+| `.../net/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
 | `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
 | `.../ebitenvideo` | Separate module: video playback as an `*ebiten.Image` |
 | `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
 
 The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
-HEIF packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
+image packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
 Ebitengine and pion are only pulled in by the two separate modules.
 
 ## Status
@@ -386,7 +387,7 @@ What the package takes care of:
 
 ## Live HLS
 
-`github.com/shibukawa/hwmediacodec/mediacontainer/hls` serves those
+`github.com/shibukawa/hwmediacodec/net/hls` serves those
 segments as a live HLS stream. A `Playlist` keeps a sliding window of them
 in memory (nothing is written to disk) and is an `http.Handler` for the
 media playlist, the init segment and the media segments:
@@ -456,17 +457,23 @@ rec.Close()                  // flushes the encoder, closes the sink
 
 ## HEIC and AVIF images
 
-`github.com/shibukawa/hwmediacodec/image/heif` reads and writes HEIF still
-images (HEIC with HEVC, AVIF with AV1) with the hardware codecs. It follows
-the conventions of `image/jpeg` and `image/png`, and importing it registers
-the formats with the standard `image` package:
+`github.com/shibukawa/hwmediacodec/image/heif` (HEIC: HEVC pictures) and
+`github.com/shibukawa/hwmediacodec/image/avif` (AVIF: AV1 pictures) read
+and write HEIF still images with the hardware codecs. They follow the
+conventions of `image/jpeg` and `image/png`, and importing one registers
+its format with the standard `image` package:
 
 ```go
-import _ "github.com/shibukawa/hwmediacodec/image/heif"
+import (
+	_ "github.com/shibukawa/hwmediacodec/image/avif"
+	_ "github.com/shibukawa/hwmediacodec/image/heif"
+)
 
 img, format, err := image.Decode(file)         // format: "heic", "avif" or "heif"
 cfg, _, err := image.DecodeConfig(file)        // size after rotation; nothing is decoded
 ```
+
+Both packages have the same functions:
 
 ```go
 img, err := heif.Decode(r)                     // image.Image (an *image.RGBA)
@@ -474,20 +481,35 @@ err = heif.Encode(w, img, nil)                 // HEIC with the encoder's defaul
 err = heif.Encode(w, img, &heif.Options{Quality: 0.8, TileSize: 512, Rotation: 90})
 
 rgba, info, err := heif.DecodeBytes(data, hwmediacodec.WithSoftwareFallback())
-info, err = heif.DecodeInfo(data)              // codec, size, tiles, rotation; no decoder needed
+info, err = heif.DecodeInfo(data)              // size, tiles, rotation; no decoder needed
 ```
 
-Decoding needs a hardware HEVC or AV1 decoder (the error wraps
-`hwmediacodec.ErrUnsupported` on a machine without one); `DecodeConfig` and
-`DecodeInfo` read only the file structure and work everywhere. The result
-is opaque RGBA: alpha planes are neither read nor written, and only 8-bit
-4:2:0 pictures are handled (iPhone HDR photos are 10-bit and out of scope).
+- Each package reads only its own codec and says so when handed the
+  other's file. A file whose major brand is the generic `mif1` does not
+  name its codec: `image.Decode` reports it as `"heif"` and decodes it when
+  the package for its pictures is imported.
+- Decoding needs a hardware HEVC or AV1 decoder and encoding a hardware
+  encoder; the error wraps `hwmediacodec.ErrUnsupported` on a machine
+  without one (no Apple Silicon chip encodes AV1, so `avif.Encode` fails
+  there). The packages have no software codec of their own;
+  `examples/imgconv` shows how to fall back to cgo-free ones.
+  `DecodeConfig` and `DecodeInfo` read only the file structure and work
+  everywhere.
+- The result is opaque RGBA: alpha planes are neither read nor written,
+  and only 8-bit 4:2:0 pictures are handled (iPhone HDR photos are 10-bit
+  and out of scope).
+- Colours: the decoder converts to RGB with what the bitstream declares.
+  An HEVC stream that declares nothing (some software encoders leave the
+  VUI out and describe the colours only in the item's `colr` property) is
+  converted from NV12 in Go with the `colr` matrix and range; otherwise a
+  full-range picture would come out with stretched contrast.
 
 A HEIF file is an ISOBMFF `meta` box of items (coded pictures, a `grid`
 that tiles them) with properties (`hvcC`/`av1C` decoder configuration,
 `ispe` size, `irot`, `imir`, `clap`, `colr`, `pixi`) and an `mdat` with the
-coded data. The package parses and writes that itself (mp4ff only supplies
-the `hvcC`/`av1C` record parsers) and leaves the pictures to the codecs:
+coded data. The two packages share the code that parses and writes it
+(mp4ff only supplies the `hvcC`/`av1C` record parsers) and leave the
+pictures to the codecs:
 
 - **Decode**: for each coded item, `hvcC`'s parameter sets plus the
   length-prefixed NAL units become one Annex-B packet (AV1: the temporal
@@ -505,7 +527,7 @@ the `hvcC`/`av1C` record parsers) and leaves the pictures to the codecs:
   320x202 for 321x203).
 - **AVIF**: decoding works wherever `Probe` lists an AV1 decoder (M3 and
   newer Macs); encoding needs an AV1 encoder, which no Apple Silicon chip
-  has, so `Encode` with `Codec: AV1` returns `ErrUnsupported` there and
+  has, so `avif.Encode` returns `ErrUnsupported` there and
   works unchanged on a platform that gains one.
 
 Tests use macOS ImageIO (`sips`) as the reference for the files this
@@ -527,7 +549,7 @@ of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
 player
 (`examples/player`), video as a texture on a box and in a Kage shader
-(`examples/texture`) and a HEIC/AVIF converter (`examples/heifconv`). The players default to a bundled clip
+(`examples/texture`) and a HEIC/AVIF converter (`examples/imgconv`). The players default to a bundled clip
 (`examples/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
@@ -539,8 +561,8 @@ go run ./hls -addr :8080      # then open http://localhost:8080/
 go run ./webrtc -addr :8080   # same, about 100 ms of latency
 go run ./player               # the bundled clip; space pause, arrows seek
 go run ./texture              # 1 flat, 2 box, 3 shader
-go run ./heifconv photo.heic photo.png
-go run ./heifconv -quality 0.8 picture.png picture.heic
+go run ./imgconv photo.heic photo.png
+go run ./imgconv -quality 0.8 picture.png picture.heic
 ```
 
 ## Ebitengine
@@ -712,9 +734,9 @@ them.
 The `mediacontainer/mp4` tests need only ffmpeg and ffprobe: they compare
 sample tables, presentation times and decoded frame checksums with
 ffprobe's view of the same files and feed ffmpeg-made streams through the
-segmenter, and the `mediacontainer/hls` test lets ffprobe play the served
+segmenter, and the `net/hls` test lets ffprobe play the served
 playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
-hardware encoder and skip otherwise. The `image/heif` tests use macOS
+hardware encoder and skip otherwise. The `image/heif` and `image/avif` tests use macOS
 ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
 
 ```sh

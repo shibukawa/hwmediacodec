@@ -1,4 +1,4 @@
-package heif
+package imageitem
 
 import "image"
 

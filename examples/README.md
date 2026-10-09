@@ -5,8 +5,8 @@ jobs. They live in their own Go module (`github.com/shibukawa/hwmediacodec/examp
 so that the core library does not depend on Ebitengine and pion, which the
 game and streaming samples pull in. The reusable parts are packages of the
 core module: [`mediacontainer/mp4`](../mediacontainer/mp4) and
-[`mediacontainer/hls`](../mediacontainer/hls), [`capture`](../capture) and
-[`image/heif`](../image/heif). Inside the
+[`net/hls`](../net/hls), [`capture`](../capture),
+[`image/heif`](../image/heif) and [`image/avif`](../image/avif). Inside the
 repository the module points at the core with a `replace ../` directive.
 
 Everything here was written and verified on an Apple Silicon Mac; the same
@@ -23,8 +23,8 @@ go run github.com/shibukawa/hwmediacodec/examples/hls@latest -addr :8080        
 go run github.com/shibukawa/hwmediacodec/examples/webrtc@latest -addr :8080                                     # fireworks show over WebRTC, opens the browser
 go run github.com/shibukawa/hwmediacodec/examples/player@latest                                                 # video player, bundled clip
 go run github.com/shibukawa/hwmediacodec/examples/texture@latest                                                # video as a texture (flat, box, shader)
-go run github.com/shibukawa/hwmediacodec/examples/heifconv@latest photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
-go run github.com/shibukawa/hwmediacodec/examples/heifconv@latest -quality 0.8 picture.png picture.heic         # PNG or JPEG to HEIC
+go run github.com/shibukawa/hwmediacodec/examples/imgconv@latest photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
+go run github.com/shibukawa/hwmediacodec/examples/imgconv@latest -quality 0.8 picture.png picture.heic         # PNG or JPEG to HEIC
 ```
 
 Inside a clone, `cd examples` and then `go run ./player` (and so on) runs the
@@ -45,7 +45,7 @@ have no program of their own.
 | [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream in a window of the video's aspect ratio, with pause, seeking and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
-| [`heifconv/`](heifconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` package |
+| [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
 
 ## convert
 
@@ -165,7 +165,7 @@ The fireworks show, encoded with a keyframe interval equal to the segment
 length and `WithLowLatency`, cut by `mp4.Segmenter` into CMAF/fMP4
 segments (init segment with the parameter sets, then one `moof`+`mdat` per
 segment, each starting at a keyframe) and served from memory by
-`hls.Playlist` (`mediacontainer/hls` in the core module, a sliding-window
+`hls.Playlist` (`net/hls` in the core module, a sliding-window
 playlist with `#EXT-X-MAP` and `#EXT-X-MEDIA-SEQUENCE`). The sample itself
 only adds the player page at `/`, which plays natively in Safari and
 through hls.js (MSE) elsewhere;
@@ -263,21 +263,44 @@ sample builder, compared NAL unit by NAL unit with what was sent, and
 decoded by ffmpeg to the source's frame checksums; a PLI from the viewer
 must reach the keyframe callback.
 
-## heifconv
+## imgconv
 
 ```sh
 cd examples
-go run ./heifconv photo.heic photo.png              # iPhone photos: HEVC tiles in a grid, irot
-go run ./heifconv -quality 0.8 picture.png picture.heic
-go run ./heifconv -tile 512 -rotate 90 picture.jpg picture.heic
-go run ./heifconv picture.avif picture.png          # AV1 decode (M3 and newer)
-go run ./heifconv -info photo.heic                  # file structure only, no decoder
+go run ./imgconv photo.heic photo.png              # iPhone photos: HEVC tiles in a grid, irot
+go run ./imgconv -quality 0.8 picture.png picture.heic
+go run ./imgconv -tile 512 -rotate 90 picture.jpg picture.heic
+go run ./imgconv picture.png picture.avif          # AV1: hardware where there is an encoder, else the fallback
+go run ./imgconv picture.avif picture.png
+go run ./imgconv -engine go picture.png picture.heic   # force the cgo-free codecs
+go run ./imgconv -info photo.heic                  # file structure only, no decoder
 ```
 
-A converter between HEIC/AVIF and PNG/JPEG on top of the core module's
-[`image/heif`](../image/heif) package (see the main README): `DecodeBytes`
-with the software-fallback option for input, `Encode` with tiles and
-rotation for output, `DecodeInfo` for `-info`.
+A converter between HEIC/AVIF and PNG/JPEG. The hardware codecs do the
+work through the core module's [`image/heif`](../image/heif) and
+[`image/avif`](../image/avif) packages (see the main README). Those
+packages return an error that wraps `hwmediacodec.ErrUnsupported` on a
+machine without a hardware codec for the format, and the sample shows what
+to do with it: `-engine auto` (the default) then switches to a codec that
+needs neither hardware nor cgo and says so on standard error.
+
+| Format | Fallback | What it is |
+| --- | --- | --- |
+| HEIC | [`github.com/gen2brain/h265`](https://github.com/gen2brain/h265) | An HEVC and HEIC codec written in Go (decoding and intra encoding) |
+| AVIF | [`github.com/gen2brain/avif`](https://github.com/gen2brain/avif) | libavif with dav1d and libaom compiled to WebAssembly, run by wazero; no cgo, but not Go code |
+
+- On an Apple Silicon Mac the fallback is what writes AVIF, since no chip
+  there has an AV1 encoder; reading AVIF and both directions of HEIC stay
+  on the hardware. `-engine hardware` and `-engine go` force one side.
+- Nothing reaches the output file until one encoder has succeeded.
+- The fallback encoders store no rotation, so `-rotate` turns the pixels
+  instead of writing `irot`; viewers show the same picture. `-tile` is
+  passed to the HEIC fallback and ignored by the AVIF one.
+- The AVIF fallback is told to write 4:2:0, which hardware AV1 decoders
+  read (its default 4:4:4 is refused by VideoToolbox, for one).
+- The files cross over: the tests let the hardware decoders read what the
+  fallback encoders wrote and the fallback HEIC decoder read what the
+  hardware encoder wrote, a rotated grid included.
 
 ## Testing
 
@@ -291,7 +314,9 @@ ffmpeg-made stream through the WebRTC track.
 The convert and thumbnails tests also need a hardware codec and skip
 otherwise; they check codec, frame count, PSNR against the source, copied
 audio and identical presentation times. (The MP4, HLS and HEIF tests moved
-to the core module with their packages.) The
+to the core module with their packages.) The imgconv tests run the fallback
+codecs everywhere and compare them with the hardware ones where the machine
+has them. The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
 test and the player opens the bundled clip through a seek; the rendering
 was checked by recording the window.

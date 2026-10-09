@@ -1,0 +1,125 @@
+id: milestone:imgconv-fallback
+type: milestone
+title: imgconv sample - HEIC/AVIF conversion that falls back to cgo-free codecs without hardware
+summary: 'The heifconv sample was renamed imgconv and now shows what to do when image/heif or image/avif
+  answer ErrUnsupported: with -engine auto it switches to github.com/gen2brain/h265 (an HEVC and HEIC codec
+  written in Go) for HEIC and github.com/gen2brain/avif (libavif with dav1d and libaom compiled to WebAssembly,
+  run by wazero) for AVIF. On Apple Silicon this is what writes AVIF, since no chip there encodes AV1. The
+  fallback lives in the sample; the core module does not depend on these libraries.'
+lifecycle: active
+authority: authored
+aliases:
+- imgconv
+- heifconv
+- pure Go fallback
+- ソフトウェアフォールバック
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: imgconv-fallback
+constraints:
+- 'The author asked for the fallback in the sample converter, not in the library: image/heif and image/avif
+  stay hardware-only and the examples module takes the new dependencies (gen2brain/avif v0.6.0 with wazero
+  v1.12.0, gen2brain/h265 v0.2.3).'
+- 'The author asked for pure-Go codecs. gen2brain/h265 is Go code; no AV1 encoder or decoder written
+  in Go was found, so the AVIF fallback is WebAssembly run by wazero: cgo-free, CGO_ENABLED=0 builds
+  work, but it is not Go source. The README and the program''s messages say so.'
+- 'Fallback only on errors.Is(err, hwmediacodec.ErrUnsupported), which also covers a hardware decoder
+  that exists but refuses the stream (VideoToolbox and 4:4:4 AV1). Other errors are reported, not hidden.
+  -engine hardware and -engine go force one side; who did the work is printed on standard error.'
+- 'The hardware path encodes into memory, so nothing reaches the output when the fallback takes over, and
+  a failed conversion leaves no file.'
+- 'The fallback encoders store no irot: -rotate turns the pixels (same displayed picture). The AVIF fallback
+  is told to write 4:2:0 because its default 4:4:4 (seq_profile 1) is refused by hardware decoders.'
+- 'Both fallback libraries also register heic/avif with the image package when imported; the sample therefore
+  calls the packages directly for HEIF input instead of image.Decode.'
+non_goals:
+- A software fallback inside image/heif and image/avif.
+- A fallback for the video converter (examples/convert).
+acceptance:
+  fallback-round-trip:
+    text: With -engine go both formats encode and decode within 32 dB (4x4-block PSNR) of the source, and
+      where the machine has a hardware decoder it reads the fallback encoders' files to the same quality.
+    scope:
+      milestone: imgconv-fallback
+    verified_by:
+    - imgconv-test
+  auto-choice:
+    text: -engine auto uses the hardware for every format and direction Probe lists and the fallback otherwise;
+      forcing the hardware where there is none is ErrUnsupported with nothing written.
+    scope:
+      milestone: imgconv-fallback
+    verified_by:
+    - imgconv-test
+  cross-read:
+    text: The fallback HEIC decoder reads the hardware encoder's files, a rotated 128-pixel grid included,
+      with the same size and rotation direction.
+    scope:
+      milestone: imgconv-fallback
+    verified_by:
+    - imgconv-test
+  command:
+    text: On the M3, imgconv writes a 1000x700 PNG as AVIF through the fallback, reads it back with the
+      hardware decoder, writes and reads a rotated HEIC with -engine go, and -engine hardware for AVIF output
+      fails without leaving a file.
+    scope:
+      milestone: imgconv-fallback
+    verified_by:
+    - imgconv-run
+verification:
+  imgconv-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestFallbackRoundTrip, TestAutoPrefersHardware, TestFallbackReadsHardwareFiles, TestFallbackBakesRotation,
+      TestFormatOf
+    evidence:
+      path: examples/imgconv/main_test.go
+      locator: TestFallbackRoundTrip
+      note: Apple M3, macOS 27; run 2026-10-10. Before the colr fix the hardware decode of the pure-Go HEIC
+        was 31.5 dB; before forcing 4:2:0 VideoToolbox refused the fallback AVIF.
+    basis:
+    - path: examples/imgconv/codec.go
+      input_hash: fe2c50d893aac20b4afbd963b2355b6977ebb267cd39286a2e3e864fe62b99ac
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
+    - path: examples/imgconv/main_test.go
+      input_hash: 8e60a1cf79bfff2815896d98c96eee856c88ce1bd96467468c7d63011f0e0cd8
+    - path: internal/imageitem/decode.go
+      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+  imgconv-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    test: imgconv src.png auto.avif; imgconv auto.avif back.png; imgconv -engine go -rotate 90 src.png go.heic;
+      imgconv go.heic back.png; imgconv -engine hardware src.png hw.avif
+    evidence:
+      path: examples/imgconv/main.go
+      locator: run
+      note: 2026-10-10 - auto.avif 4491 bytes written by the fallback and described as avif 1000x700; go.heic
+        described as heic 700x1000; both read back; the forced hardware AVIF encode failed with ErrUnsupported
+        and left no file
+    basis:
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
+facts:
+  flags: '-quality -tile -rotate -info -engine auto|hardware|go -software -jpeg-quality'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author asked for the sample converter to use pure-Go encoders and decoders when there is
+      no hardware codec, and for the sample to be called imgconv.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:image-heif

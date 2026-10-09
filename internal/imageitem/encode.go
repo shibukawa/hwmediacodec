@@ -1,4 +1,4 @@
-package heif
+package imageitem
 
 import (
 	"bytes"
@@ -40,27 +40,23 @@ type codedItem struct {
 	height int
 }
 
-// Encode writes img as a HEIF file: HEIC unless the options select AV1.
-// A nil *Options means the defaults, as with jpeg.Encode. The alpha
-// channel is not stored.
-func Encode(w io.Writer, img image.Image, opts *Options) error {
-	var o Options
-	if opts != nil {
-		o = *opts
-	}
+// Encode writes img as a HEIC (Codec HEVC, the default) or AVIF (Codec
+// AV1) file. The alpha channel is not stored. Nothing is written to w
+// unless encoding succeeded.
+func Encode(w io.Writer, img image.Image, o Options) error {
 	if o.Codec == 0 {
 		o.Codec = hwmediacodec.HEVC
 	}
 	if o.Codec != hwmediacodec.HEVC && o.Codec != hwmediacodec.AV1 {
-		return fmt.Errorf("heif: cannot write %s pictures", o.Codec)
+		return fmt.Errorf("cannot write %s pictures", o.Codec)
 	}
 	if o.Rotation%90 != 0 {
-		return fmt.Errorf("heif: rotation must be a multiple of 90, got %d", o.Rotation)
+		return fmt.Errorf("rotation must be a multiple of 90, got %d", o.Rotation)
 	}
 	rgba := toRGBA(img)
 	width, height := rgba.Rect.Dx(), rgba.Rect.Dy()
 	if width == 0 || height == 0 {
-		return errors.New("heif: empty image")
+		return errors.New("empty image")
 	}
 	// The hardware encoders work on 4:2:0 pictures with even dimensions
 	// (VideoToolbox silently rounds an odd request down), so odd pictures
@@ -171,12 +167,12 @@ func encodeTiles(tiles []*image.RGBA, o Options) ([]codedItem, error) {
 		return nil, err
 	}
 	if len(packets) != len(tiles) {
-		return nil, fmt.Errorf("heif: encoder produced %d pictures for %d tiles", len(packets), len(tiles))
+		return nil, fmt.Errorf("encoder produced %d pictures for %d tiles", len(packets), len(tiles))
 	}
 	out := make([]codedItem, len(packets))
 	for i, p := range packets {
 		if !p.Keyframe {
-			return nil, fmt.Errorf("heif: picture %d is not a keyframe", i)
+			return nil, fmt.Errorf("picture %d is not a keyframe", i)
 		}
 		var err error
 		switch o.Codec {
@@ -215,7 +211,7 @@ func hevcItem(au []byte) (codedItem, error) {
 		}
 	}
 	if len(vps) == 0 || len(sps) == 0 || len(pps) == 0 {
-		return codedItem{}, errors.New("heif: the encoded picture carries no VPS/SPS/PPS")
+		return codedItem{}, errors.New("the encoded picture carries no VPS/SPS/PPS")
 	}
 	hvcC, err := mp4.CreateHvcC(vps, sps, pps, true, true, true, true)
 	if err != nil {
@@ -242,7 +238,7 @@ func av1Item(tu []byte) (codedItem, error) {
 			off++
 		}
 		if !hasSize {
-			return codedItem{}, errors.New("heif: AV1 OBU without a size field")
+			return codedItem{}, errors.New("AV1 OBU without a size field")
 		}
 		size, n := 0, 0
 		for n < 8 && off+n < len(tu) {
@@ -255,13 +251,13 @@ func av1Item(tu []byte) (codedItem, error) {
 		}
 		off += n
 		if off+size > len(tu) {
-			return codedItem{}, errors.New("heif: truncated AV1 OBU")
+			return codedItem{}, errors.New("truncated AV1 OBU")
 		}
 		if typ == 1 {
 			seqHdr = tu[start : off+size]
 			sh, err := av1.ParseSequenceHeader(tu[off : off+size])
 			if err != nil {
-				return codedItem{}, fmt.Errorf("heif: AV1 sequence header: %w", err)
+				return codedItem{}, fmt.Errorf("AV1 sequence header: %w", err)
 			}
 			rec := av1.CodecConfRecFromSequenceHeader(sh, seqHdr)
 			var buf bytes.Buffer
@@ -272,7 +268,7 @@ func av1Item(tu []byte) (codedItem, error) {
 		}
 		off += size
 	}
-	return codedItem{}, errors.New("heif: the encoded AV1 picture carries no sequence header")
+	return codedItem{}, errors.New("the encoded AV1 picture carries no sequence header")
 }
 
 // writeFile lays out ftyp, meta and mdat. Item IDs: tiles 1..n, the grid

@@ -8,6 +8,7 @@ import (
 	"image/draw"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
@@ -124,17 +125,12 @@ func checkImagePackage(t *testing.T, data []byte, want *image.RGBA, wantInfo *he
 	if *info != *wantInfo {
 		t.Errorf("DecodeInfo %+v, DecodeBytes reported %+v", *info, *wantInfo)
 	}
-	wantFormat := "heic"
-	if wantInfo.Codec == hwmediacodec.AV1 {
-		wantFormat = "avif"
-	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("image.DecodeConfig: %v", err)
 	}
-	// A file whose major brand is the generic mif1 is reported as "heif".
-	if format != wantFormat && format != "heif" {
-		t.Errorf("image.DecodeConfig format %q, want %q", format, wantFormat)
+	if format != "heic" {
+		t.Errorf("image.DecodeConfig format %q, want heic", format)
 	}
 	if cfg.Width != want.Rect.Dx() || cfg.Height != want.Rect.Dy() || cfg.ColorModel != color.RGBAModel {
 		t.Errorf("image.DecodeConfig %dx%d, decoded %v", cfg.Width, cfg.Height, want.Rect.Size())
@@ -206,8 +202,8 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 			if tc.o.TileSize > 0 {
 				wantTiles = ((tc.w + tc.o.TileSize - 1) / tc.o.TileSize) * ((tc.h + tc.o.TileSize - 1) / tc.o.TileSize)
 			}
-			if info.Codec != hwmediacodec.HEVC || info.Tiles != wantTiles || info.Rotation != tc.o.Rotation%360 {
-				t.Errorf("info %+v, want HEVC, %d tiles, rotation %d", info, wantTiles, tc.o.Rotation)
+			if info.Tiles != wantTiles || info.Rotation != tc.o.Rotation%360 {
+				t.Errorf("info %+v, want %d tiles, rotation %d", info, wantTiles, tc.o.Rotation)
 			}
 			// ffmpeg reads single pictures too and, unlike ImageIO, applies
 			// irot (it becomes a display matrix that autorotate honours),
@@ -242,7 +238,7 @@ func TestDecodeHEICFromSips(t *testing.T) {
 	mediatest.Sips(t, srcPNG, heic, "heic")
 
 	got, info := decodeFile(t, heic)
-	if info.Codec != hwmediacodec.HEVC || got.Bounds().Dx() != 800 || got.Bounds().Dy() != 600 {
+	if info.Tiles < 1 || got.Bounds().Dx() != 800 || got.Bounds().Dy() != 600 {
 		t.Fatalf("decoded %v %+v", got.Bounds(), info)
 	}
 	// Compare with ImageIO's own decode of its file, which isolates our
@@ -254,47 +250,6 @@ func TestDecodeHEICFromSips(t *testing.T) {
 	}
 	if p := mediatest.BlockPSNR(got, src, 4); p < 35 {
 		t.Errorf("%.1f dB from the source, want at least 35", p)
-	}
-}
-
-func TestDecodeAVIFFromFFmpeg(t *testing.T) {
-	mediatest.RequireFFmpeg(t)
-	mediatest.RequireHardware(t, hwmediacodec.AV1, hwmediacodec.Decode)
-	if !mediatest.HasEncoder(t, "libsvtav1") {
-		t.Skip("ffmpeg has no libsvtav1")
-	}
-	dir := t.TempDir()
-	src := testImage(640, 480)
-	srcPNG := filepath.Join(dir, "src.png")
-	mediatest.SavePNG(t, srcPNG, src)
-	avif := mediatest.FFmpegImage(t, srcPNG, filepath.Join(dir, "ffmpeg.avif"), "-c:v", "libsvtav1", "-pix_fmt", "yuv420p", "-f", "avif")
-
-	got, info := decodeFile(t, avif)
-	if info.Codec != hwmediacodec.AV1 || info.Tiles != 1 || got.Bounds().Dx() != 640 || got.Bounds().Dy() != 480 {
-		t.Fatalf("decoded %v %+v", got.Bounds(), info)
-	}
-	ref := mediatest.LoadPNG(t, mediatest.FFmpegImage(t, avif, filepath.Join(dir, "ffmpeg_dec.png")))
-	if p := mediatest.BlockPSNR(got, ref, 4); p < 40 {
-		t.Errorf("%.1f dB from ffmpeg's decode, want at least 40", p)
-	}
-	if p := mediatest.BlockPSNR(got, src, 4); p < 30 {
-		t.Errorf("%.1f dB from the source, want at least 30", p)
-	}
-}
-
-func TestEncodeAVIFNeedsAnEncoder(t *testing.T) {
-	var buf bytes.Buffer
-	err := heif.Encode(&buf, testImage(64, 64), &heif.Options{Codec: hwmediacodec.AV1})
-	if err == nil {
-		// A platform with a hardware AV1 encoder: the file must round-trip.
-		img, info, derr := heif.DecodeBytes(buf.Bytes())
-		if derr != nil || info.Codec != hwmediacodec.AV1 || img.Bounds().Dx() != 64 {
-			t.Fatalf("AVIF round trip: %v %+v", derr, info)
-		}
-		return
-	}
-	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
-		t.Fatalf("want ErrUnsupported without an AV1 encoder, got %v", err)
 	}
 }
 
@@ -351,8 +306,79 @@ func TestDecodeConfigNeedsNoDecoder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := heif.Info{Codec: hwmediacodec.HEVC, Width: 300, Height: 500, Tiles: 12, Rotation: 90}
+	want := heif.Info{Width: 300, Height: 500, Tiles: 12, Rotation: 90}
 	if *info != want {
 		t.Errorf("DecodeInfo %+v, want %+v", *info, want)
 	}
 }
+
+// TestGenericBrand rewrites the major brand of a HEIC file to mif1, which
+// does not name the codec: the image package then reports "heif" and the
+// picture is decoded all the same.
+func TestGenericBrand(t *testing.T) {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	var buf bytes.Buffer
+	if err := heif.Encode(&buf, testImage(320, 240), nil); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	want, _, err := heif.DecodeBytes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy(data[8:12], "mif1")
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || format != "heif" || cfg.Width != 320 || cfg.Height != 240 {
+		t.Fatalf("image.DecodeConfig: %q %dx%d %v", format, cfg.Width, cfg.Height, err)
+	}
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil || format != "heif" {
+		t.Fatalf("image.Decode: %q %v", format, err)
+	}
+	if rgba, ok := img.(*image.RGBA); !ok || !bytes.Equal(rgba.Pix, want.Pix) {
+		t.Errorf("the mif1 file decodes to %T, which differs from the heic one", img)
+	}
+}
+
+// TestRejectsAVIF feeds an AVIF file to this package, which only reads
+// HEVC pictures, and to image.Decode in a program that does not link
+// image/avif: both say where AVIF is handled.
+func TestRejectsAVIF(t *testing.T) {
+	mediatest.RequireFFmpeg(t)
+	if !mediatest.HasEncoder(t, "libsvtav1") {
+		t.Skip("ffmpeg has no libsvtav1")
+	}
+	dir := t.TempDir()
+	srcPNG := filepath.Join(dir, "src.png")
+	mediatest.SavePNG(t, srcPNG, testImage(320, 240))
+	path := mediatest.FFmpegImage(t, srcPNG, filepath.Join(dir, "ffmpeg.avif"), "-c:v", "libsvtav1", "-pix_fmt", "yuv420p", "-f", "avif")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, err := range map[string]error{
+		"DecodeInfo":   second(heif.DecodeInfo(data)),
+		"DecodeConfig": second(heif.DecodeConfig(bytes.NewReader(data))),
+		"Decode":       second(heif.Decode(bytes.NewReader(data))),
+	} {
+		if err == nil || !strings.Contains(err.Error(), "image/avif") {
+			t.Errorf("%s of an AVIF file: %v, want an error naming image/avif", name, err)
+		}
+	}
+	// With its own brand nothing in this test binary claims the file.
+	if _, _, err := image.Decode(bytes.NewReader(data)); !errors.Is(err, image.ErrFormat) {
+		t.Errorf("image.Decode of an avif-branded file: %v, want image.ErrFormat", err)
+	}
+	// As mif1 the generic entry takes it and reports the missing package.
+	copy(data[8:12], "mif1")
+	if _, _, err := image.Decode(bytes.NewReader(data)); err == nil || !strings.Contains(err.Error(), "image/avif") {
+		t.Errorf("image.Decode of a mif1 file with AV1 pictures: %v, want an error naming image/avif", err)
+	}
+	// The structure is readable without the codec's package.
+	if cfg, format, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || format != "heif" || cfg.Width != 320 {
+		t.Errorf("image.DecodeConfig of the mif1 file: %q %dx%d %v", format, cfg.Width, cfg.Height, err)
+	}
+}
+
+func second[T any](_ T, err error) error { return err }
