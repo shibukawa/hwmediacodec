@@ -512,7 +512,7 @@ verification:
       note: hardware-free; see milestone:display-order-rgba for the basis and details
     basis:
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/reorder_test.go
