@@ -113,9 +113,9 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/videotoolbox/decoder.go
@@ -145,9 +145,9 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: ebc6de94da60bdf7ab88b56352b41f87a84c75b22d2bf814abf63e85f94e3ebf
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
       input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
     - path: internal/reorder/reorder_test.go
@@ -183,8 +183,8 @@ verification:
       locator: TestSliceHeadersAndPOC
       note: parameter sets and slice headers embedded from libx264/libx265 output
     basis:
-    - path: internal/h264/h264.go
-      input_hash: b02a7a52132ff28ae12718eb9b14b28bf43180351e5d743e15410d8d830c53ca
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/h264/h264_test.go
       input_hash: c25892deb133c635219456abe25c873c773429478443f4ae564ebddced44dbb0
     - path: internal/hevc/hevc.go
