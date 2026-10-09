@@ -195,7 +195,8 @@ facts:
       GetVideoParam when a keyframe lacks them, DTS = input PTS of the k-th frame minus
       (GopRefDist - 1) frame durations.
     limitations:
-    - 8-bit 4:2:0 NV12 only in both directions (no RGBA/BGRA, no 10-bit); AV1 is decoded only (8-bit Main profile).
+    - 8-bit 4:2:0 NV12 only in both directions (RGBA/BGRA through the conversion in Go, no 10-bit);
+      AV1 is decoded only (8-bit Main profile).
     - WithDecodeOrder has no effect; the runtime's own reorder delay applies.
     - Even picture dimensions for encoding; one synchronous operation per frame.
     - Needs libvpl (the legacy libmfx.so.1 dispatcher alone is not used); Linux only.
@@ -231,9 +232,9 @@ verification:
       note: see milestone:linux-intel-vpl for the oracle recipe
     basis:
     - path: internal/vpl/sys/types.go
-      input_hash: f61232720bdf423681638033bf1f609192a23528c4de750e27c84e44effdce3a
+      input_hash: 554ecb18443e2911b3c6d5b6989b42986be44bb6f0adab1e94694c0b4f18d411
     - path: internal/vpl/sys/layout_test.go
-      input_hash: 38c7290c61dbcc8c896b59c113158909508ab281825c4478a85519931b7d4584
+      input_hash: 5e8f33e72b47635706e1e8ebaf9d197490da13d2f6e7144434a5228e0f240106
   symbol-binding:
     state: passed
     method: integration
@@ -286,7 +287,7 @@ verification:
     - path: internal/vpl/encoder.go
       input_hash: 037b7abb3e556c8d7d9cbf96b2a34c9c2ec8b7656ed7446736ad7be363b339e1
     - path: internal/vpl/encparam.go
-      input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/backend.go
       input_hash: 9a117eb1af538b586de2e3d973aae9969c97ba24d2563f5db166c6b81040763d
 history:

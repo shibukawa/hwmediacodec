@@ -121,6 +121,7 @@ var (
 	ExtBuffCodingOption       = fourCC('C', 'D', 'O', 'P')
 	ExtBuffCodingOption2      = fourCC('C', 'D', 'O', '2')
 	ExtBuffCodingOption3      = fourCC('C', 'D', 'O', '3')
+	ExtBuffVideoSignalInfo    = fourCC('V', 'S', 'I', 'N')
 	ExtBuffCodingOptionSPSPPS = fourCC('C', 'O', 'S', 'P')
 	ExtBuffCodingOptionVPS    = fourCC('C', 'O', 'V', 'P')
 )
@@ -420,6 +421,18 @@ type ExtCodingOption3 struct {
 	_      [29]uint16
 	GPB    uint16
 	_      [444]byte
+}
+
+// ExtVideoSignalInfo mirrors mfxExtVideoSignalInfo: the video signal type
+// fields of the VUI.
+type ExtVideoSignalInfo struct {
+	Header                   ExtBuffer
+	VideoFormat              uint16
+	VideoFullRange           uint16
+	ColourDescriptionPresent uint16
+	ColourPrimaries          uint16
+	TransferCharacteristics  uint16
+	MatrixCoefficients       uint16
 }
 
 // ExtCodingOptionSPSPPS mirrors mfxExtCodingOptionSPSPPS; attached to

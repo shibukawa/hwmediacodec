@@ -109,7 +109,7 @@ verification:
         flags equal ffprobe; no B-frames
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -117,9 +117,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -139,7 +139,7 @@ verification:
       note: 'interval 10 over 45 frames: keyframes at 0,10,20,30,40 and no others'
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -147,9 +147,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -169,7 +169,7 @@ verification:
       note: forced at frames 7 and 13; neighbours are not keyframes
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -177,9 +177,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -200,7 +200,7 @@ verification:
         49.8 dB'
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -208,9 +208,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -230,7 +230,7 @@ verification:
       note: '90 frames 320x240: VBR 400k -> 410 kbit/s, VBR 2M -> 1369 kbit/s, CBR 1M -> 951 kbit/s'
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -238,9 +238,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -260,7 +260,7 @@ verification:
       note: quality 0.5 -> 33 KB / 39.8 dB; quality 0.9 -> 132 KB / 60.6 dB
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -268,9 +268,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -291,7 +291,7 @@ verification:
         dB
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -299,9 +299,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -321,7 +321,7 @@ verification:
       note: ffprobe reports Baseline/Main/High (H.264) and Main (HEVC); HEVC+Baseline -> ErrUnsupported
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -329,9 +329,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -351,7 +351,7 @@ verification:
       note: 'encode 1.5 Mbit/s then VideoToolbox decode: worst luma PSNR 52.8 dB'
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -359,9 +359,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -384,7 +384,7 @@ verification:
         sets
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -392,9 +392,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -414,7 +414,7 @@ verification:
       note: wrong size and short planes -> ErrInvalidData; Send/Receive after Close -> ErrClosed
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: internal/videotoolbox/sys/sys.go
@@ -422,9 +422,9 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
     - path: internal/codec/codec.go
-      input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
+      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
       input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
@@ -461,7 +461,7 @@ verification:
     - path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: hwmediacodec.go
-      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
+      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
   cross-build-check:
     state: passed
     method: static
@@ -495,7 +495,7 @@ verification:
         and under -race
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 094926488df543752a532100c5db24c118acecc87f56873e9c5bb9af4d1d67af
+      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
 open_questions:
   pixel-buffer-copy-cost:
     text: Input frames are copied into a pool CVPixelBuffer (about 3 MB per 1080p frame). Is the copy

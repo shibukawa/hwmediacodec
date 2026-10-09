@@ -43,7 +43,8 @@ non_goals:
 - AV1 encoding on any backend (NVENC from RTX 40, VPL from Arc, VA-API from RDNA3/Arc, vendor encoder
   MFTs) - a later slice.
 - 10-bit AV1 on Linux and Windows (needs P010 surfaces and a conversion; VideoToolbox converts itself).
-- RGBA/BGRA output on these backends (NV12 only, as for H.264 and HEVC there).
+- RGBA/BGRA output from the backends themselves (they return NV12; the conversion in Go of milestone:decoder-rgb-conversion
+  provides both formats, with the matrix and range of the sequence header's color_config).
 - Spatial scalability (several spatial layers) and large-scale-tile streams on VA-API - ErrUnsupported.
 - The Annex B length-delimited AV1 format.
 acceptance:
@@ -186,7 +187,7 @@ verification:
     - path: fakevaapi_av1_linux_test.go
       input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
     - path: fakevaapi_linux_test.go
-      input_hash: 71bde535c9e1c6b4d050c74550fe5f8582f88e1a26302cec9b18d99b21e88ca7
+      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
     - path: internal/testutil/av1.go
       input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: scripts/vaapi_fake_driver_test.sh
@@ -255,9 +256,9 @@ verification:
     - path: internal/vaapi/sys/layout_av1_test.go
       input_hash: 82cd6b1171661b157e4038097f24c6b4b13cd4215da317bed56fcc1de887d1ac
     - path: internal/vpl/sys/types.go
-      input_hash: f61232720bdf423681638033bf1f609192a23528c4de750e27c84e44effdce3a
+      input_hash: 554ecb18443e2911b3c6d5b6989b42986be44bb6f0adab1e94694c0b4f18d411
     - path: internal/vpl/sys/layout_test.go
-      input_hash: 38c7290c61dbcc8c896b59c113158909508ab281825c4478a85519931b7d4584
+      input_hash: 5e8f33e72b47635706e1e8ebaf9d197490da13d2f6e7144434a5228e0f240106
   hardware-av1-decode:
     state: not_run
     method: integration

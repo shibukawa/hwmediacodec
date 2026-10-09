@@ -24,6 +24,7 @@ func TestStructLayouts(t *testing.T) {
 	var co ExtCodingOption
 	var co2 ExtCodingOption2
 	var co3 ExtCodingOption3
+	var vsi ExtVideoSignalInfo
 	var sp ExtCodingOptionSPSPPS
 	var vps ExtCodingOptionVPS
 
@@ -192,6 +193,8 @@ func TestStructLayouts(t *testing.T) {
 
 		{"sizeof mfxExtCodingOption3", unsafe.Sizeof(co3), 512},
 		{"mfxExtCodingOption3.GPB", unsafe.Offsetof(co3.GPB), 66},
+		{"sizeof mfxExtVideoSignalInfo", unsafe.Sizeof(vsi), 20},
+		{"mfxExtVideoSignalInfo.MatrixCoefficients", unsafe.Offsetof(vsi.MatrixCoefficients), 18},
 
 		{"sizeof mfxExtCodingOptionSPSPPS", unsafe.Sizeof(sp), 32},
 		{"mfxExtCodingOptionSPSPPS.SPSBuffer", unsafe.Offsetof(sp.SPSBuffer), 8},

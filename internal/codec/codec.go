@@ -435,6 +435,11 @@ type EncoderConfig struct {
 	// Profile selects the coding profile; ProfileDefault lets the backend
 	// choose.
 	Profile Profile
+	// BT709 asks the backend to declare BT.709 primaries, transfer
+	// function and matrix in video range in the stream. The public API
+	// sets it when it converts packed RGB input to NV12 itself (package
+	// pixconv), so that decoders convert back with the same matrix.
+	BT709 bool
 }
 
 // DecoderOption adjusts a DecoderConfig.

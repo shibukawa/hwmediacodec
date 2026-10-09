@@ -28,6 +28,11 @@ const (
 	// pic_order_cnt_lsb in the streams this encoder writes.
 	encLog2MaxFrameNum = 8
 	encLog2MaxPOCLsb   = 8
+	// VUI video signal description: video_format 5 is "unspecified" and
+	// 1 stands for BT.709 in colour_primaries, transfer_characteristics
+	// and matrix_coeffs alike.
+	videoFormatUnspecified = 5
+	colourBT709            = 1
 )
 
 // encoder is an H.264 or HEVC encoder on VAEntrypointEncSlice: I and P
@@ -290,6 +295,14 @@ func (e *encoder) buildParameterSets() {
 		sps.VUI.NumUnitsInTick = den
 		sps.VUI.TimeScale = 2 * num
 		sps.VUI.FixedFrameRate = true
+	}
+	if cfg.BT709 {
+		sps.VUI.VideoSignalTypePresent = true
+		sps.VUI.VideoFormat = videoFormatUnspecified
+		sps.VUI.ColourDescriptionPresent = true
+		sps.VUI.ColourPrimaries = colourBT709
+		sps.VUI.TransferCharacteristics = colourBT709
+		sps.VUI.MatrixCoefficients = colourBT709
 	}
 	pps := &h264.PPS{
 		EntropyCodingMode:              cabac,
