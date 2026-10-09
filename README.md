@@ -14,7 +14,8 @@ works and the module cross-compiles from one machine.
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
-| Linux | Intel VPL / NVDEC | planned | planned |
+| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
+| Linux | Intel VPL | planned | planned |
 | Windows | Media Foundation / NVENC | planned | planned |
 
 Decoded frames come back in display order: the slice headers are parsed in
@@ -210,6 +211,20 @@ go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc
 ```
 
 ### Linux notes
+
+The NVIDIA backend (`internal/nvidia`) loads `libcuda.so.1`, `libnvcuvid.so.1`
+and `libnvidia-encode.so.1` from the proprietary driver (470.57 or newer for
+NVENC API 11.1). Decoding uses the driver's own parser, so H.264 and HEVC both
+work; frames are 8-bit 4:2:0 NV12 (10-bit and 4:4:4 streams report
+`ErrUnsupported`), progressive only, copied to CPU memory per picture.
+Encoding accepts NV12, RGBA and BGRA (RGB is converted by NVENC with BT.601
+and the stream is tagged so), supports B-frames (two consecutive, when the GPU
+has them), VBR/CBR, constant QP for `WithQuality`, low-latency tuning and
+profiles. Set `HWMEDIACODEC_NVIDIA_DEVICE` to a CUDA device ordinal to pick a
+GPU. The backend is registered before VA-API. It was written on a Mac: struct
+layouts are verified against the SDK headers with clang and every symbol binds
+against driver 535 in a container, but no NVIDIA hardware conformance run has
+happened yet.
 
 The VA-API backend opens the first DRM render node (`/dev/dri/renderD128`
 and up) that libva can initialise. Set `HWMEDIACODEC_VAAPI_DEVICE` to a
