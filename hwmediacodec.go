@@ -11,12 +11,11 @@
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
 // Silicon) through VideoToolbox, on Linux and Windows (amd64) with the NVIDIA
 // driver through NVDEC and NVENC, on Linux with an Intel GPU through Intel
-// VPL (a VPL or Media SDK runtime), and on Windows (amd64 and arm64) through
-// Media Foundation (decoding with the Microsoft decoder transforms
-// accelerated by Direct3D 11, encoding with the vendor's hardware encoder
-// transforms); H.264 decoding and encoding on Linux through VA-API (AMD Mesa
-// and Intel drivers). Where the NVIDIA driver is installed its backend is
-// tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
+// VPL (a VPL or Media SDK runtime), on Linux through VA-API (AMD Mesa and
+// Intel drivers), and on Windows (amd64 and arm64) through Media Foundation
+// (decoding with the Microsoft decoder transforms accelerated by Direct3D 11,
+// encoding with the vendor's hardware encoder transforms). Where the NVIDIA
+// driver is installed its backend is tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
 // return NV12 only on VA-API, NVDEC, Intel VPL and Media Foundation for now,
 // and the VA-API, Intel VPL and Media Foundation encoders take NV12 only).
 // Decoded frames are returned in display order (see NewDecoder and

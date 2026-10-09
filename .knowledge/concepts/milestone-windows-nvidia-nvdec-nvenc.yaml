@@ -198,9 +198,9 @@ verification:
     - path: probe_test.go
       input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
     - path: hwmediacodec.go
-      input_hash: 4aa1fac3178aa01ae5d844ef4490d0958b540825cf7fd96215bf338ae2b2094a
+      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
   windows-loader-run:
     state: not_run
     method: integration
@@ -245,7 +245,7 @@ verification:
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
   hardware-encode-windows:
     state: not_run
     method: integration
@@ -266,7 +266,7 @@ verification:
     - path: internal/nvidia/sys/nvenc.go
       input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
     - path: encode_test.go
-      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+      input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
 open_questions:
   hardware-verification:
     text: Does the backend work on a Windows machine with an NVIDIA GPU? Nothing above the compile-time

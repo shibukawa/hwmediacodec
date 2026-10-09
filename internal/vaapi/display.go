@@ -99,6 +99,10 @@ func openDevice(path string) (*display, error) {
 		syscall.Close(fd)
 		return nil, fmt.Errorf("vaapi: vaInitialize on %s: %s", path, statusMessage(st))
 	}
+	// Initialisation can succeed after libva complained about something it
+	// then worked around; drop that message so that it is not attached to
+	// the first real failure.
+	sys.LastErrorMessage()
 	d.vendor = sys.QueryVendorString(d.dpy)
 	if err := d.queryProfiles(); err != nil {
 		d.close()

@@ -113,17 +113,17 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+      input_hash: 0c10c681f69b18f4fca29f7292509013056b6bef5f4a3891f16e36ace265eb81
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
-      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/videotoolbox/decoder.go
       input_hash: ce5c84261bdaa6d99580c22ad5cd679430cc89ed4bdde463be838decc8931735
     - path: hwmediacodec.go
-      input_hash: 4aa1fac3178aa01ae5d844ef4490d0958b540825cf7fd96215bf338ae2b2094a
+      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   reorder-oracle-test:
@@ -145,11 +145,11 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: 468b2341b26f48fa75bd1280e48ecdef18b602d25bcbc40db640a655389e4513
+      input_hash: 0c10c681f69b18f4fca29f7292509013056b6bef5f4a3891f16e36ace265eb81
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
-      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/reorder/reorder_test.go
       input_hash: c602035448064880985b37d6b9ef936f7c09712500ebea643f1129baaeb3fe87
     - path: internal/testutil/ffmpeg.go
@@ -188,9 +188,9 @@ verification:
     - path: internal/h264/poc_test.go
       input_hash: 6dd185cfb69762d9c4e1b8c489c3a42525168ad0f6e21128c84514c1d204e954
     - path: internal/hevc/hevc.go
-      input_hash: 8be25a2aa238843d0ed35ad4907c6376ab5c9057af99d601bd891a4d419e37f1
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/hevc/hevc_test.go
-      input_hash: d691a7f66c68183195f57fd51a51e7a839c3dfe0aefc44c671e47eb13ab5700e
+      input_hash: a75cf1af1767efb03232e3d8626a59464b770f2107aa87b0eb32338d42f31633
   decode-order-test:
     state: passed
     method: integration
@@ -205,9 +205,9 @@ verification:
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 4aa1fac3178aa01ae5d844ef4490d0958b540825cf7fd96215bf338ae2b2094a
+      input_hash: 1589ddaf1dc6e01e08a1a687a0ac57ef2ee79e6c0f0d9a11cd18df0e8286132d
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
   rgba-decode-test:
     state: passed
     method: integration
@@ -233,7 +233,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 9ba441bc46fdfb905e76e57f42497477ed087d28650a31c47ce46000c5c640ef
     - path: decode_test.go
-      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
+      input_hash: 0c4e3fa75140edd80f63ffc2a5716c2bbed6255ae39835495419d933a3dcebe9
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   rgb-encode-test:
@@ -258,7 +258,7 @@ verification:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
     - path: encode_test.go
-      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+      input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
     - path: internal/testutil/ffmpeg.go
       input_hash: 797f2e79227ca546c1c473a8e0242382b0e31601d5c02548c376963917472785
   timeline-unit-test:
