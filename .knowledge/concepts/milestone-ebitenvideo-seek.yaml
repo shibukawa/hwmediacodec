@@ -98,12 +98,12 @@ verification:
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
     - path: ebitenvideo/source.go
-      input_hash: af2f4210c3ce6a0db66705443743cd433efc235d70f5d8e3177bb8042978662e
+      input_hash: b4db79f6028b2bfe7f8ebdd763e6ed1aaa3d1c4d3440de6fd327cc0a88e9b4b1
     - path: ebitenvideo/seek_darwin_test.go
       input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
     - path: ebitenvideo/player_darwin_test.go
       input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
-    - path: annexb/annexb.go
+    - path: bitstream/annexb/annexb.go
       input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
   player-seek-test:
     state: passed
@@ -157,7 +157,7 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: mediacontainer/mp4/packetsource_test.go
-      input_hash: 372451376024200465f143038655e9f3fccbb218b7b25f8921bd5e6da4a2f9c5
+      input_hash: 3419c8e0a26b4cbcc01dd68cd7bedf5b4bcabb6997da936088df61f79c4bb70c
   annexb-offset-test:
     state: passed
     method: unit
@@ -166,12 +166,12 @@ verification:
       milestone: ebitenvideo-seek
     test: TestReaderOffset
     evidence:
-      path: annexb/annexb_test.go
+      path: bitstream/annexb/annexb_test.go
       locator: TestReaderOffset
     basis:
-    - path: annexb/annexb.go
+    - path: bitstream/annexb/annexb.go
       input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
-    - path: annexb/annexb_test.go
+    - path: bitstream/annexb/annexb_test.go
       input_hash: d759de2aa0f82d53ce154f230e8c3e1d8a8279407e127012f9029307c7044951
 facts:
   api:

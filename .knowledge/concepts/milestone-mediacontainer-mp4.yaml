@@ -30,8 +30,8 @@ constraints:
   leaving room for other formats. Inside the package github.com/Eyevinn/mp4ff/mp4 is imported as mp4ff;
   a program that uses both needs the same alias.'
 - 'The tests need ffmpeg helpers that lived in examples/internal/testutil, which the core module cannot
-  import (and the examples module cannot import a core internal package), so internal/mp4test is a copy
-  of that file. The bundled-clip test needs examples/assets and stayed in the examples module (examples/assets/assets_test.go).'
+  import (and the examples module cannot import a core internal package), so internal/mediatest (first named internal/mp4test) holds a
+  copy of that file. The bundled-clip test needs examples/assets and stayed in the examples module (examples/assets/assets_test.go).'
 - 'As with capture, examples/go.mod still requires hwmediacodec v0.1.0: the workspace covers a clone,
   running the examples by module path needs a core release first.'
 non_goals:
@@ -78,7 +78,7 @@ verification:
     - path: mediacontainer/mp4/mux.go
       input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
     - path: mediacontainer/mp4/sample.go
-      input_hash: dc6d08babd2ae480a9fa2275181e9fe6d02e4871a3735e9845ffa544cd9c4dc7
+      input_hash: d9f3d899ad1483f07ba7e5190d86d0b06ff5e6dee5181b145a329d5616021f09
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
     - path: mediacontainer/mp4/packetsource.go
@@ -88,17 +88,17 @@ verification:
     - path: mediacontainer/mp4/videofile.go
       input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
     - path: mediacontainer/mp4/mp4_test.go
-      input_hash: c73a2f292fc0df8b6d9e1a1448f51d7d27faed4100cf36b71b75e5e8cf45f3f5
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: mediacontainer/mp4/segmenter_test.go
-      input_hash: 40491f068d0cdb0745c75eedde631cb02fb80cc07ec65d6af6473571a523f16a
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
     - path: mediacontainer/mp4/packetsource_test.go
-      input_hash: 372451376024200465f143038655e9f3fccbb218b7b25f8921bd5e6da4a2f9c5
+      input_hash: 3419c8e0a26b4cbcc01dd68cd7bedf5b4bcabb6997da936088df61f79c4bb70c
     - path: mediacontainer/mp4/stream_test.go
-      input_hash: e8db182bd3662a37fb3f87c091ce1269b08d578525ea6932630488bcbdf9bb94
+      input_hash: 208cf01c4ac1ee4e0e58d12ef2fa4da59e5c6b465e0ef39ce3464286ed534048
     - path: mediacontainer/mp4/videofile_test.go
-      input_hash: 31d07fec8bb75c4f9b48b4a042457e974a8dfe3a0c6f4aedcdf33138f4164e47
-    - path: internal/mp4test/ffmpeg.go
-      input_hash: dd5eaa9f35e661fa01796f686b17fc98c9c0489ad510500a2ed646ce25ed4129
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 803987096791d8e44ead05bb9c31544c3ce70b2629207e552ff5cd93b5904710
   build-check:
     state: passed
     method: manual
@@ -139,11 +139,13 @@ open_questions:
       (pion)?
     state: open
     resolution: The HLS playlist followed on 2026-10-10 (milestone:mediacontainer-hls); heif is discussed
-      as image/heif, pending a standard-library-style API.
+      as image/heif, pending a standard-library-style API (delivered, milestone:image-heif).
   ivf-annexb-placement:
     text: annexb and ivf sit at the module root while MP4 is under mediacontainer; should ivf move or
       be aliased there for consistency?
-    state: open
+    state: resolved
+    resolution: Moved without aliases on 2026-10-10 (milestone:package-layout) - ivf to mediacontainer/ivf,
+      annexb to bitstream/annexb.
 facts:
   api:
     mp4: 'import github.com/shibukawa/hwmediacodec/mediacontainer/mp4; Open(path) / NewDemuxer(io.ReadSeeker)

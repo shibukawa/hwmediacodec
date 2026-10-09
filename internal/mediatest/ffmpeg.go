@@ -1,8 +1,9 @@
-// Package mp4test drives ffmpeg and ffprobe as test oracles for the MP4
-// packages: it generates MP4 inputs and inspects outputs. Nothing here is
-// used at run time. The examples module keeps its own copy
+// Package mediatest drives ffmpeg, ffprobe and sips as test oracles for
+// the container and image packages: it generates MP4 inputs, inspects
+// outputs and converts pictures. Nothing here is used at run time. The
+// examples module keeps its own copy of the ffmpeg helpers
 // (examples/internal/testutil), since it cannot import this one.
-package mp4test
+package mediatest
 
 import (
 	"bytes"

@@ -79,7 +79,7 @@ verification:
     - path: examples/webrtc/server.go
       input_hash: 3ba4679c4af13aa4216a65e2c50dda0b5e80e39fe4fdd20a1f4fb0bb516189ef
     - path: examples/webrtc/server_test.go
-      input_hash: 6495ba0b951ef7e9885764d290ccebdf9d2b3b1c45ff177fb25ad1164d0c4203
+      input_hash: acd9c469c002a9dbdd4f6c2e88922764ace8b45e1e19e5be8dccb8da30bce055
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
   recorder-keyframe-test:

@@ -3,9 +3,10 @@
 Small, complete programs that show how to use `hwmediacodec` for everyday
 jobs. They live in their own Go module (`github.com/shibukawa/hwmediacodec/examples`)
 so that the core library does not depend on Ebitengine and pion, which the
-game and streaming samples pull in. MP4 files go through the core module's
-[`mediacontainer/mp4`](../mediacontainer/mp4) package and screen capture
-through its [`capture`](../capture) package. Inside the
+game and streaming samples pull in. The reusable parts are packages of the
+core module: [`mediacontainer/mp4`](../mediacontainer/mp4) and
+[`mediacontainer/hls`](../mediacontainer/hls), [`capture`](../capture) and
+[`image/heif`](../image/heif). Inside the
 repository the module points at the core with a `replace ../` directive.
 
 Everything here was written and verified on an Apple Silicon Mac; the same
@@ -44,7 +45,7 @@ have no program of their own.
 | [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream in a window of the video's aspect ratio, with pause, seeking and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
-| [`heif/`](heif/), [`heifconv/`](heifconv/) | HEIC and AVIF still images: decode (single pictures, grids, rotation, clean aperture) and encode HEIC with the HEVC encoder, AVIF where an AV1 encoder exists |
+| [`heifconv/`](heifconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` package |
 
 ## convert
 
@@ -262,7 +263,7 @@ sample builder, compared NAL unit by NAL unit with what was sent, and
 decoded by ffmpeg to the source's frame checksums; a PLI from the viewer
 must reach the keyframe callback.
 
-## heif and heifconv
+## heifconv
 
 ```sh
 cd examples
@@ -270,44 +271,13 @@ go run ./heifconv photo.heic photo.png              # iPhone photos: HEVC tiles 
 go run ./heifconv -quality 0.8 picture.png picture.heic
 go run ./heifconv -tile 512 -rotate 90 picture.jpg picture.heic
 go run ./heifconv picture.avif picture.png          # AV1 decode (M3 and newer)
-go run ./heifconv -info photo.heic
+go run ./heifconv -info photo.heic                  # file structure only, no decoder
 ```
 
-A HEIF file is an ISOBMFF `meta` box of items (coded pictures, a `grid`
-that tiles them) with properties (`hvcC`/`av1C` decoder configuration,
-`ispe` size, `irot`, `imir`, `clap`, `colr`, `pixi`) and an `mdat` with the
-coded data. The `heif` package parses and writes that by hand (about 600
-lines, no dependency beyond mp4ff's record parsers) and leaves the pictures
-to hwmediacodec:
-
-- **Decode**: for each coded item, `hvcC`'s parameter sets plus the
-  length-prefixed NAL units become one Annex-B packet (AV1: the temporal
-  unit, with the sequence header from `av1C` if the item lacks one); all
-  items go through one decoder opened with `WithOutputFormat(RGBA)` and
-  `WithDecodeOrder()`, grids are stitched tile by tile and cropped to the
-  grid size, then `clap`, `irot` and `imir` are applied in their stored
-  order. `Decode` returns an `*image.RGBA` and an `Info` (codec, size,
-  tiles, rotation).
-- **Encode**: one keyframe per picture or tile (`WithKeyframeInterval(1)`,
-  `ForceKeyframe`, `WithQuality`), VPS/SPS/PPS from the packet into `hvcC`,
-  the slices as the item data. `TileSize` writes a grid like phone cameras
-  do; `Rotation` stores an `irot`. Odd sizes are padded by a replicated
-  row or column and declared through `clap`, because the hardware encoders
-  work on even 4:2:0 pictures (VideoToolbox rounds an odd request down to
-  320x202 for 321x203).
-- **AVIF**: decoding works wherever `Probe` lists an AV1 decoder (M3 and
-  newer Macs); encoding needs an AV1 encoder, which no Apple Silicon chip
-  has, so `Encode` with `Codec: AV1` returns `ErrUnsupported` there and
-  works unchanged on a platform that gains one.
-
-Tests use macOS ImageIO (`sips`) as the reference for the files this
-package writes (single, grid, rotated, odd sizes) and for HEIC input, and
-ffmpeg for AVIF input and for the rotation direction (ffmpeg maps `irot` to
-a display matrix and autorotates; ImageIO keeps it as orientation
-metadata). ImageIO resamples `clap`-cropped pictures instead of cropping,
-and ffmpeg rounds odd `clap` sizes to even, so odd pictures are compared
-with the source instead. 8-bit 4:2:0 only; iPhone HDR photos (10-bit) are
-out of scope.
+A converter between HEIC/AVIF and PNG/JPEG on top of the core module's
+[`image/heif`](../image/heif) package (see the main README): `DecodeBytes`
+with the software-fallback option for input, `Encode` with tiles and
+rotation for output, `DecodeInfo` for `-info`.
 
 ## Testing
 
@@ -317,12 +287,11 @@ go test ./...
 ```
 
 The WebRTC broadcaster test needs only ffmpeg and ffprobe: it feeds an
-ffmpeg-made stream through the WebRTC track. (The HLS playlist test moved
-to the core module with the package.)
-The convert, thumbnails and heif tests also need a hardware codec and skip
+ffmpeg-made stream through the WebRTC track. 
+The convert and thumbnails tests also need a hardware codec and skip
 otherwise; they check codec, frame count, PSNR against the source, copied
-audio and identical presentation times. (The MP4 demuxer, muxer and
-segmenter tests moved to the core module with the package.) The
+audio and identical presentation times. (The MP4, HLS and HEIF tests moved
+to the core module with their packages.) The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
 test and the player opens the bundled clip through a seek; the rendering
 was checked by recording the window.

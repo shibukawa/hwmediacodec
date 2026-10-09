@@ -129,7 +129,7 @@ verification:
     - path: mediacontainer/mp4/videofile.go
       input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
     - path: mediacontainer/mp4/videofile_test.go
-      input_hash: 31d07fec8bb75c4f9b48b4a042457e974a8dfe3a0c6f4aedcdf33138f4164e47
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
   record-run:
     state: passed
     method: manual

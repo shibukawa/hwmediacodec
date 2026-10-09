@@ -96,7 +96,7 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: mediacontainer/mp4/mp4_test.go
-      input_hash: c73a2f292fc0df8b6d9e1a1448f51d7d27faed4100cf36b71b75e5e8cf45f3f5
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: examples/internal/testutil/ffmpeg.go
       input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
   container-mux-test:
@@ -116,7 +116,7 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: mediacontainer/mp4/mp4_test.go
-      input_hash: c73a2f292fc0df8b6d9e1a1448f51d7d27faed4100cf36b71b75e5e8cf45f3f5
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: examples/internal/testutil/ffmpeg.go
       input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
   convert-test:

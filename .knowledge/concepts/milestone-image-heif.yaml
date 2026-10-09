@@ -1,0 +1,138 @@
+id: milestone:image-heif
+type: milestone
+title: image/heif - HEIC and AVIF as an image format package of the core module
+summary: 'The HEIF reader and writer of the samples (examples/heif) moved to the core module as github.com/shibukawa/hwmediacodec/image/heif
+  and gained the conventions of the standard image packages: Decode(io.Reader) (image.Image, error), DecodeConfig(io.Reader)
+  (image.Config, error), Encode(w, img, *Options) and registration with image.RegisterFormat, so a blank
+  import makes image.Decode read HEIC and AVIF. The former Decode(data, opts...) is DecodeBytes; DecodeInfo
+  describes a file without decoding.'
+lifecycle: active
+authority: authored
+aliases:
+- heif package
+- HEIC
+- AVIF
+- image.Decode HEIC
+- image 互換
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: image-heif
+constraints:
+- 'The author made the image/heif path conditional on the package being usable like a standard image
+  format, not only a parser; hence Decode/DecodeConfig/RegisterFormat and the *Options argument of Encode
+  (nil means defaults, as jpeg.Encode).'
+- 'Formats are registered by major brand after "????ftyp": heic, heix, hevc, hevx, heim, heis, hevm,
+  hevs as "heic"; avif, avis as "avif"; mif1, msf1 as "heif". The brand does not prove the codec of the
+  primary item; Decode decides from the item type.'
+- 'Decode has no context or option parameter (the image package signature): it uses context.Background
+  and hardware codecs only. DecodeBytes takes hwmediacodec.DecoderOption values (software fallback).'
+- 'DecodeConfig and DecodeInfo use only the boxes: ispe of the primary item or the grid descriptor,
+  then clap and irot in their stored order, so they need no decoder. The tests require them to predict
+  exactly what DecodeBytes returns for every file decoded.'
+- 'Decoding needs a hardware HEVC or AV1 decoder, so image.Decode fails on machines without one (the
+  error wraps hwmediacodec.ErrUnsupported). Output is opaque *image.RGBA; alpha (auxiliary items), 10-bit
+  and 4:4:4 pictures are not handled.'
+non_goals:
+- Alpha planes, 10-bit/HDR photos, image sequences, Exif/XMP items, thumbnails.
+- A software decoder of its own.
+acceptance:
+  image-package:
+    text: For every HEIC and AVIF file the tests decode (written by this package as single, odd-sized,
+      grid, rotated and rotated-grid pictures, written by ImageIO, written by ffmpeg with libsvtav1), image.DecodeConfig
+      reports the format and the size of the decoded picture, image.Decode returns the same pixels as
+      DecodeBytes, and DecodeInfo equals the Info DecodeBytes returns.
+    scope:
+      milestone: image-heif
+    verified_by:
+    - heif-test
+  encode-defaults:
+    text: Encode with nil options writes a HEIC file that image.Decode reads back within 30 dB of the
+      source.
+    scope:
+      milestone: image-heif
+    verified_by:
+    - heif-test
+  garbage:
+    text: Empty, text and zero input is rejected by DecodeBytes, Decode, DecodeConfig and image.Decode.
+    scope:
+      milestone: image-heif
+    verified_by:
+    - heif-test
+  heifconv:
+    text: heifconv writes a tiled, rotated HEIC from a PNG, prints its structure with -info without decoding
+      and converts it back to a PNG of the rotated size.
+    scope:
+      milestone: image-heif
+    verified_by:
+    - heifconv-run
+verification:
+  heif-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeHEICReadBySips, TestDecodeHEICFromSips, TestDecodeAVIFFromFFmpeg, TestEncodeAVIFNeedsAnEncoder,
+      TestDecodeRejectsGarbage, TestEncodeDefaults, TestDecodeConfigNeedsNoDecoder
+    evidence:
+      path: image/heif/heif_test.go
+      locator: checkImagePackage
+      note: Apple M3, macOS 27, sips and ffmpeg with libsvtav1; run 2026-10-10
+    basis:
+    - path: image/heif/decode.go
+      input_hash: 33a3600460a17ddf8c4df3bcf362349e99806a87dd156f06aa5193ea24fbdbf8
+    - path: image/heif/encode.go
+      input_hash: cc60f37566ff86df9b0adedb78ddc6ebef50b0a5762b65c8badbe5c3902ee51e
+    - path: image/heif/box.go
+      input_hash: db3aeb6f678435445566b1e6afb3723357bd56883b62efb05ea9b692bd9c59a2
+    - path: image/heif/transform.go
+      input_hash: 96779a370c24a074175b6907d0887eae22dd55ac5d157aa79d21e615c11c8363
+    - path: image/heif/heif_test.go
+      input_hash: 427f89d498ae30e2a1c6251572170b2fbd9c149ffeba15a33007f239bedccbaa
+    - path: internal/mediatest/image.go
+      input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
+  heifconv-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    test: heifconv -tile 512 -rotate 90 src.png out.heic; heifconv -info out.heic; heifconv out.heic back.png
+    evidence:
+      path: examples/heifconv/main.go
+      locator: run
+      note: 2026-10-10 - 1000x700 gradient; -info printed hevc, 700x1000, 4 tile(s), rotation 90; back.png
+        is 700x1000
+    basis:
+    - path: examples/heifconv/main.go
+      input_hash: e3a857498dd9a0b8b2ed25edd3c6f78636ff61a7a8cf4a99730cbb85bace4e96
+open_questions:
+  real-phone-photos:
+    text: iPhone photos are 10-bit HDR by default on recent models and carry auxiliary items; how far
+      should the decoder go (tone-mapped 8-bit output, alpha)?
+    state: open
+facts:
+  api:
+    heif: 'import github.com/shibukawa/hwmediacodec/image/heif (blank import registers heic, avif, heif);
+      Decode(io.Reader) (image.Image, error); DecodeConfig(io.Reader) (image.Config, error); DecodeBytes(data,
+      ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error); DecodeInfo(data) (*Info, error); Encode(w,
+      img, *Options{Codec, Quality, TileSize, Rotation, Software}) error; Info{Codec, Width, Height, Tiles,
+      Rotation, Mirror}'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author proposed image/heif provided the package offers image-compatible use rather than
+      a parser only, then asked for the image compatibility.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:examples-heif-avif
+- relation: follows
+  to: milestone:package-layout

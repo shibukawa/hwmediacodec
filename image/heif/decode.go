@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 
 	"github.com/Eyevinn/mp4ff/av1"
@@ -47,10 +48,117 @@ type file struct {
 	order   []uint32
 }
 
-// Decode decodes the primary image of a HEIC or AVIF file held in data.
-// Grid images are decoded tile by tile and stitched; irot and imir are
-// applied. The result is opaque RGBA.
-func Decode(data []byte, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+func init() {
+	// The major brand follows the box size and "ftyp". Files whose major
+	// brand is the generic mif1/msf1 are reported as "heif".
+	for _, b := range []string{"heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"} {
+		image.RegisterFormat("heic", "????ftyp"+b, Decode, DecodeConfig)
+	}
+	for _, b := range []string{"avif", "avis"} {
+		image.RegisterFormat("avif", "????ftyp"+b, Decode, DecodeConfig)
+	}
+	for _, b := range []string{"mif1", "msf1"} {
+		image.RegisterFormat("heif", "????ftyp"+b, Decode, DecodeConfig)
+	}
+}
+
+// Decode reads a HEIC or AVIF file from r and returns its primary image
+// as an *image.RGBA. It is DecodeBytes without options, in the form the
+// image package registers.
+func Decode(r io.Reader) (image.Image, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	img, _, err := DecodeBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+// DecodeConfig returns the colour model and the dimensions of the image
+// Decode would return (after cropping and rotation) without decoding it,
+// so it needs no hardware codec.
+func DecodeConfig(r io.Reader) (image.Config, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return image.Config{}, err
+	}
+	info, err := DecodeInfo(data)
+	if err != nil {
+		return image.Config{}, err
+	}
+	return image.Config{ColorModel: color.RGBAModel, Width: info.Width, Height: info.Height}, nil
+}
+
+// DecodeInfo describes the primary image of a HEIC or AVIF file held in
+// data from the file structure alone: nothing is decoded.
+func DecodeInfo(data []byte) (*Info, error) {
+	f, err := parse(data)
+	if err != nil {
+		return nil, err
+	}
+	prim, ok := f.items[f.primary]
+	if !ok {
+		return nil, fmt.Errorf("heif: primary item %d not found", f.primary)
+	}
+	info := &Info{Tiles: 1}
+	coded := prim
+	var w, h int
+	switch prim.typ {
+	case "hvc1", "hev1", "av01":
+		if w, h, ok = prim.ispe(); !ok {
+			return nil, fmt.Errorf("heif: item %d has no ispe property", prim.id)
+		}
+	case "grid":
+		g, err := f.grid(prim)
+		if err != nil {
+			return nil, err
+		}
+		w, h, info.Tiles, coded = g.outW, g.outH, len(g.tiles), g.tiles[0]
+	default:
+		return nil, fmt.Errorf("heif: primary item is a %q, which this decoder does not handle", prim.typ)
+	}
+	switch coded.typ {
+	case "hvc1", "hev1":
+		info.Codec = hwmediacodec.HEVC
+	case "av01":
+		info.Codec = hwmediacodec.AV1
+	default:
+		return nil, fmt.Errorf("heif: grid tiles are %q items, which this decoder does not handle", coded.typ)
+	}
+	for _, p := range prim.props {
+		switch p.typ {
+		case "clap":
+			rect, err := clapRect(w, h, p.data)
+			if err != nil {
+				return nil, err
+			}
+			w, h = rect.Dx(), rect.Dy()
+		case "irot":
+			if len(p.data) > 0 {
+				angle := int(p.data[0]&3) * 90
+				if angle%180 != 0 {
+					w, h = h, w
+				}
+				info.Rotation = (info.Rotation + angle) % 360
+			}
+		case "imir":
+			if len(p.data) > 0 {
+				info.Mirror = !info.Mirror
+			}
+		}
+	}
+	info.Width, info.Height = w, h
+	return info, nil
+}
+
+// DecodeBytes decodes the primary image of a HEIC or AVIF file held in
+// data. Grid images are decoded tile by tile and stitched; clap, irot and
+// imir are applied. The result is opaque RGBA. The options are passed to
+// the decoder (hwmediacodec.WithSoftwareFallback, for example).
+func DecodeBytes(data []byte, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
 	f, err := parse(data)
 	if err != nil {
 		return nil, nil, err
@@ -542,39 +650,56 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 	return single, codec, nil
 }
 
-// decodeGrid decodes a grid derived image: tiles in row-major order,
-// stitched and cropped to the grid's output size.
-func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image.RGBA, hwmediacodec.Codec, int, error) {
+// gridLayout is the descriptor of a grid item: the tiles in row-major
+// order and the size of the picture they are cropped to.
+type gridLayout struct {
+	rows, cols int
+	outW, outH int
+	tiles      []*item
+}
+
+func (f *file) grid(grid *item) (*gridLayout, error) {
 	data, err := f.payload(grid)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, err
 	}
 	r := &reader{b: data}
 	if v := r.u8(); v != 0 {
-		return nil, 0, 0, fmt.Errorf("heif: grid version %d", v)
+		return nil, fmt.Errorf("heif: grid version %d", v)
 	}
 	flags := r.u8()
-	rows, cols := int(r.u8())+1, int(r.u8())+1
-	var outW, outH int
+	g := &gridLayout{}
+	g.rows, g.cols = int(r.u8())+1, int(r.u8())+1
 	if flags&1 == 0 {
-		outW, outH = int(r.u16()), int(r.u16())
+		g.outW, g.outH = int(r.u16()), int(r.u16())
 	} else {
-		outW, outH = int(r.u32()), int(r.u32())
+		g.outW, g.outH = int(r.u32()), int(r.u32())
 	}
 	if r.err != nil {
-		return nil, 0, 0, r.err
+		return nil, r.err
 	}
-	if len(grid.dimg) != rows*cols {
-		return nil, 0, 0, fmt.Errorf("heif: grid of %dx%d references %d tiles", cols, rows, len(grid.dimg))
+	if len(grid.dimg) != g.rows*g.cols {
+		return nil, fmt.Errorf("heif: grid of %dx%d references %d tiles", g.cols, g.rows, len(grid.dimg))
 	}
-	tiles := make([]*item, len(grid.dimg))
+	g.tiles = make([]*item, len(grid.dimg))
 	for i, id := range grid.dimg {
 		t, ok := f.items[id]
 		if !ok {
-			return nil, 0, 0, fmt.Errorf("heif: grid tile %d missing", id)
+			return nil, fmt.Errorf("heif: grid tile %d missing", id)
 		}
-		tiles[i] = t
+		g.tiles[i] = t
 	}
+	return g, nil
+}
+
+// decodeGrid decodes a grid derived image: tiles in row-major order,
+// stitched and cropped to the grid's output size.
+func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image.RGBA, hwmediacodec.Codec, int, error) {
+	g, err := f.grid(grid)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	rows, cols, outW, outH, tiles := g.rows, g.cols, g.outW, g.outH, g.tiles
 	var canvas *image.RGBA
 	var tileW, tileH int
 	place := func(i int, img *image.RGBA) error {
@@ -606,27 +731,36 @@ func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image
 // whose centre is offset from the picture centre by (horizOff, vertOff),
 // all as fractions.
 func cleanAperture(img *image.RGBA, data []byte) (*image.RGBA, error) {
+	rect, err := clapRect(img.Rect.Dx(), img.Rect.Dy(), data)
+	if err != nil {
+		return nil, err
+	}
+	return crop(img.SubImage(rect.Add(img.Rect.Min)).(*image.RGBA)), nil
+}
+
+// clapRect returns the window a clap property selects in a picture of
+// width x height.
+func clapRect(width, height int, data []byte) (image.Rectangle, error) {
 	r := &reader{b: data}
 	var v [8]int64
 	for i := range v {
 		v[i] = int64(int32(r.u32()))
 	}
 	if r.err != nil {
-		return nil, fmt.Errorf("heif: clap: %w", r.err)
+		return image.Rectangle{}, fmt.Errorf("heif: clap: %w", r.err)
 	}
 	if v[1] == 0 || v[3] == 0 || v[5] == 0 || v[7] == 0 {
-		return nil, errors.New("heif: clap with a zero denominator")
+		return image.Rectangle{}, errors.New("heif: clap with a zero denominator")
 	}
-	pw, ph := int64(img.Rect.Dx()), int64(img.Rect.Dy())
+	pw, ph := int64(width), int64(height)
 	// Integer arithmetic on doubled coordinates: left = (pw - w)/2 + off.
 	w, h := v[0]/v[1], v[2]/v[3]
 	left := ((pw-w)*v[5] + 2*v[4]) / (2 * v[5]) // (pw-w)/2 + horizOffN/horizOffD
 	top := ((ph-h)*v[7] + 2*v[6]) / (2 * v[7])
 	if w <= 0 || h <= 0 || left < 0 || top < 0 || left+w > pw || top+h > ph {
-		return nil, fmt.Errorf("heif: clap %dx%d at (%d, %d) does not fit %dx%d", w, h, left, top, pw, ph)
+		return image.Rectangle{}, fmt.Errorf("heif: clap %dx%d at (%d, %d) does not fit %dx%d", w, h, left, top, pw, ph)
 	}
-	rect := image.Rect(int(left), int(top), int(left+w), int(top+h)).Add(img.Rect.Min)
-	return crop(img.SubImage(rect).(*image.RGBA)), nil
+	return image.Rect(int(left), int(top), int(left+w), int(top+h)), nil
 }
 
 // frameImage copies a decoded RGBA frame into an image.

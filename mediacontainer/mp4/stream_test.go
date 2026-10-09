@@ -7,13 +7,13 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
-	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 func TestElementaryStream(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
-	src := mp4test.GenerateMP4(t, t.TempDir(), mp4test.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 25, BFrames: 2, GOP: 10})
+	mediatest.RequireFFmpeg(t)
+	src := mediatest.GenerateMP4(t, t.TempDir(), mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 25, BFrames: 2, GOP: 10})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)

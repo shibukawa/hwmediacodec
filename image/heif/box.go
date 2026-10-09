@@ -1,11 +1,22 @@
 // Package heif reads and writes HEIF still images (HEIC with HEVC, AVIF
-// with AV1) with the hardware codecs. A HEIF file is an ISOBMFF "meta"
-// box describing items (coded pictures, a "grid" that tiles them, their
-// properties: decoder configuration, size, rotation, colour) and an
-// "mdat" holding the coded data. The codec work is one keyframe per item;
-// everything else here is the box plumbing, written out by hand because it
-// is small and because the point of the sample is to show where the codec
-// library fits.
+// with AV1) with the hardware codecs, in the manner of image/jpeg and
+// image/png: Decode and DecodeConfig take an io.Reader, Encode an
+// image.Image, and importing the package registers the formats with the
+// image package, so that image.Decode understands HEIC and AVIF files:
+//
+//	import _ "github.com/shibukawa/hwmediacodec/image/heif"
+//
+//	img, format, err := image.Decode(file) // format is "heic", "avif" or "heif"
+//
+// Decoding needs a hardware HEVC (HEIC) or AV1 (AVIF) decoder on the
+// machine and fails with an error that wraps hwmediacodec.ErrUnsupported
+// without one; DecodeConfig and DecodeInfo only read the file structure
+// and work everywhere.
+//
+// A HEIF file is an ISOBMFF "meta" box describing items (coded pictures,
+// a "grid" that tiles them, their properties: decoder configuration, size,
+// rotation, colour) and an "mdat" holding the coded data. The codec work
+// is one keyframe per item; everything else here is the box plumbing.
 package heif
 
 import (

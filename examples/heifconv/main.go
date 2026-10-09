@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/heif"
+	"github.com/shibukawa/hwmediacodec/image/heif"
 )
 
 func main() {
@@ -61,17 +61,22 @@ func run(in, out string, infoOnly bool, o heif.Options, jpegQuality int, softwar
 		if err != nil {
 			return err
 		}
+		if infoOnly {
+			// The file structure alone: no decoder needed.
+			info, err := heif.DecodeInfo(data)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s: %s, %dx%d, %d tile(s), rotation %d, mirror %v\n", in, info.Codec, info.Width, info.Height, info.Tiles, info.Rotation, info.Mirror)
+			return nil
+		}
 		var opts []hwmediacodec.DecoderOption
 		if software {
 			opts = append(opts, hwmediacodec.WithSoftwareFallback())
 		}
-		decoded, info, err := heif.Decode(data, opts...)
+		decoded, _, err := heif.DecodeBytes(data, opts...)
 		if err != nil {
 			return err
-		}
-		if infoOnly {
-			fmt.Printf("%s: %s, %dx%d, %d tile(s), rotation %d, mirror %v\n", in, info.Codec, info.Width, info.Height, info.Tiles, info.Rotation, info.Mirror)
-			return nil
 		}
 		img = decoded
 	} else {
@@ -96,10 +101,10 @@ func run(in, out string, infoOnly bool, o heif.Options, jpegQuality int, softwar
 	switch ext := strings.ToLower(filepath.Ext(out)); ext {
 	case ".heic", ".heif", ".hif":
 		o.Codec = hwmediacodec.HEVC
-		return heif.Encode(w, img, o)
+		return heif.Encode(w, img, &o)
 	case ".avif":
 		o.Codec = hwmediacodec.AV1
-		return heif.Encode(w, img, o)
+		return heif.Encode(w, img, &o)
 	case ".png":
 		return png.Encode(w, img)
 	case ".jpg", ".jpeg":

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/heif"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/image/heif"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 )
 
 // testImage is a smooth picture with hard edges: gradients, a few flat
@@ -89,7 +89,7 @@ func rotateCCW(src image.Image, angle int) *image.RGBA {
 func encodeFile(t *testing.T, path string, img image.Image, o heif.Options) {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := heif.Encode(&buf, img, o); err != nil {
+	if err := heif.Encode(&buf, img, &o); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
@@ -103,16 +103,55 @@ func decodeFile(t *testing.T, path string) (*image.RGBA, *heif.Info) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, info, err := heif.Decode(data)
+	img, info, err := heif.DecodeBytes(data)
 	if err != nil {
 		t.Fatalf("decode %s: %v", filepath.Base(path), err)
 	}
+	checkImagePackage(t, data, img, info)
 	return img, info
 }
 
+// checkImagePackage reads the same file the way a program that only knows
+// the image package would: the format is recognised from the file header,
+// DecodeConfig and DecodeInfo predict what DecodeBytes returned without
+// decoding, and image.Decode returns the same pixels.
+func checkImagePackage(t *testing.T, data []byte, want *image.RGBA, wantInfo *heif.Info) {
+	t.Helper()
+	info, err := heif.DecodeInfo(data)
+	if err != nil {
+		t.Fatalf("DecodeInfo: %v", err)
+	}
+	if *info != *wantInfo {
+		t.Errorf("DecodeInfo %+v, DecodeBytes reported %+v", *info, *wantInfo)
+	}
+	wantFormat := "heic"
+	if wantInfo.Codec == hwmediacodec.AV1 {
+		wantFormat = "avif"
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("image.DecodeConfig: %v", err)
+	}
+	// A file whose major brand is the generic mif1 is reported as "heif".
+	if format != wantFormat && format != "heif" {
+		t.Errorf("image.DecodeConfig format %q, want %q", format, wantFormat)
+	}
+	if cfg.Width != want.Rect.Dx() || cfg.Height != want.Rect.Dy() || cfg.ColorModel != color.RGBAModel {
+		t.Errorf("image.DecodeConfig %dx%d, decoded %v", cfg.Width, cfg.Height, want.Rect.Size())
+	}
+	img, format2, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("image.Decode: %v", err)
+	}
+	rgba, ok := img.(*image.RGBA)
+	if !ok || format2 != format || rgba.Rect != want.Rect || !bytes.Equal(rgba.Pix, want.Pix) {
+		t.Errorf("image.Decode returned %T %q %v, which differs from DecodeBytes", img, format2, img.Bounds())
+	}
+}
+
 func TestEncodeHEICReadBySips(t *testing.T) {
-	testutil.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
-	if !testutil.HasSips() {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	if !mediatest.HasSips() {
 		t.Skip("sips (macOS ImageIO) not available")
 	}
 	dir := t.TempDir()
@@ -138,12 +177,12 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 			// orientation metadata rather than rotating the pixels, so its
 			// output is the stored, unrotated picture.
 			png := filepath.Join(dir, tc.name+"_sips.png")
-			testutil.Sips(t, out, png, "png")
-			ref := testutil.LoadPNG(t, png)
+			mediatest.Sips(t, out, png, "png")
+			ref := mediatest.LoadPNG(t, png)
 			if ref.Bounds().Size() != src.Bounds().Size() {
 				t.Fatalf("ImageIO decodes to %v, want %v", ref.Bounds().Size(), src.Bounds().Size())
 			}
-			if p := testutil.BlockPSNR(src, ref, 4); p < 35 {
+			if p := mediatest.BlockPSNR(src, ref, 4); p < 35 {
 				t.Errorf("ImageIO's decode is %.1f dB from the source, want at least 35", p)
 			}
 			ref = rotateCCW(ref, tc.o.Rotation)
@@ -157,10 +196,10 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 				t.Fatalf("decoded %v, want %v", got.Bounds().Size(), want.Bounds().Size())
 			}
 			odd := tc.w%2 == 1 || tc.h%2 == 1
-			if p := testutil.BlockPSNR(got, ref, 1); !odd && p < 40 {
+			if p := mediatest.BlockPSNR(got, ref, 1); !odd && p < 40 {
 				t.Errorf("our decode is %.1f dB from ImageIO's, want at least 40", p)
 			}
-			if p := testutil.BlockPSNR(got, want, 1); p < 35 {
+			if p := mediatest.BlockPSNR(got, want, 1); p < 35 {
 				t.Errorf("our decode is %.1f dB from the source, want at least 35", p)
 			}
 			wantTiles := 1
@@ -176,13 +215,13 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 			// Its clap handling rounds odd sizes to even, so only even
 			// pictures are compared.
 			if tc.o.TileSize == 0 && !odd {
-				testutil.RequireFFmpeg(t)
-				fpng := testutil.FFmpegImage(t, out, filepath.Join(dir, tc.name+"_ffmpeg.png"))
-				fref := testutil.LoadPNG(t, fpng)
+				mediatest.RequireFFmpeg(t)
+				fpng := mediatest.FFmpegImage(t, out, filepath.Join(dir, tc.name+"_ffmpeg.png"))
+				fref := mediatest.LoadPNG(t, fpng)
 				if fref.Bounds().Size() != want.Bounds().Size() {
 					t.Fatalf("ffmpeg decodes to %v, want %v", fref.Bounds().Size(), want.Bounds().Size())
 				}
-				if p := testutil.BlockPSNR(want, fref, 4); p < 35 {
+				if p := mediatest.BlockPSNR(want, fref, 4); p < 35 {
 					t.Errorf("ffmpeg's decode is %.1f dB from the (rotated) source", p)
 				}
 			}
@@ -191,16 +230,16 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 }
 
 func TestDecodeHEICFromSips(t *testing.T) {
-	testutil.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
-	if !testutil.HasSips() {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	if !mediatest.HasSips() {
 		t.Skip("sips (macOS ImageIO) not available")
 	}
 	dir := t.TempDir()
 	src := testImage(800, 600)
 	srcPNG := filepath.Join(dir, "src.png")
-	testutil.SavePNG(t, srcPNG, src)
+	mediatest.SavePNG(t, srcPNG, src)
 	heic := filepath.Join(dir, "sips.heic")
-	testutil.Sips(t, srcPNG, heic, "heic")
+	mediatest.Sips(t, srcPNG, heic, "heic")
 
 	got, info := decodeFile(t, heic)
 	if info.Codec != hwmediacodec.HEVC || got.Bounds().Dx() != 800 || got.Bounds().Dy() != 600 {
@@ -209,46 +248,46 @@ func TestDecodeHEICFromSips(t *testing.T) {
 	// Compare with ImageIO's own decode of its file, which isolates our
 	// decoding from the encoder's loss.
 	refPNG := filepath.Join(dir, "sips_dec.png")
-	testutil.Sips(t, heic, refPNG, "png")
-	if p := testutil.BlockPSNR(got, testutil.LoadPNG(t, refPNG), 4); p < 40 {
+	mediatest.Sips(t, heic, refPNG, "png")
+	if p := mediatest.BlockPSNR(got, mediatest.LoadPNG(t, refPNG), 4); p < 40 {
 		t.Errorf("%.1f dB from ImageIO's decode, want at least 40", p)
 	}
-	if p := testutil.BlockPSNR(got, src, 4); p < 35 {
+	if p := mediatest.BlockPSNR(got, src, 4); p < 35 {
 		t.Errorf("%.1f dB from the source, want at least 35", p)
 	}
 }
 
 func TestDecodeAVIFFromFFmpeg(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	testutil.RequireHardware(t, hwmediacodec.AV1, hwmediacodec.Decode)
-	if !testutil.HasEncoder(t, "libsvtav1") {
+	mediatest.RequireFFmpeg(t)
+	mediatest.RequireHardware(t, hwmediacodec.AV1, hwmediacodec.Decode)
+	if !mediatest.HasEncoder(t, "libsvtav1") {
 		t.Skip("ffmpeg has no libsvtav1")
 	}
 	dir := t.TempDir()
 	src := testImage(640, 480)
 	srcPNG := filepath.Join(dir, "src.png")
-	testutil.SavePNG(t, srcPNG, src)
-	avif := testutil.FFmpegImage(t, srcPNG, filepath.Join(dir, "ffmpeg.avif"), "-c:v", "libsvtav1", "-pix_fmt", "yuv420p", "-f", "avif")
+	mediatest.SavePNG(t, srcPNG, src)
+	avif := mediatest.FFmpegImage(t, srcPNG, filepath.Join(dir, "ffmpeg.avif"), "-c:v", "libsvtav1", "-pix_fmt", "yuv420p", "-f", "avif")
 
 	got, info := decodeFile(t, avif)
 	if info.Codec != hwmediacodec.AV1 || info.Tiles != 1 || got.Bounds().Dx() != 640 || got.Bounds().Dy() != 480 {
 		t.Fatalf("decoded %v %+v", got.Bounds(), info)
 	}
-	ref := testutil.LoadPNG(t, testutil.FFmpegImage(t, avif, filepath.Join(dir, "ffmpeg_dec.png")))
-	if p := testutil.BlockPSNR(got, ref, 4); p < 40 {
+	ref := mediatest.LoadPNG(t, mediatest.FFmpegImage(t, avif, filepath.Join(dir, "ffmpeg_dec.png")))
+	if p := mediatest.BlockPSNR(got, ref, 4); p < 40 {
 		t.Errorf("%.1f dB from ffmpeg's decode, want at least 40", p)
 	}
-	if p := testutil.BlockPSNR(got, src, 4); p < 30 {
+	if p := mediatest.BlockPSNR(got, src, 4); p < 30 {
 		t.Errorf("%.1f dB from the source, want at least 30", p)
 	}
 }
 
 func TestEncodeAVIFNeedsAnEncoder(t *testing.T) {
 	var buf bytes.Buffer
-	err := heif.Encode(&buf, testImage(64, 64), heif.Options{Codec: hwmediacodec.AV1})
+	err := heif.Encode(&buf, testImage(64, 64), &heif.Options{Codec: hwmediacodec.AV1})
 	if err == nil {
 		// A platform with a hardware AV1 encoder: the file must round-trip.
-		img, info, derr := heif.Decode(buf.Bytes())
+		img, info, derr := heif.DecodeBytes(buf.Bytes())
 		if derr != nil || info.Codec != hwmediacodec.AV1 || img.Bounds().Dx() != 64 {
 			t.Fatalf("AVIF round trip: %v %+v", derr, info)
 		}
@@ -261,8 +300,59 @@ func TestEncodeAVIFNeedsAnEncoder(t *testing.T) {
 
 func TestDecodeRejectsGarbage(t *testing.T) {
 	for _, in := range [][]byte{nil, []byte("not a heif file at all, just text"), bytes.Repeat([]byte{0}, 64)} {
-		if _, _, err := heif.Decode(in); err == nil {
+		if _, _, err := heif.DecodeBytes(in); err == nil {
 			t.Errorf("decoding %q succeeded", in)
 		}
+		if _, err := heif.Decode(bytes.NewReader(in)); err == nil {
+			t.Errorf("Decode of %q succeeded", in)
+		}
+		if _, err := heif.DecodeConfig(bytes.NewReader(in)); err == nil {
+			t.Errorf("DecodeConfig of %q succeeded", in)
+		}
+		if _, _, err := image.Decode(bytes.NewReader(in)); err == nil {
+			t.Errorf("image.Decode of %q succeeded", in)
+		}
+	}
+}
+
+// TestEncodeDefaults writes with nil options, as jpeg.Encode allows, and
+// reads the file back through the image package alone.
+func TestEncodeDefaults(t *testing.T) {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	src := testImage(320, 240)
+	var buf bytes.Buffer
+	if err := heif.Encode(&buf, src, nil); err != nil {
+		t.Fatal(err)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(buf.Bytes()))
+	if err != nil || format != "heic" || cfg.Width != 320 || cfg.Height != 240 {
+		t.Fatalf("image.DecodeConfig: %q %dx%d %v", format, cfg.Width, cfg.Height, err)
+	}
+	img, format, err := image.Decode(bytes.NewReader(buf.Bytes()))
+	if err != nil || format != "heic" {
+		t.Fatalf("image.Decode: %q %v", format, err)
+	}
+	if p := mediatest.BlockPSNR(img, src, 4); p < 30 {
+		t.Errorf("%.1f dB from the source, want at least 30", p)
+	}
+}
+
+// TestDecodeConfigNeedsNoDecoder checks the structure-only path: the size
+// after rotation, the tile count and the codec of a rotated grid come from
+// the boxes, and only an encoder is needed to make the file.
+func TestDecodeConfigNeedsNoDecoder(t *testing.T) {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	var buf bytes.Buffer
+	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 128, Rotation: 90}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := heif.DecodeInfo(buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := heif.Info{Codec: hwmediacodec.HEVC, Width: 300, Height: 500, Tiles: 12, Rotation: 90}
+	if *info != want {
+		t.Errorf("DecodeInfo %+v, want %+v", *info, want)
 	}
 }

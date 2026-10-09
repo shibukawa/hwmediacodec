@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/hls"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
@@ -19,7 +19,7 @@ import (
 // into the playlist, so the server is tested without a hardware encoder.
 func feed(t *testing.T, p *hls.Playlist, target time.Duration) string {
 	t.Helper()
-	src := mp4test.GenerateMP4(t, t.TempDir(), mp4test.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 150, BFrames: 0, GOP: 15})
+	src := mediatest.GenerateMP4(t, t.TempDir(), mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 150, BFrames: 0, GOP: 15})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func get(t *testing.T, url string) (int, string, []byte) {
 }
 
 func TestPlaylistServesLiveHLS(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	p := hls.NewPlaylist(10, time.Second)
 	srv := httptest.NewServer(p)
 	defer srv.Close()
@@ -108,7 +108,7 @@ func TestPlaylistServesLiveHLS(t *testing.T) {
 }
 
 func TestPlaylistSlidingWindow(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	p := hls.NewPlaylist(3, time.Second)
 	feed(t, p, time.Second)
 	m3u8 := p.M3U8()
@@ -121,7 +121,7 @@ func TestPlaylistSlidingWindow(t *testing.T) {
 // the handler goes by the last path element and the playlist's URIs are
 // relative.
 func TestPlaylistMountedUnderPrefix(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	p := hls.NewPlaylist(10, time.Second)
 	mux := http.NewServeMux()
 	mux.Handle("/live/cam1/", p)

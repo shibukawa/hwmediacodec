@@ -251,7 +251,7 @@ verification:
       input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
     - &mf_decoder
       path: internal/mediafoundation/decoder.go
-      input_hash: ae11d17155be5a1f185161117e7506cc31bfef03792b6875b8427cbb7c066f24
+      input_hash: bfe877952205bfc43de2037fdd051c679f11d3893987ff1f62c50a6af0a7b1c4
     - &mf_sys
       path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
@@ -270,7 +270,7 @@ verification:
       input_hash: 17adee94e73aa9bfa32381632547621fcf4d87185ab988689589451d4654332e
     - &mf_encoder
       path: internal/mediafoundation/encoder.go
-      input_hash: 8d27e0c9005148538185c0c06c8f3c0b062f3697131831cbda5760a4e2e2ded4
+      input_hash: 70a9c21a6aa29db10d885632338362c6664e9c982c30f0df4ad739e90024912b
     - &mf_sys_encode
       path: internal/mediafoundation/sys/encode.go
       input_hash: 202b5cd3a676d70ae5f6b7893623cc31b83e91866bb612784d02903d017122af
@@ -313,19 +313,19 @@ verification:
     - path: internal/mediafoundation/time.go
       input_hash: 6cade0f2a36a7356f801482f5b83a29b8e3f3911c9d0ad01e4d3f6da36b73553
     - path: internal/mediafoundation/paramsets.go
-      input_hash: 6935f0a81a5c8467783d3967d270524a59d626e2e84546058e1fb93d922e7df3
-    - path: annexb/paramsets.go
+      input_hash: e5aa3939f80ab9edc5672c110b3ead610ee592e21dd301ba745037d75f3c0be5
+    - path: bitstream/annexb/paramsets.go
       input_hash: 63834eae0dd58bd494d66b5488ba59cf89ba638bf7e3a0d03c91e3e9fc6a434a
     - path: internal/mediafoundation/frame_test.go
       input_hash: 14545212fb75a36d42b2f8f8293976d6482827f567b2630cc52e975886c214df
     - path: internal/mediafoundation/paramsets_test.go
-      input_hash: 33e4afdd97a3668b4419f4460c417d4828f93a41b0a4b90c9ff2abd6fd2228e2
+      input_hash: aad0259a1f728b2c31d3dcc74d443a735c408157a71a305125af1510b659fa1a
     - path: internal/mediafoundation/time_test.go
       input_hash: 41957ebf74a3f2ff62c8db67dee4a63a3c277c600f04e936ba07524012bedb53
-    - path: annexb/paramsets_test.go
+    - path: bitstream/annexb/paramsets_test.go
       input_hash: b95fcf8864b98cffc9d94a23a5837b6c0322608168dbf0138fc039b8f804b954
     - path: internal/mediafoundation/encodeutil.go
-      input_hash: ba9071362ac512856b342ee66411b34801be031828a366264ecfc2dd8cc2dcd5
+      input_hash: 2b349836e5c366e4843c1579d411b4f762530e896beb06f564f7ebe4722af1e7
     - path: internal/mediafoundation/encodeutil_test.go
       input_hash: 24ea374200a61af9e90c6001cae4c3102390c047b7d889bc93e26c0d0282b211
 open_questions:

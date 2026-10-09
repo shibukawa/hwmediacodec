@@ -40,8 +40,14 @@ type codedItem struct {
 	height int
 }
 
-// Encode writes img as a HEIF file.
-func Encode(w io.Writer, img image.Image, o Options) error {
+// Encode writes img as a HEIF file: HEIC unless the options select AV1.
+// A nil *Options means the defaults, as with jpeg.Encode. The alpha
+// channel is not stored.
+func Encode(w io.Writer, img image.Image, opts *Options) error {
+	var o Options
+	if opts != nil {
+		o = *opts
+	}
 	if o.Codec == 0 {
 		o.Codec = hwmediacodec.HEVC
 	}

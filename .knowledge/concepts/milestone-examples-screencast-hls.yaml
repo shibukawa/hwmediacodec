@@ -104,7 +104,7 @@ verification:
     - path: mediacontainer/mp4/videofile.go
       input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
     - path: mediacontainer/mp4/videofile_test.go
-      input_hash: 31d07fec8bb75c4f9b48b4a042457e974a8dfe3a0c6f4aedcdf33138f4164e47
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: mediacontainer/mp4/mux.go
       input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
   segmenter-test:
@@ -122,9 +122,9 @@ verification:
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
     - path: mediacontainer/mp4/sample.go
-      input_hash: dc6d08babd2ae480a9fa2275181e9fe6d02e4871a3735e9845ffa544cd9c4dc7
+      input_hash: d9f3d899ad1483f07ba7e5190d86d0b06ff5e6dee5181b145a329d5616021f09
     - path: mediacontainer/mp4/segmenter_test.go
-      input_hash: 40491f068d0cdb0745c75eedde631cb02fb80cc07ec65d6af6473571a523f16a
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
   hls-server-test:
     state: passed
     method: integration
@@ -141,7 +141,7 @@ verification:
     - path: mediacontainer/hls/playlist.go
       input_hash: 9fded29e107a4cfc436dc2bcfe868c465ae2a33e2bbcbca80cbeb29566bcb40f
     - path: mediacontainer/hls/playlist_test.go
-      input_hash: 21c8493bf65b16d84abd3b3d3a43ef4d8f545b9949430f6de61d5fd5236116e4
+      input_hash: 166907238474c7853d9fdfd0c67ac62fe00b34afb155bb4954abc1f5c1d3c021
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
   hls-live-run:

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -33,8 +33,8 @@ func normalize(pts []int64) []int64 {
 }
 
 func TestDemuxMatchesFFprobe(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
-	cases := []mp4test.MP4Options{
+	mediatest.RequireFFmpeg(t)
+	cases := []mediatest.MP4Options{
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 2, GOP: 12, Audio: true},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 30, BFrames: 2, GOP: 10},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 20, BFrames: 0, GOP: 10, HEV1: true},
@@ -46,7 +46,7 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := mp4test.GenerateMP4(t, dir, c)
+			path := mediatest.GenerateMP4(t, dir, c)
 			d, err := mp4.Open(path)
 			if err != nil {
 				t.Fatal(err)
@@ -70,7 +70,7 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 			}
 
 			// Presentation times and keyframes agree with ffprobe.
-			ref := mp4test.Frames(t, path)
+			ref := mediatest.Frames(t, path)
 			if len(ref) != c.Frames {
 				t.Fatalf("ffprobe sees %d frames", len(ref))
 			}
@@ -123,8 +123,8 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 				f.Write(au.Data)
 			}
 			f.Close()
-			want := mp4test.FrameMD5(t, path, "")
-			got := mp4test.FrameMD5(t, raw, rawFormat(c.Codec))
+			want := mediatest.FrameMD5(t, path, "")
+			got := mediatest.FrameMD5(t, raw, rawFormat(c.Codec))
 			if !slices.Equal(got, want) {
 				t.Errorf("elementary stream decodes differently from the MP4 (%d vs %d frames)", len(got), len(want))
 			}
@@ -133,8 +133,8 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 }
 
 func TestMuxRoundTrip(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
-	cases := []mp4test.MP4Options{
+	mediatest.RequireFFmpeg(t)
+	cases := []mediatest.MP4Options{
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 2, GOP: 12, Audio: true},
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 20, BFrames: 0, GOP: 10},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 30, BFrames: 2, GOP: 10, Audio: true},
@@ -142,7 +142,7 @@ func TestMuxRoundTrip(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Codec.String()+"_b"+string(rune('0'+c.BFrames)), func(t *testing.T) {
 			dir := t.TempDir()
-			src := mp4test.GenerateMP4(t, dir, c)
+			src := mediatest.GenerateMP4(t, dir, c)
 			d, err := mp4.Open(src)
 			if err != nil {
 				t.Fatal(err)
@@ -201,8 +201,8 @@ func TestMuxRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			mp4test.CheckDecodes(t, out)
-			srcStreams, outStreams := mp4test.Streams(t, src), mp4test.Streams(t, out)
+			mediatest.CheckDecodes(t, out)
+			srcStreams, outStreams := mediatest.Streams(t, src), mediatest.Streams(t, out)
 			if len(srcStreams) != len(outStreams) {
 				t.Fatalf("%d streams, want %d", len(outStreams), len(srcStreams))
 			}
@@ -223,20 +223,20 @@ func TestMuxRoundTrip(t *testing.T) {
 			}
 			// Same pictures, same presentation times (the edit list hides
 			// the B-frame delay exactly as ffmpeg's does).
-			if got, want := mp4test.FrameMD5(t, out, ""), mp4test.FrameMD5(t, src, ""); !slices.Equal(got, want) {
+			if got, want := mediatest.FrameMD5(t, out, ""), mediatest.FrameMD5(t, src, ""); !slices.Equal(got, want) {
 				t.Errorf("remuxed video decodes differently (%d vs %d frames)", len(got), len(want))
 			}
 			var gotPTS, wantPTS []int64
-			for _, f := range mp4test.Frames(t, out) {
+			for _, f := range mediatest.Frames(t, out) {
 				gotPTS = append(gotPTS, f.PTS)
 			}
-			for _, f := range mp4test.Frames(t, src) {
+			for _, f := range mediatest.Frames(t, src) {
 				wantPTS = append(wantPTS, f.PTS)
 			}
 			if !slices.Equal(gotPTS, wantPTS) {
 				t.Errorf("presentation times differ:\n got %v\nwant %v", gotPTS, wantPTS)
 			}
-			if sd, od := mp4test.VideoStream(t, src).Seconds(), mp4test.VideoStream(t, out).Seconds(); od < sd-0.05 || od > sd+0.05 {
+			if sd, od := mediatest.VideoStream(t, src).Seconds(), mediatest.VideoStream(t, out).Seconds(); od < sd-0.05 || od > sd+0.05 {
 				t.Errorf("duration %.3fs, want %.3fs", od, sd)
 			}
 		})

@@ -74,7 +74,7 @@ verification:
     - path: mediacontainer/mp4/stream.go
       input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
     - path: mediacontainer/mp4/stream_test.go
-      input_hash: e8db182bd3662a37fb3f87c091ce1269b08d578525ea6932630488bcbdf9bb94
+      input_hash: 208cf01c4ac1ee4e0e58d12ef2fa4da59e5c6b465e0ef39ce3464286ed534048
   mesh-test:
     state: passed
     method: unit

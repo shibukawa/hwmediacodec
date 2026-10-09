@@ -12,7 +12,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -69,8 +69,8 @@ func rgbPSNR(a *image.RGBA, b image.Image) float64 {
 // VideoFile and checks the MP4 with ffprobe: this one needs a hardware
 // encoder.
 func TestVideoFileRecordsCapture(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
-	mp4test.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
+	mediatest.RequireFFmpeg(t)
+	mediatest.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "rec.mp4")
 	sink, err := mp4.CreateVideoFile(out, hwmediacodec.H264, capture.TimeScale)
@@ -106,15 +106,15 @@ func TestVideoFileRecordsCapture(t *testing.T) {
 		t.Errorf("duration %v, want 2 s", d)
 	}
 
-	mp4test.CheckDecodes(t, out)
-	vs := mp4test.VideoStream(t, out)
+	mediatest.CheckDecodes(t, out)
+	vs := mediatest.VideoStream(t, out)
 	if vs.CodecName != "h264" || vs.Width != w || vs.Height != h || vs.FrameCount() != frames {
 		t.Errorf("stream %s %dx%d %d frames", vs.CodecName, vs.Width, vs.Height, vs.FrameCount())
 	}
 	if d := vs.Seconds(); d < 1.99 || d > 2.01 {
 		t.Errorf("duration %.3f s, want 2", d)
 	}
-	fr := mp4test.Frames(t, out)
+	fr := mediatest.Frames(t, out)
 	for i := 1; i < len(fr); i++ {
 		if fr[i].PTS-fr[i-1].PTS != 3000 { // 90000 / 30
 			t.Errorf("frame %d pts step %d", i, fr[i].PTS-fr[i-1].PTS)
@@ -122,7 +122,7 @@ func TestVideoFileRecordsCapture(t *testing.T) {
 	}
 	// The first decoded frame is the first captured image (RGBA order and
 	// colour conversion right).
-	f, err := os.Open(mp4test.ExtractFrame(t, out, 0, dir))
+	f, err := os.Open(mediatest.ExtractFrame(t, out, 0, dir))
 	if err != nil {
 		t.Fatal(err)
 	}

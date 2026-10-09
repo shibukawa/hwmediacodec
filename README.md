@@ -9,6 +9,24 @@ through [purego](https://github.com/ebitengine/purego) and, for Media
 Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
 
+## Packages
+
+| Import path | What it is |
+| --- | --- |
+| `github.com/shibukawa/hwmediacodec` | The codec API: `Probe`, `NewDecoder`, `NewEncoder`, packets and frames |
+| `.../bitstream/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
+| `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets, fMP4 segmenter |
+| `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
+| `.../mediacontainer/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
+| `.../image/heif` | HEIC and AVIF still images, registered with the standard `image` package |
+| `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
+| `.../ebitenvideo` | Separate module: video playback as an `*ebiten.Image` |
+| `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
+
+The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
+HEIF packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
+Ebitengine and pion are only pulled in by the two separate modules.
+
 ## Status
 
 | Platform | Backend | Decode | Encode |
@@ -71,7 +89,7 @@ Known limitations:
   fails with "decoder malfunction"; 96x64 works).
 - The VideoToolbox encoder rounds odd picture sizes down to even: a
   321x203 request yields a 320x202 stream. Pad to even and crop at the
-  consumer (as `examples/heif` does with a `clap` property).
+  consumer (as `image/heif` does with a `clap` property).
 - `Encoder.Flush` blocks until VideoToolbox has emitted every pending frame;
   it does not observe context cancellation once the call has started.
 - Intel Macs are out of scope; the VideoToolbox backend requires hardware
@@ -436,6 +454,69 @@ rec.Close()                  // flushes the encoder, closes the sink
   `RequestKeyframe` forces a keyframe on the next captured frame (a new
   viewer joining a live stream).
 
+## HEIC and AVIF images
+
+`github.com/shibukawa/hwmediacodec/image/heif` reads and writes HEIF still
+images (HEIC with HEVC, AVIF with AV1) with the hardware codecs. It follows
+the conventions of `image/jpeg` and `image/png`, and importing it registers
+the formats with the standard `image` package:
+
+```go
+import _ "github.com/shibukawa/hwmediacodec/image/heif"
+
+img, format, err := image.Decode(file)         // format: "heic", "avif" or "heif"
+cfg, _, err := image.DecodeConfig(file)        // size after rotation; nothing is decoded
+```
+
+```go
+img, err := heif.Decode(r)                     // image.Image (an *image.RGBA)
+err = heif.Encode(w, img, nil)                 // HEIC with the encoder's default quality
+err = heif.Encode(w, img, &heif.Options{Quality: 0.8, TileSize: 512, Rotation: 90})
+
+rgba, info, err := heif.DecodeBytes(data, hwmediacodec.WithSoftwareFallback())
+info, err = heif.DecodeInfo(data)              // codec, size, tiles, rotation; no decoder needed
+```
+
+Decoding needs a hardware HEVC or AV1 decoder (the error wraps
+`hwmediacodec.ErrUnsupported` on a machine without one); `DecodeConfig` and
+`DecodeInfo` read only the file structure and work everywhere. The result
+is opaque RGBA: alpha planes are neither read nor written, and only 8-bit
+4:2:0 pictures are handled (iPhone HDR photos are 10-bit and out of scope).
+
+A HEIF file is an ISOBMFF `meta` box of items (coded pictures, a `grid`
+that tiles them) with properties (`hvcC`/`av1C` decoder configuration,
+`ispe` size, `irot`, `imir`, `clap`, `colr`, `pixi`) and an `mdat` with the
+coded data. The package parses and writes that itself (mp4ff only supplies
+the `hvcC`/`av1C` record parsers) and leaves the pictures to the codecs:
+
+- **Decode**: for each coded item, `hvcC`'s parameter sets plus the
+  length-prefixed NAL units become one Annex-B packet (AV1: the temporal
+  unit, with the sequence header from `av1C` if the item lacks one); all
+  items go through one decoder opened with `WithOutputFormat(RGBA)` and
+  `WithDecodeOrder()`, grids are stitched tile by tile and cropped to the
+  grid size, then `clap`, `irot` and `imir` are applied in their stored
+  order.
+- **Encode**: one keyframe per picture or tile (`WithKeyframeInterval(1)`,
+  `ForceKeyframe`, `WithQuality`), VPS/SPS/PPS from the packet into `hvcC`,
+  the slices as the item data. `TileSize` writes a grid like phone cameras
+  do; `Rotation` stores an `irot`. Odd sizes are padded by a replicated
+  row or column and declared through `clap`, because the hardware encoders
+  work on even 4:2:0 pictures (VideoToolbox rounds an odd request down to
+  320x202 for 321x203).
+- **AVIF**: decoding works wherever `Probe` lists an AV1 decoder (M3 and
+  newer Macs); encoding needs an AV1 encoder, which no Apple Silicon chip
+  has, so `Encode` with `Codec: AV1` returns `ErrUnsupported` there and
+  works unchanged on a platform that gains one.
+
+Tests use macOS ImageIO (`sips`) as the reference for the files this
+package writes (single, grid, rotated, odd sizes) and for HEIC input, and
+ffmpeg for AVIF input and for the rotation direction (ffmpeg maps `irot` to
+a display matrix and autorotates; ImageIO keeps it as orientation
+metadata). ImageIO resamples `clap`-cropped pictures instead of cropping,
+and ffmpeg rounds odd `clap` sizes to even, so odd pictures are compared
+with the source instead. 8-bit 4:2:0 only; iPhone HDR photos (10-bit) are
+out of scope.
+
 ## Examples
 
 The [`examples/`](examples/) directory is a third Go module with complete
@@ -446,8 +527,7 @@ of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
 player
 (`examples/player`), video as a texture on a box and in a Kage shader
-(`examples/texture`) and HEIC/AVIF still images (`examples/heif`,
-`examples/heifconv`). The players default to a bundled clip
+(`examples/texture`) and a HEIC/AVIF converter (`examples/heifconv`). The players default to a bundled clip
 (`examples/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
@@ -597,7 +677,7 @@ parameter sets and slice headers the HEVC encoder writes are read back by
 ffmpeg and ffprobe. The AV1 OBU splitter, sequence header and frame header
 parsers are checked against `trace_headers` on SVT-AV1 streams (8-bit and
 10-bit), and the `av1C` record against the one ffmpeg writes into an MP4 of
-the same stream; the `ivf` package is checked against ffmpeg's own IVF
+the same stream; the `mediacontainer/ivf` package is checked against ffmpeg's own IVF
 files. These tests skip when ffmpeg lacks libsvtav1. The AV1 decode
 conformance tests need libdav1d as well: every NV12 frame of an 8-bit
 stream with hidden frames and `show_existing_frame` must equal dav1d's
@@ -634,7 +714,8 @@ sample tables, presentation times and decoded frame checksums with
 ffprobe's view of the same files and feed ffmpeg-made streams through the
 segmenter, and the `mediacontainer/hls` test lets ffprobe play the served
 playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
-hardware encoder and skip otherwise.
+hardware encoder and skip otherwise. The `image/heif` tests use macOS
+ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
 
 ```sh
 go test ./...

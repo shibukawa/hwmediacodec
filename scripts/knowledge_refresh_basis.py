@@ -34,6 +34,19 @@ RENAMES = {
     "examples/container/assets_test.go": "examples/assets/assets_test.go",
     "examples/hls/server.go": "mediacontainer/hls/playlist.go",
     "examples/hls/server_test.go": "mediacontainer/hls/playlist_test.go",
+    "annexb/annexb.go": "bitstream/annexb/annexb.go",
+    "annexb/annexb_test.go": "bitstream/annexb/annexb_test.go",
+    "annexb/paramsets.go": "bitstream/annexb/paramsets.go",
+    "annexb/paramsets_test.go": "bitstream/annexb/paramsets_test.go",
+    "ivf/ivf.go": "mediacontainer/ivf/ivf.go",
+    "ivf/ivf_test.go": "mediacontainer/ivf/ivf_test.go",
+    "examples/heif/box.go": "image/heif/box.go",
+    "examples/heif/decode.go": "image/heif/decode.go",
+    "examples/heif/encode.go": "image/heif/encode.go",
+    "examples/heif/heif_test.go": "image/heif/heif_test.go",
+    "examples/heif/transform.go": "image/heif/transform.go",
+    "examples/internal/testutil/image.go": "internal/mediatest/image.go",
+    "internal/mp4test/ffmpeg.go": "internal/mediatest/ffmpeg.go",
 }
 root = sys.argv[1]
 apply = "--apply" in sys.argv

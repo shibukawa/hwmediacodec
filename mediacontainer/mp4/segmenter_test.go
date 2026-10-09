@@ -10,7 +10,7 @@ import (
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -19,7 +19,7 @@ import (
 // the segmenter is tested without a hardware encoder.
 func segmentSource(t *testing.T, dir string, c hwmediacodec.Codec, target time.Duration) (src string, init []byte, segs []mp4.Segment) {
 	t.Helper()
-	src = mp4test.GenerateMP4(t, dir, mp4test.MP4Options{Codec: c, Width: 160, Height: 120, Frames: 90, BFrames: 0, GOP: 10})
+	src = mediatest.GenerateMP4(t, dir, mediatest.MP4Options{Codec: c, Width: 160, Height: 120, Frames: 90, BFrames: 0, GOP: 10})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func segmentSource(t *testing.T, dir string, c hwmediacodec.Codec, target time.D
 }
 
 func TestSegmenter(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
 		t.Run(c.String(), func(t *testing.T) {
 			dir := t.TempDir()
@@ -102,11 +102,11 @@ func TestSegmenter(t *testing.T) {
 			if err := os.WriteFile(all, data, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			mp4test.CheckDecodes(t, all)
-			if got, want := mp4test.FrameMD5(t, all, ""), mp4test.FrameMD5(t, src, ""); !slices.Equal(got, want) {
+			mediatest.CheckDecodes(t, all)
+			if got, want := mediatest.FrameMD5(t, all, ""), mediatest.FrameMD5(t, src, ""); !slices.Equal(got, want) {
 				t.Errorf("segments decode differently from the source (%d vs %d frames)", len(got), len(want))
 			}
-			if vs := mp4test.VideoStream(t, all); vs.CodecName != c.String() || vs.Width != 160 {
+			if vs := mediatest.VideoStream(t, all); vs.CodecName != c.String() || vs.Width != 160 {
 				t.Errorf("stream is %s %dx%d", vs.CodecName, vs.Width, vs.Height)
 			}
 		})
@@ -114,7 +114,7 @@ func TestSegmenter(t *testing.T) {
 }
 
 func TestSegmenterShortTarget(t *testing.T) {
-	mp4test.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	// A target shorter than the keyframe interval cuts at every keyframe.
 	_, _, segs := segmentSource(t, t.TempDir(), hwmediacodec.H264, 100*time.Millisecond)
 	if len(segs) != 9 {

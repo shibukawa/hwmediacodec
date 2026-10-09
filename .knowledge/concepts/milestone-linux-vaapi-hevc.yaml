@@ -124,7 +124,7 @@ verification:
     - path: internal/hevc/paramsets.go
       input_hash: 960c560c9686df382fdf1b439059cfe96a87aaff1b4c0b2ea9fa743e388c4626
     - path: internal/hevc/oracle_test.go
-      input_hash: 6941fe55630fececd1b39528b7f1c24a1b6f9cabfef18c9be3efe4b25a2dc222
+      input_hash: 54ca908c2b663861564ec5da08eddfb6dbc4494ae2940037c61129e3528ed985
     - path: internal/hevc/rps_test.go
       input_hash: fcf489eb61c72a9b05295d4226eed72b0623e749d299fdea7896d6e9b3e7d35c
     - path: internal/testutil/hevc.go
@@ -149,7 +149,7 @@ verification:
     - path: internal/hevc/slice.go
       input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
     - path: internal/hevc/dpb_oracle_test.go
-      input_hash: 41de390c994d7f9d25540348780ac8ab24e5e9c47c9ccce61b473156104be676
+      input_hash: 0d6ab2926c4b87d3bd908f459e9e84a3e57757385c161a027e026ee68b985268
     - path: internal/hevc/dpb_test.go
       input_hash: d527c6acd42e9e9b8477f841916514ffb0f170534cc4caed3e23d06e1dc7f389
     - path: internal/testutil/hevc.go
@@ -168,7 +168,7 @@ verification:
     - path: internal/vaapi/hevcfill.go
       input_hash: a96d02e0c2fb0a53c91b77cef6c901db0e94d08ec1d6a5c5ebe9cbabdc700ae5
     - path: internal/vaapi/hevcfill_test.go
-      input_hash: 9d8ea5bad2a66d23a5e5a90e7f3f8d98520e84ca59f75238092fca87d00743a8
+      input_hash: 94f576c6a2a29c1f5efc05d7385cbea247a17b42322424c95c39471474fb2805
     - path: internal/vaapi/sys/types_hevc.go
       input_hash: f8f0a7de322f48df990a6509528efceee4b98ddebc18b27b4c61d04b890c1580
     - path: internal/hevc/dpb.go
@@ -223,7 +223,7 @@ verification:
     - path: internal/vaapi/hevcparams.go
       input_hash: cc811fa1bfe1c396c0c9561c25ae53c35a142948ad4f9ab7e9eca60c3060c507
     - path: internal/vaapi/hevcparams_test.go
-      input_hash: 4b3e1be3fc48b9bc3bee6e8ac74e4362715fe829262c6e6155460055d64c2755
+      input_hash: ecec425bb0887b5598b6b4c08e15339f1e39cef645a198f99dd939c9ccf32879
     - path: internal/hevc/write.go
       input_hash: 346027af5b6f5cdacc4e746789f74d9e7b7bb960846483e92dc447a22dabe34d
   fake-driver-test:
@@ -241,7 +241,7 @@ verification:
         surface. The first run of the pre-existing H.264 backend code through libva.
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: bcae97623e49532f3d3d84db4f13ec2a79626ae9f06ba88362af5d1029f8cb57
+      input_hash: 62fd8e7205d8318f75f2900f2089bae920d4a9f79cdbe09c4036b750a8c52af8
     - path: scripts/vaapi_fake_driver_test.sh
       input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
@@ -251,15 +251,15 @@ verification:
     - path: internal/vaapi/testdata/fakedriver/Dockerfile
       input_hash: 53b1dfedc7a87a6cc03a6414c054a1970e64b2892a0675601f7a7513401de509
     - path: internal/vaapi/decoder.go
-      input_hash: 072e21339ab564f3f16596ce27fb9f788f6802b0ab0392ee4cdc6b013c29de12
+      input_hash: 4c8fd9283863952e688e71abc9743483cc7362ae7ea497e38f9f63331bcf9b84
     - path: internal/vaapi/hevcdec.go
       input_hash: 8844e4633fe10e21b8afe6c235ed2832ab0d4252b9cdf46c601ddb2a6f651697
     - path: internal/vaapi/hevcfill.go
       input_hash: a96d02e0c2fb0a53c91b77cef6c901db0e94d08ec1d6a5c5ebe9cbabdc700ae5
     - path: internal/vaapi/encoder.go
-      input_hash: 8e0d7404dd56f907609802ad5b4e022d60ec660320c631d283dfb590b8738a80
+      input_hash: 1524e4bd891ffe03bca128afa29a09eaddcab6cdd5e863a1dec3392d3902a72f
     - path: internal/vaapi/hevcenc.go
-      input_hash: bd0e4ae1968170577f4d8ff51a29f222e3b5c0ff6180662997f9c01d23f805d8
+      input_hash: 0093da6a82cc9bb6597984f7e49553443298a3661b3747f9be883824eb55f3ac
     - path: internal/vaapi/hevcparams.go
       input_hash: cc811fa1bfe1c396c0c9561c25ae53c35a142948ad4f9ab7e9eca60c3060c507
     - path: internal/vaapi/backend.go
