@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Eyevinn/mp4ff/mp4"
+	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
 )
@@ -54,10 +54,10 @@ type pendingSample struct {
 // onSegment every media segment in order.
 func NewSegmenter(c hwmediacodec.Codec, timeScale uint32, target time.Duration, onInit func([]byte) error, onSegment func(Segment) error) (*Segmenter, error) {
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
-		return nil, fmt.Errorf("container: cannot segment %s", c)
+		return nil, fmt.Errorf("mp4: cannot segment %s", c)
 	}
 	if timeScale == 0 || target <= 0 {
-		return nil, errors.New("container: segmenter needs a time scale and a target duration")
+		return nil, errors.New("mp4: segmenter needs a time scale and a target duration")
 	}
 	return &Segmenter{ps: paramSets{codec: c}, timeScale: timeScale, target: target, onInit: onInit, onSegment: onSegment}, nil
 }
@@ -65,7 +65,7 @@ func NewSegmenter(c hwmediacodec.Codec, timeScale uint32, target time.Duration, 
 // WritePacket adds one Annex-B access unit.
 func (s *Segmenter) WritePacket(p hwmediacodec.Packet) error {
 	if s.closed {
-		return errors.New("container: segmenter is closed")
+		return errors.New("mp4: segmenter is closed")
 	}
 	data, sync, err := s.ps.sample(p)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Segmenter) WritePacket(p hwmediacodec.Packet) error {
 		return nil
 	}
 	if p.PTS != p.DTS {
-		return errors.New("container: the segmenter needs PTS == DTS (encode without B-frames)")
+		return errors.New("mp4: the segmenter needs PTS == DTS (encode without B-frames)")
 	}
 	if !s.initDone {
 		if !sync {
@@ -95,7 +95,7 @@ func (s *Segmenter) WritePacket(p hwmediacodec.Packet) error {
 		}
 	}
 	if len(s.pending) > 0 && p.DTS <= s.pending[len(s.pending)-1].dts {
-		return fmt.Errorf("container: decode time %d does not increase", p.DTS)
+		return fmt.Errorf("mp4: decode time %d does not increase", p.DTS)
 	}
 	s.pending = append(s.pending, pendingSample{data: data, dts: p.DTS, pts: p.PTS, sync: sync})
 	return nil
@@ -106,7 +106,7 @@ func (s *Segmenter) toDuration(ts int64) time.Duration {
 }
 
 func (s *Segmenter) writeInit() error {
-	init := mp4.CreateEmptyInit()
+	init := mp4ff.CreateEmptyInit()
 	trak := init.AddEmptyTrack(s.timeScale, "video", "und")
 	if err := s.ps.setDescriptor(trak); err != nil {
 		return err
@@ -131,7 +131,7 @@ func (s *Segmenter) emit(nextDTS int64) error {
 		return nil
 	}
 	s.seq++
-	frag, err := mp4.CreateFragment(uint32(s.seq), 1)
+	frag, err := mp4ff.CreateFragment(uint32(s.seq), 1)
 	if err != nil {
 		return err
 	}
@@ -151,17 +151,17 @@ func (s *Segmenter) emit(nextDTS int64) error {
 		}
 		s.lastDur = dur
 		total += dur
-		flags := uint32(mp4.NonSyncSampleFlags)
+		flags := uint32(mp4ff.NonSyncSampleFlags)
 		if ps.sync {
-			flags = mp4.SyncSampleFlags
+			flags = mp4ff.SyncSampleFlags
 		}
-		frag.AddFullSample(mp4.FullSample{
-			Sample:     mp4.Sample{Flags: flags, Dur: uint32(dur), Size: uint32(len(ps.data))},
+		frag.AddFullSample(mp4ff.FullSample{
+			Sample:     mp4ff.Sample{Flags: flags, Dur: uint32(dur), Size: uint32(len(ps.data))},
 			DecodeTime: uint64(ps.dts - s.base),
 			Data:       ps.data,
 		})
 	}
-	seg := mp4.NewMediaSegment()
+	seg := mp4ff.NewMediaSegment()
 	seg.AddFragment(frag)
 	var buf bytes.Buffer
 	if err := seg.Encode(&buf); err != nil {

@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import "github.com/shibukawa/hwmediacodec"
 

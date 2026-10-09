@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import (
 	"errors"
@@ -42,7 +42,7 @@ func (s *elementaryStream) Read(p []byte) (int, error) {
 
 func (s *elementaryStream) Seek(offset int64, whence int) (int64, error) {
 	if offset != 0 || whence != io.SeekStart {
-		return 0, errors.New("container: an elementary stream can only be rewound to its start")
+		return 0, errors.New("mp4: an elementary stream can only be rewound to its start")
 	}
 	s.next = 0
 	s.buf = nil

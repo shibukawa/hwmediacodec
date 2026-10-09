@@ -90,7 +90,7 @@ verification:
       gpu: apple-silicon
     test: TestVideoFileRecordsCapture (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
     evidence:
-      path: examples/container/videofile_test.go
+      path: mediacontainer/mp4/videofile_test.go
       locator: TestVideoFileRecordsCapture
       note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09, re-run the same day after the recorder
         moved to the core module (milestone:capture-package)
@@ -101,12 +101,12 @@ verification:
       input_hash: 886b58fe675995d986c1b643878763f581154dbed7bf575fbc9d004168440927
     - path: capture/recorder_test.go
       input_hash: 2731f5638900b66e796d95fa40a89d749a1effb2ebbed8bbed9bf9039842aea7
-    - path: examples/container/videofile.go
-      input_hash: 1585739a2167b8b1f314538d5df7861ef744880a59c08acb10b9b4d4de691253
-    - path: examples/container/videofile_test.go
-      input_hash: d7dd5de0fc3db9aac8e3cc26603f5ea7af28683035e98924f7ac9644c8bba4cf
-    - path: examples/container/mux.go
-      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 31d07fec8bb75c4f9b48b4a042457e974a8dfe3a0c6f4aedcdf33138f4164e47
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
   segmenter-test:
     state: passed
     method: integration
@@ -115,16 +115,16 @@ verification:
       milestone: examples-screencast-hls
     test: TestSegmenter (h264, hevc), TestSegmenterShortTarget
     evidence:
-      path: examples/container/segmenter_test.go
+      path: mediacontainer/mp4/segmenter_test.go
       locator: TestSegmenter
       note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
     basis:
-    - path: examples/container/segmenter.go
-      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
-    - path: examples/container/sample.go
-      input_hash: f8a95f9be1e6ca330931967a31d66a5cbed8b67f45061bd12434ac3c5d25818a
-    - path: examples/container/segmenter_test.go
-      input_hash: 8f125617b90eaa72ed9b7628070bdbb2141ebe7ed87e9ac64106d7ce2d1f9905
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+    - path: mediacontainer/mp4/sample.go
+      input_hash: dc6d08babd2ae480a9fa2275181e9fe6d02e4871a3735e9845ffa544cd9c4dc7
+    - path: mediacontainer/mp4/segmenter_test.go
+      input_hash: 40491f068d0cdb0745c75eedde631cb02fb80cc07ec65d6af6473571a523f16a
   hls-server-test:
     state: passed
     method: integration
@@ -139,11 +139,11 @@ verification:
         run 2026-10-09
     basis:
     - path: examples/hls/server.go
-      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
+      input_hash: 920b97e192bd30d37071aa7e9802f69133675cfc3adbe090bea3e6d47277b63a
     - path: examples/hls/server_test.go
-      input_hash: afff2b8f59b5d641a6fec60570340eeb13410c9161de654454a1801c10a8efd7
-    - path: examples/container/segmenter.go
-      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
+      input_hash: 78c2f156242e32ab1a9cc19b3af2df160db1cffc023bd4e7f5068e043219e53d
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
   hls-live-run:
     state: passed
     method: manual
@@ -162,9 +162,9 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 3279d0146fc1b58288b22562a23953f909ece736fc52ec0700a19cc769d811b4
+      input_hash: 9e939ea512216fb1dbf996612e7f12ed95f0f0cfd630a567d7792c4b27e61c71
     - path: examples/hls/server.go
-      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
+      input_hash: 920b97e192bd30d37071aa7e9802f69133675cfc3adbe090bea3e6d47277b63a
   record-run:
     state: passed
     method: manual
@@ -181,7 +181,7 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: 08cbf0ae1a930726761a73d9d23a7a8a5f0fae4a8dafc22f278b736b2caee9f6
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
     - path: examples/internal/fireworks/scene.go
       input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
 open_questions:
@@ -197,7 +197,7 @@ facts:
       LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
       Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink =
       WritePacket+Close; Funcs{Write, Done}; TimeScale 90000. Since milestone:capture-package the package
-      is github.com/shibukawa/hwmediacodec/capture in the core module and the MP4 sink is container.CreateVideoFile(path,
+      is github.com/shibukawa/hwmediacodec/capture in the core module and the MP4 sink is mp4.CreateVideoFile(path,
       codec, timeScale)'
     segmenter: 'NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
       Data, Start, Duration}'
@@ -214,7 +214,9 @@ history:
       all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
   moved-2026-10-09:
     summary: screencast.Recorder left the examples module for the core module as capture.Recorder (milestone:capture-package);
-      NewMP4File became container.CreateVideoFile and the MP4 acceptance test moved to examples/container.
+      NewMP4File became CreateVideoFile of the MP4 package and the MP4 acceptance test moved there; the
+      package itself (container, with the Segmenter) became mediacontainer/mp4 in the core module on 2026-10-10
+      (milestone:mediacontainer-mp4).
 relations:
 - relation: implements_part_of
   to: requirement:hwmediacodec

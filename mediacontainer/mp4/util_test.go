@@ -1,4 +1,4 @@
-package container_test
+package mp4_test
 
 import (
 	"bytes"

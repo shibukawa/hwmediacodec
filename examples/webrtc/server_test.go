@@ -19,8 +19,8 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/annexb"
-	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // viewer is a pion peer standing in for the browser: it posts an offer to
@@ -100,7 +100,7 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 	testutil.RequireFFmpeg(t)
 	dir := t.TempDir()
 	src := testutil.GenerateMP4(t, dir, testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 60, BFrames: 0, GOP: 15})
-	d, err := container.Open(src)
+	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 func TestBroadcasterStartsViewersAtKeyframes(t *testing.T) {
 	testutil.RequireFFmpeg(t)
 	src := testutil.GenerateMP4(t, t.TempDir(), testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 0, GOP: 10})
-	d, err := container.Open(src)
+	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type options struct {
@@ -67,7 +67,7 @@ func main() {
 }
 
 // pick chooses the sample indexes to decode.
-func pick(v *container.VideoTrack, o options) []int {
+func pick(v *mp4.VideoTrack, o options) []int {
 	if o.all {
 		return v.Keyframes()
 	}
@@ -85,7 +85,7 @@ func pick(v *container.VideoTrack, o options) []int {
 }
 
 func run(ctx context.Context, o options, path string) ([]string, error) {
-	in, err := container.Open(path)
+	in, err := mp4.Open(path)
 	if err != nil {
 		return nil, err
 	}

@@ -67,14 +67,14 @@ verification:
       milestone: examples-texture
     test: TestElementaryStream
     evidence:
-      path: examples/container/stream_test.go
+      path: mediacontainer/mp4/stream_test.go
       locator: TestElementaryStream
       note: ffmpeg-made H.264 bf=2 file; run 2026-10-09
     basis:
-    - path: examples/container/stream.go
-      input_hash: f95ad8d253d86d14e31558c47cb41c8d4308c05e947873faabac72e31da26cf3
-    - path: examples/container/stream_test.go
-      input_hash: 88f006f77ab9b4063ad5db185bb494dcfb0538c6ec18c7e04de689acdda6d781
+    - path: mediacontainer/mp4/stream.go
+      input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
+    - path: mediacontainer/mp4/stream_test.go
+      input_hash: e8db182bd3662a37fb3f87c091ce1269b08d578525ea6932630488bcbdf9bb94
   mesh-test:
     state: passed
     method: unit
@@ -107,7 +107,7 @@ verification:
         lit faces) and 10 s (shader) inspected
     basis:
     - path: examples/texture/main.go
-      input_hash: de2ccddf6f013f0ee04455d78c309e5896b0cbd60983f76e32197a65b7191710
+      input_hash: ffc3a2444239f4b2960d589ac9d49c2feaa938291997495c72a9068ea77b061b
     - path: examples/texture/shader.go
       input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
     - path: examples/texture/mesh.go

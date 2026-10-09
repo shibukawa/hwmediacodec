@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // feed runs the access units of an ffmpeg-made file through a Segmenter
@@ -19,13 +19,13 @@ import (
 func feed(t *testing.T, p *Playlist, target time.Duration) string {
 	t.Helper()
 	src := testutil.GenerateMP4(t, t.TempDir(), testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 150, BFrames: 0, GOP: 15})
-	d, err := container.Open(src)
+	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer d.Close()
 	v := d.Video()
-	seg, err := container.NewSegmenter(hwmediacodec.H264, v.TimeScale, target, p.SetInit, p.Add)
+	seg, err := mp4.NewSegmenter(hwmediacodec.H264, v.TimeScale, target, p.SetInit, p.Add)
 	if err != nil {
 		t.Fatal(err)
 	}

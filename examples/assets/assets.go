@@ -18,6 +18,6 @@ var WaterfallMP4 []byte
 // WaterfallName is the clip's file name, for messages.
 const WaterfallName = "waterfall-720p-hevc.mp4"
 
-// Waterfall returns a reader over the clip, which the container demuxer
+// Waterfall returns a reader over the clip, which the MP4 demuxer
 // accepts in place of a file.
 func Waterfall() io.ReadSeeker { return bytes.NewReader(WaterfallMP4) }

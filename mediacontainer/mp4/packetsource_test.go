@@ -1,4 +1,4 @@
-package container_test
+package mp4_test
 
 import (
 	"bytes"
@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 func TestPacketSource(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	src := testutil.GenerateMP4(t, t.TempDir(), testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 60, BFrames: 2, GOP: 10})
-	d, err := container.Open(src)
+	mp4test.RequireFFmpeg(t)
+	src := mp4test.GenerateMP4(t, t.TempDir(), mp4test.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 60, BFrames: 2, GOP: 10})
+	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,6 +18,20 @@ RENAMES = {
     "examples/screencast/recorder.go": "capture/recorder.go",
     "examples/screencast/recorder_test.go": "capture/recorder_test.go",
     "examples/screencast/sinks.go": "capture/sinks.go",
+    "examples/container/demux.go": "mediacontainer/mp4/demux.go",
+    "examples/container/mux.go": "mediacontainer/mp4/mux.go",
+    "examples/container/sample.go": "mediacontainer/mp4/sample.go",
+    "examples/container/stream.go": "mediacontainer/mp4/stream.go",
+    "examples/container/packetsource.go": "mediacontainer/mp4/packetsource.go",
+    "examples/container/segmenter.go": "mediacontainer/mp4/segmenter.go",
+    "examples/container/videofile.go": "mediacontainer/mp4/videofile.go",
+    "examples/container/container_test.go": "mediacontainer/mp4/mp4_test.go",
+    "examples/container/util_test.go": "mediacontainer/mp4/util_test.go",
+    "examples/container/stream_test.go": "mediacontainer/mp4/stream_test.go",
+    "examples/container/packetsource_test.go": "mediacontainer/mp4/packetsource_test.go",
+    "examples/container/segmenter_test.go": "mediacontainer/mp4/segmenter_test.go",
+    "examples/container/videofile_test.go": "mediacontainer/mp4/videofile_test.go",
+    "examples/container/assets_test.go": "examples/assets/assets_test.go",
 }
 root = sys.argv[1]
 apply = "--apply" in sys.argv

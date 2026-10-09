@@ -2,9 +2,10 @@
 
 Small, complete programs that show how to use `hwmediacodec` for everyday
 jobs. They live in their own Go module (`github.com/shibukawa/hwmediacodec/examples`)
-so that the core library keeps its two dependencies; the examples pull in
-[mp4ff](https://github.com/Eyevinn/mp4ff) for MP4 files and, later in this
-directory, Ebitengine and pion for the game and streaming samples. Inside the
+so that the core library does not depend on Ebitengine and pion, which the
+game and streaming samples pull in. MP4 files go through the core module's
+[`mediacontainer/mp4`](../mediacontainer/mp4) package and screen capture
+through its [`capture`](../capture) package. Inside the
 repository the module points at the core with a `replace ../` directive.
 
 Everything here was written and verified on an Apple Silicon Mac; the same
@@ -29,13 +30,12 @@ Inside a clone, `cd examples` and then `go run ./player` (and so on) runs the
 same programs from the working tree.
 
 Without arguments, `player` and `texture` play the bundled clip in
-`assets/`. The library-only directories (`assets`, `container`,
-`internal/fireworks`) have no program of their own.
+`assets/`. The library-only directories (`assets`, `internal/fireworks`)
+have no program of their own.
 
 | Directory | What it shows |
 | --- | --- |
 | [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
-| [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units, a progressive MP4 muxer fed with encoder packets and the MP4 file sink for `capture.Recorder` |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
@@ -45,44 +45,6 @@ Without arguments, `player` and `texture` play the bundled clip in
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`heif/`](heif/), [`heifconv/`](heifconv/) | HEIC and AVIF still images: decode (single pictures, grids, rotation, clean aperture) and encode HEIC with the HEVC encoder, AVIF where an AV1 encoder exists |
-
-## container
-
-`hwmediacodec` deliberately stops at the elementary stream: packets in, frames
-out, Annex-B on both ends. Files need a container, and this package is the
-smallest useful bridge, built on mp4ff's box parser:
-
-```go
-d, _ := container.Open("movie.mp4")
-v := d.Video()                      // codec, size, time scale, sample table
-pkt, _ := v.Packet(i)               // Annex-B access unit with SPS/PPS in front of keyframes
-dec, _ := hwmediacodec.NewDecoder(ctx, v.Codec, hwmediacodec.WithTimeScale(int32(v.TimeScale)))
-dec.Send(ctx, pkt)                  // pkt.PTS is the MP4 sample time
-
-m, _ := container.Create("out.mp4")
-vw, _ := m.AddVideoTrack(hwmediacodec.HEVC, v.TimeScale)
-vw.WritePacket(p)                   // p from Encoder.Receive: Annex-B, PTS, DTS, Keyframe
-aw := m.AddPassthroughTrack(d.Others()[0])
-aw.WriteSample(s)                   // audio copied as is
-m.Close()                           // writes moov
-```
-
-Design points worth copying into your own code:
-
-- `Track.MediaTimeOffset` carries the edit list. A B-frame stream's first
-  picture has a PTS above its DTS and the muxer hides that delay with an
-  `elst`; sample PTS minus the offset is the time a player shows the frame.
-- The muxer learns SPS/PPS/VPS from the packets (hwmediacodec encoders put
-  them in front of every keyframe) and strips them from the samples, so the
-  output is `avc1`/`hvc1` as QuickTime and browsers expect.
-- VideoToolbox numbers decode times from the first PTS when B-frames are on,
-  so a reordered picture can carry DTS > PTS. MP4 needs DTS ≤ PTS, so the
-  muxer shifts every DTS back by the largest lag; durations are unchanged and
-  the edit list absorbs the start delay. The tests check that ffprobe sees
-  the same presentation times as in the source.
-- Progressive output only (`ftyp`, `mdat`, `moov` at the end), `stco` or
-  `co64` as the size requires, one chunk per run of samples of the same
-  track. Fragmented input is rejected; use mp4ff's segmenter for that.
 
 ## convert
 
@@ -128,10 +90,10 @@ carry the presentation time (`movie_00-01-30.000.jpg`).
 The game samples capture their window with `capture.Recorder`, a
 package of the core module
 (`github.com/shibukawa/hwmediacodec/capture`; see the main README).
-What this module adds are the sinks the recorder writes into:
+The samples differ in the sink the recorder writes into:
 
 ```go
-sink, _ := container.CreateVideoFile("capture.mp4", hwmediacodec.H264, capture.TimeScale)
+sink, _ := mp4.CreateVideoFile("capture.mp4", hwmediacodec.H264, capture.TimeScale)
 rec, _ := capture.New(1280, 720, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -142,9 +104,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 rec.Close()                  // flushes the encoder, finishes the file
 ```
 
-- `container.CreateVideoFile` is an MP4 file with one video track
+- `mp4.CreateVideoFile` (`mediacontainer/mp4`) is an MP4 file with one video track
   (`record`, and `-record` of `texture`).
-- `container.Segmenter` cuts the packets into fMP4 segments for the HLS
+- `mp4.Segmenter` cuts the packets into fMP4 segments for the HLS
   playlist server (`hls`).
 - The broadcaster in `webrtc` hands each access unit to a pion track.
 
@@ -199,7 +161,7 @@ go run ./hls -segment 1s -bitrate 2M -open=false
 ```
 
 The fireworks show, encoded with a keyframe interval equal to the segment
-length and `WithLowLatency`, cut by `container.Segmenter` into CMAF/fMP4
+length and `WithLowLatency`, cut by `mp4.Segmenter` into CMAF/fMP4
 segments (init segment with the parameter sets, then one `moof`+`mdat` per
 segment, each starting at a keyframe) and served from memory with a
 sliding-window playlist (`#EXT-X-MAP`, `#EXT-X-MEDIA-SEQUENCE`). The page
@@ -218,7 +180,7 @@ go run ./player -once -codec hevc -fps 30 stream.hevc
 ```
 
 The plain video player: `ebitenvideo.NewPlayerFromSource` over
-`container.VideoTrack.PacketSource()` for MP4 files (presentation times,
+`mp4.VideoTrack.PacketSource()` for MP4 files (presentation times,
 the sync-sample table for seeking, the length), `ebitenvideo.NewPlayer`
 for raw streams. The window takes the video's aspect ratio; space pauses,
 the arrow keys seek five seconds, Home restarts; a progress bar runs along
@@ -252,7 +214,7 @@ updates in place, so the video goes wherever an image goes:
   and a vignette with `imageSrc0At`, kept gentle so real footage still
   looks like itself.
 
-MP4 input is demuxed by the container package: `VideoTrack.PacketSource()`
+MP4 input is demuxed by the `mediacontainer/mp4` package: `VideoTrack.PacketSource()`
 implements `ebitenvideo.Source` and `Seeker` (access units with
 presentation times, the sync-sample table for seeking, the track length),
 so `ebitenvideo.NewPlayerFromSource` plays it without an `-fps` flag and
@@ -352,15 +314,13 @@ cd examples
 go test ./...
 ```
 
-The container, segmenter, HLS server and WebRTC broadcaster tests need
-only ffmpeg and ffprobe: they compare sample tables, presentation times and
-decoded frame checksums with ffprobe's view of the same files, feed
-ffmpeg-made streams through the segmenter and the WebRTC track and let
-ffprobe play the served playlist over HTTP.
-The convert, thumbnails, heif and recorder-to-MP4 (`container`) tests also
-need a hardware codec and skip otherwise; they check codec, frame count,
-PSNR against the source, copied audio, identical presentation times and the
-recorder's timing. The
+The HLS server and WebRTC broadcaster tests need only ffmpeg and ffprobe:
+they feed ffmpeg-made streams through the segmenter and the WebRTC track
+and let ffprobe play the served playlist over HTTP.
+The convert, thumbnails and heif tests also need a hardware codec and skip
+otherwise; they check codec, frame count, PSNR against the source, copied
+audio and identical presentation times. (The MP4 demuxer, muxer and
+segmenter tests moved to the core module with the package.) The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
 test and the player opens the bundled clip through a seek; the rendering
 was checked by recording the window.

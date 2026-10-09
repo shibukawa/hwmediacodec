@@ -9,7 +9,7 @@
 //
 // Keys: 1 flat, 2 box, 3 shader, space pause, left/right seek 5 s, home
 // restart; without a key press the modes cycle every few seconds. MP4
-// input is demuxed by the container package into a packet source with
+// input is demuxed by the mp4 package into a packet source with
 // presentation times and a sync-sample table, so the player seeks through
 // it; raw streams seek too (the file is scanned for keyframes once). The
 // player's image is an ordinary *ebiten.Image updated in place, so it
@@ -35,7 +35,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type mode int
@@ -197,7 +197,7 @@ func main() {
 	}
 	g := &game{w: w, h: h, player: player, shader: shader, auto: true, limit: time.Duration(*seconds * float64(time.Second))}
 	if *record != "" {
-		sink, err := container.CreateVideoFile(*record, hwmediacodec.H264, capture.TimeScale)
+		sink, err := mp4.CreateVideoFile(*record, hwmediacodec.H264, capture.TimeScale)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -221,22 +221,22 @@ func main() {
 }
 
 // openVideo opens a player for path: the bundled clip when path is empty,
-// an MP4 demuxed by the container package into a seekable packet source,
+// an MP4 demuxed by the mp4 package into a seekable packet source,
 // or anything else read as a raw .h264/.hevc stream at the given frame
 // rate.
 func openVideo(path, codecName string, fps float64, opts []ebitenvideo.Option) (*ebitenvideo.Player, io.Closer, error) {
-	var d *container.Demuxer
+	var d *mp4.Demuxer
 	var closer io.Closer
 	switch {
 	case path == "":
 		var err error
-		if d, err = container.NewDemuxer(assets.Waterfall()); err != nil {
+		if d, err = mp4.NewDemuxer(assets.Waterfall()); err != nil {
 			return nil, nil, err
 		}
 		closer = io.NopCloser(nil)
 	case isMP4(path):
 		var err error
-		if d, err = container.Open(path); err != nil {
+		if d, err = mp4.Open(path); err != nil {
 			return nil, nil, err
 		}
 		closer = d

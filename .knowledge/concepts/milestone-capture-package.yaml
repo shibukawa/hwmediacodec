@@ -5,7 +5,8 @@ summary: 'The recorder (screencast.Recorder in examples/screencast) moved from t
   as github.com/shibukawa/hwmediacodec/capture, next to annexb and ivf, so that it is a supported feature
   with the core module''s version instead of sample code. The package depends on hwmediacodec only: Source
   is Bounds()+ReadPixels() (satisfied by *ebiten.Image without importing Ebitengine) and Sink is WritePacket+Close.
-  The one sink that needed mp4ff, NewMP4File, stayed in the examples module as container.CreateVideoFile.'
+  The one sink that needed mp4ff, NewMP4File, became CreateVideoFile of the MP4 package, which followed into
+  the core module as mediacontainer/mp4 (milestone:mediacontainer-mp4).'
 lifecycle: active
 authority: authored
 aliases:
@@ -19,8 +20,8 @@ scope:
   gpu: apple-silicon
   milestone: capture-package
 constraints:
-- 'The core module keeps its two dependencies (purego, x/sys): nothing in capture imports Ebitengine,
-  mp4ff or pion. Container and transport sinks live with their dependencies (examples/container.VideoFile
+- 'Nothing in capture imports Ebitengine, mp4ff or pion. Container and transport sinks live with their
+  dependencies (mediacontainer/mp4.VideoFile
   and Segmenter, examples/webrtc.Broadcaster) and satisfy capture.Sink structurally.'
 - 'Named capture, not screencast: to the author screencast suggests mirroring a screen to a television
   (casting), while the package grabs frames and encodes them. The type stays Recorder (capture.New returns
@@ -33,7 +34,7 @@ constraints:
   the HLS sample segments in memory.'
 - 'The package tests cannot use an MP4 muxer, so TestRecorderEncodes collects the packets through Funcs,
   checks PTS steps on the packets themselves and lets ffmpeg decode the concatenated Annex-B stream; the
-  MP4-level check (ffprobe frame count, duration, PTS steps) is TestVideoFileRecordsCapture in examples/container.'
+  MP4-level check (ffprobe frame count, duration, PTS steps) is TestVideoFileRecordsCapture in mediacontainer/mp4.'
 - 'examples/go.mod still requires hwmediacodec v0.1.0, which has no capture package: the workspace
   (go.work) hides that in a clone, but go run ...examples/record@latest needs a core release that contains
   the package, then the require line bumped and an examples tag.'
@@ -59,7 +60,7 @@ acceptance:
     verified_by:
     - recorder-core-test
   no-new-dependencies:
-    text: The core module builds on its own (GOWORK=off) with an unchanged go.mod, and go list -deps ./capture
+    text: The core module builds on its own (GOWORK=off), and go list -deps ./capture
       shows only the standard library, purego, x/sys and packages of the module; go vet passes for linux
       and windows.
     scope:
@@ -68,7 +69,7 @@ acceptance:
     - deps-check
   samples-follow:
     text: record, texture, hls and webrtc build against the moved package; the MP4 sink test passes in
-      examples/container and the record app still writes a playable 1280x720 file.
+      mediacontainer/mp4 and the record app still writes a playable 1280x720 file.
     scope:
       milestone: capture-package
     verified_by:
@@ -106,10 +107,11 @@ verification:
       path: go.mod
       locator: require
       note: 2026-10-09 - non-standard dependencies of ./capture are hwmediacodec, hwmediacodec/annexb,
-        hwmediacodec/internal/... and purego; go.mod untouched
+        hwmediacodec/internal/... and purego (go.mod gained mp4ff a day later for mediacontainer/mp4, which
+        capture does not import)
     basis:
     - path: go.mod
-      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
   videofile-test:
     state: passed
     method: integration
@@ -120,14 +122,14 @@ verification:
       gpu: apple-silicon
     test: TestVideoFileRecordsCapture
     evidence:
-      path: examples/container/videofile_test.go
+      path: mediacontainer/mp4/videofile_test.go
       locator: TestVideoFileRecordsCapture
       note: 2026-10-09 - the former TestRecorderWritesMP4, unchanged apart from the sink constructor
     basis:
-    - path: examples/container/videofile.go
-      input_hash: 1585739a2167b8b1f314538d5df7861ef744880a59c08acb10b9b4d4de691253
-    - path: examples/container/videofile_test.go
-      input_hash: d7dd5de0fc3db9aac8e3cc26603f5ea7af28683035e98924f7ac9644c8bba4cf
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 31d07fec8bb75c4f9b48b4a042457e974a8dfe3a0c6f4aedcdf33138f4164e47
   record-run:
     state: passed
     method: manual
@@ -143,7 +145,7 @@ verification:
       note: 2026-10-09 - 137 frames, 0 dropped, 3 s; ffprobe h264 1280x720 137 frames 3.000 s
     basis:
     - path: examples/record/main.go
-      input_hash: 08cbf0ae1a930726761a73d9d23a7a8a5f0fae4a8dafc22f278b736b2caee9f6
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
 open_questions:
   examples-release:
     text: When is the core module tagged with the capture package, so that examples/go.mod can require
@@ -160,7 +162,7 @@ facts:
       FPS, Bitrate, Quality, CBR, KeyframeInterval, LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source),
       CaptureAt, RequestKeyframe, Close, Err, Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels();
       Sink = WritePacket+Close; Funcs{Write, Done}; TimeScale 90000'
-    container: 'CreateVideoFile(path, codec, timeScale) -> *VideoFile{WritePacket, Close} replaces screencast.NewMP4File(path,
+    container: 'CreateVideoFile(path, codec, timeScale) -> *VideoFile{WritePacket, Close} (mediacontainer/mp4) replaces screencast.NewMP4File(path,
       codec)'
   result:
     status: delivered 2026-10-09

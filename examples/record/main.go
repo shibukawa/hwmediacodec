@@ -23,8 +23,8 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type game struct {
@@ -90,7 +90,7 @@ func main() {
 	if strings.EqualFold(*codecName, "hevc") {
 		codec = hwmediacodec.HEVC
 	}
-	sink, err := container.CreateVideoFile(*out, codec, capture.TimeScale)
+	sink, err := mp4.CreateVideoFile(*out, codec, capture.TimeScale)
 	if err != nil {
 		log.Fatal(err)
 	}

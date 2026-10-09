@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/Eyevinn/mp4ff/mp4"
+	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
 )
@@ -42,8 +42,8 @@ type trackWriter struct {
 	samples   []outSample
 	chunkOff  []uint64
 	chunkN    []uint32
-	build     func(stbl *mp4.StblBox) (*mp4.TrakBox, error)
-	edts      *mp4.EdtsBox // copied from a source track
+	build     func(stbl *mp4ff.StblBox) (*mp4ff.TrakBox, error)
+	edts      *mp4ff.EdtsBox // copied from a source track
 }
 
 // Create creates the file at path.
@@ -64,7 +64,7 @@ func Create(path string) (*Muxer, error) {
 // NewMuxer starts writing a file to w.
 func NewMuxer(w io.WriteSeeker) (*Muxer, error) {
 	m := &Muxer{w: w}
-	ftyp := mp4.NewFtyp("isom", 512, []string{"isom", "iso2", "avc1", "mp41"})
+	ftyp := mp4ff.NewFtyp("isom", 512, []string{"isom", "iso2", "avc1", "mp41"})
 	if err := ftyp.Encode(w); err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ type VideoWriter struct {
 // Packet.DTS.
 func (m *Muxer) AddVideoTrack(c hwmediacodec.Codec, timeScale uint32) (*VideoWriter, error) {
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
-		return nil, fmt.Errorf("container: cannot write %s samples", c)
+		return nil, fmt.Errorf("mp4: cannot write %s samples", c)
 	}
 	v := &VideoWriter{ps: paramSets{codec: c}}
 	v.trackWriter = m.addTrack(timeScale, v.buildTrak)
@@ -114,7 +114,7 @@ func (m *Muxer) AddPassthroughTrack(src *Track) *TrackWriter {
 	return t
 }
 
-func (m *Muxer) addTrack(timeScale uint32, build func(*mp4.StblBox) (*mp4.TrakBox, error)) *trackWriter {
+func (m *Muxer) addTrack(timeScale uint32, build func(*mp4ff.StblBox) (*mp4ff.TrakBox, error)) *trackWriter {
 	t := &trackWriter{m: m, id: uint32(len(m.tracks) + 1), timeScale: timeScale, build: build}
 	m.tracks = append(m.tracks, t)
 	return t
@@ -122,7 +122,7 @@ func (m *Muxer) addTrack(timeScale uint32, build func(*mp4.StblBox) (*mp4.TrakBo
 
 func (m *Muxer) write(t *trackWriter, data []byte, s outSample) error {
 	if m.closed {
-		return errors.New("container: muxer is closed")
+		return errors.New("mp4: muxer is closed")
 	}
 	if m.last != t {
 		t.chunkOff = append(t.chunkOff, uint64(m.pos))
@@ -154,15 +154,15 @@ func (v *VideoWriter) WritePacket(p hwmediacodec.Packet) error {
 	return v.m.write(v.trackWriter, data, outSample{dts: p.DTS, pts: p.PTS, sync: sync})
 }
 
-func (v *VideoWriter) buildTrak(stbl *mp4.StblBox) (*mp4.TrakBox, error) {
+func (v *VideoWriter) buildTrak(stbl *mp4ff.StblBox) (*mp4ff.TrakBox, error) {
 	entry, width, height, err := v.ps.sampleEntry()
 	if err != nil {
 		return nil, err
 	}
-	stsd := mp4.NewStsdBox()
+	stsd := mp4ff.NewStsdBox()
 	stsd.AddChild(entry)
-	hdlr, _ := mp4.CreateHdlr("video")
-	return newTrak(v.trackWriter, hdlr, mp4.CreateVmhd(), stsd, stbl, width, height, "und"), nil
+	hdlr, _ := mp4ff.CreateHdlr("video")
+	return newTrak(v.trackWriter, hdlr, mp4ff.CreateVmhd(), stsd, stbl, width, height, "und"), nil
 }
 
 // WriteSample copies one sample of the source track. Samples must come in
@@ -171,9 +171,9 @@ func (t *TrackWriter) WriteSample(s Sample) error {
 	return t.m.write(t.trackWriter, s.Data, outSample{dts: s.DTS, pts: s.PTS, dur: s.Duration, sync: s.Keyframe})
 }
 
-func (t *TrackWriter) buildTrak(stbl *mp4.StblBox) (*mp4.TrakBox, error) {
+func (t *TrackWriter) buildTrak(stbl *mp4ff.StblBox) (*mp4ff.TrakBox, error) {
 	src := t.src.Trak
-	var mediaHeader mp4.Box
+	var mediaHeader mp4ff.Box
 	switch {
 	case src.Mdia.Minf.Vmhd != nil:
 		mediaHeader = src.Mdia.Minf.Vmhd
@@ -182,7 +182,7 @@ func (t *TrackWriter) buildTrak(stbl *mp4.StblBox) (*mp4.TrakBox, error) {
 	case src.Mdia.Minf.Sthd != nil:
 		mediaHeader = src.Mdia.Minf.Sthd
 	default:
-		mediaHeader = &mp4.NmhdBox{}
+		mediaHeader = &mp4ff.NmhdBox{}
 	}
 	lang := src.Mdia.Mdhd.GetLanguage()
 	width := int(src.Tkhd.Width >> 16)
@@ -195,26 +195,26 @@ func (t *TrackWriter) buildTrak(stbl *mp4.StblBox) (*mp4.TrakBox, error) {
 
 // newTrak assembles trak(tkhd, [edts], mdia(mdhd, hdlr, minf(mediaHeader,
 // dinf, stbl))) around a finished sample table.
-func newTrak(t *trackWriter, hdlr *mp4.HdlrBox, mediaHeader mp4.Box, stsd *mp4.StsdBox, stbl *mp4.StblBox, width, height int, lang string) *mp4.TrakBox {
-	stbl.Children = append([]mp4.Box{stsd}, stbl.Children...)
+func newTrak(t *trackWriter, hdlr *mp4ff.HdlrBox, mediaHeader mp4ff.Box, stsd *mp4ff.StsdBox, stbl *mp4ff.StblBox, width, height int, lang string) *mp4ff.TrakBox {
+	stbl.Children = append([]mp4ff.Box{stsd}, stbl.Children...)
 	stbl.Stsd = stsd
 
-	trak := mp4.NewTrakBox()
-	tkhd := mp4.CreateTkhd()
+	trak := mp4ff.NewTrakBox()
+	tkhd := mp4ff.CreateTkhd()
 	tkhd.TrackID = t.id
-	tkhd.Width = mp4.Fixed32(uint32(width) << 16)
-	tkhd.Height = mp4.Fixed32(uint32(height) << 16)
+	tkhd.Width = mp4ff.Fixed32(uint32(width) << 16)
+	tkhd.Height = mp4ff.Fixed32(uint32(height) << 16)
 	trak.AddChild(tkhd)
 
-	mdia := mp4.NewMdiaBox()
-	mdhd := &mp4.MdhdBox{Timescale: t.timeScale}
+	mdia := mp4ff.NewMdiaBox()
+	mdhd := &mp4ff.MdhdBox{Timescale: t.timeScale}
 	mdhd.SetLanguage(lang)
 	mdia.AddChild(mdhd)
 	mdia.AddChild(hdlr)
-	minf := mp4.NewMinfBox()
+	minf := mp4ff.NewMinfBox()
 	minf.AddChild(mediaHeader)
-	dinf := &mp4.DinfBox{}
-	dinf.AddChild(mp4.CreateDref())
+	dinf := &mp4ff.DinfBox{}
+	dinf.AddChild(mp4ff.CreateDref())
 	minf.AddChild(dinf)
 	minf.AddChild(stbl)
 	mdia.AddChild(minf)
@@ -226,9 +226,9 @@ func newTrak(t *trackWriter, hdlr *mp4.HdlrBox, mediaHeader mp4.Box, stsd *mp4.S
 // Decode times are shifted so that the first sample decodes at 0;
 // composition offsets stay PTS-DTS. The presentation start (the smallest
 // PTS) is returned so that an edit list can hide the decoder delay.
-func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presStart, presEnd int64, err error) {
+func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presStart, presEnd int64, err error) {
 	if len(t.samples) == 0 {
-		return nil, 0, 0, 0, fmt.Errorf("container: track %d has no samples", t.id)
+		return nil, 0, 0, 0, fmt.Errorf("mp4: track %d has no samples", t.id)
 	}
 	n := len(t.samples)
 	// Some encoders (VideoToolbox with B-frames) number decode times from
@@ -257,7 +257,7 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 		case i+1 < n:
 			d := t.samples[i+1].dts - s.dts
 			if d <= 0 {
-				return nil, 0, 0, 0, fmt.Errorf("container: track %d: decode time does not increase at sample %d", t.id, i)
+				return nil, 0, 0, 0, fmt.Errorf("mp4: track %d: decode time does not increase at sample %d", t.id, i)
 			}
 			s.dur = uint32(d)
 		case i > 0:
@@ -266,11 +266,11 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 			s.dur = 1
 		}
 	}
-	stbl = mp4.NewStblBox()
-	stts := &mp4.SttsBox{}
-	var ctts *mp4.CttsBox
-	stss := &mp4.StssBox{}
-	stsz := &mp4.StszBox{}
+	stbl = mp4ff.NewStblBox()
+	stts := &mp4ff.SttsBox{}
+	var ctts *mp4ff.CttsBox
+	stss := &mp4ff.StssBox{}
+	stsz := &mp4ff.StszBox{}
 	allSync := true
 	presStart = t.samples[0].pts - base
 	presEnd = presStart
@@ -284,10 +284,10 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 		}
 		cto := s.pts - s.dts
 		if cto < 0 {
-			return nil, 0, 0, 0, fmt.Errorf("container: track %d: sample %d has PTS before DTS", t.id, i)
+			return nil, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d has PTS before DTS", t.id, i)
 		}
 		if ctts == nil && cto != 0 {
-			ctts = &mp4.CttsBox{}
+			ctts = &mp4ff.CttsBox{}
 			for range i {
 				ctts.SampleOffset = append(ctts.SampleOffset, 0)
 			}
@@ -317,7 +317,7 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 			counts[i] = 1
 		}
 		offsets := ctts.SampleOffset
-		ctts = &mp4.CttsBox{}
+		ctts = &mp4ff.CttsBox{}
 		if err := ctts.AddSampleCountsAndOffset(counts, offsets); err != nil {
 			return nil, 0, 0, 0, err
 		}
@@ -326,7 +326,7 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 	if !allSync {
 		stbl.AddChild(stss)
 	}
-	stsc := &mp4.StscBox{}
+	stsc := &mp4ff.StscBox{}
 	for i, cnt := range t.chunkN {
 		if k := len(stsc.Entries); k > 0 && stsc.Entries[k-1].SamplesPerChunk == cnt {
 			continue
@@ -338,13 +338,13 @@ func (t *trackWriter) finish() (stbl *mp4.StblBox, mediaDuration uint64, presSta
 	stbl.AddChild(stsc)
 	stbl.AddChild(stsz)
 	if t.m.pos < 1<<32 {
-		stco := &mp4.StcoBox{}
+		stco := &mp4ff.StcoBox{}
 		for _, o := range t.chunkOff {
 			stco.ChunkOffset = append(stco.ChunkOffset, uint32(o))
 		}
 		stbl.AddChild(stco)
 	} else {
-		stbl.AddChild(&mp4.Co64Box{ChunkOffset: t.chunkOff})
+		stbl.AddChild(&mp4ff.Co64Box{ChunkOffset: t.chunkOff})
 	}
 	return stbl, mediaDuration, presStart, presEnd, nil
 }
@@ -382,8 +382,8 @@ func (m *Muxer) writeMoov() error {
 		return err
 	}
 
-	moov := mp4.NewMoovBox()
-	mvhd := mp4.CreateMvhd()
+	moov := mp4ff.NewMoovBox()
+	mvhd := mp4ff.CreateMvhd()
 	mvhd.Timescale = movieTimeScale
 	mvhd.NextTrackID = uint32(len(m.tracks) + 1)
 	moov.AddChild(mvhd)
@@ -412,9 +412,9 @@ func (m *Muxer) writeMoov() error {
 		case presStart > 0:
 			// Hide the decoder delay of a B-frame stream: presentation
 			// starts at the first PTS, not at decode time 0.
-			elst := &mp4.ElstBox{Version: 1}
-			elst.Entries = []mp4.ElstEntry{{SegmentDuration: presDur, MediaTime: presStart, MediaRateInteger: 1}}
-			edts := &mp4.EdtsBox{}
+			elst := &mp4ff.ElstBox{Version: 1}
+			elst.Entries = []mp4ff.ElstEntry{{SegmentDuration: presDur, MediaTime: presStart, MediaRateInteger: 1}}
+			edts := &mp4ff.EdtsBox{}
 			edts.AddChild(elst)
 			trak.AddChild(edts)
 		}
@@ -425,7 +425,7 @@ func (m *Muxer) writeMoov() error {
 	}
 	mvhd.Duration = movieDuration
 	if len(moov.Traks) == 0 {
-		return errors.New("container: no track received any sample")
+		return errors.New("mp4: no track received any sample")
 	}
 	return moov.Encode(m.w)
 }

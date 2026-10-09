@@ -148,16 +148,16 @@ verification:
       milestone: ebitenvideo-seek
     test: TestPacketSource
     evidence:
-      path: examples/container/packetsource_test.go
+      path: mediacontainer/mp4/packetsource_test.go
       locator: TestPacketSource
       note: no hardware; ffmpeg-made MP4; run 2026-10-09
     basis:
-    - path: examples/container/packetsource.go
-      input_hash: cd830475ef2cbfcee21e4461c0cddfed7e2fd229c5161a44c794cbc5baebbe5d
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
-    - path: examples/container/packetsource_test.go
-      input_hash: 1e58c3bf19a740c5738b7492ae83f7cee304a62caf691534ec897866ead60442
+    - path: mediacontainer/mp4/packetsource.go
+      input_hash: 2a177b29fd86f490f7842286333183c88fb5795d65700dc8731e19596d8cc50c
+    - path: mediacontainer/mp4/demux.go
+      input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
+    - path: mediacontainer/mp4/packetsource_test.go
+      input_hash: 372451376024200465f143038655e9f3fccbb218b7b25f8921bd5e6da4a2f9c5
   annexb-offset-test:
     state: passed
     method: unit

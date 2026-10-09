@@ -7,7 +7,7 @@
 //
 // Space pauses, the left and right arrow keys seek five seconds, Home
 // restarts, L toggles looping. The window takes the video's aspect ratio.
-// MP4 files go through container.VideoTrack.PacketSource, which gives
+// MP4 files go through mp4.VideoTrack.PacketSource, which gives
 // ebitenvideo presentation times, the sync-sample table for seeking and
 // the length; raw streams go through ebitenvideo.NewPlayer. Audio tracks
 // are ignored (Ebitengine has no AAC decoder).
@@ -32,7 +32,7 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type game struct {
@@ -161,17 +161,17 @@ func main() {
 // open returns a player for path (or the bundled clip when path is empty)
 // and the picture size when the container knows it.
 func open(path, codecName string, fps float64, opts []ebitenvideo.Option) (p *ebitenvideo.Player, closer io.Closer, name string, w, h int, err error) {
-	var d *container.Demuxer
+	var d *mp4.Demuxer
 	switch {
 	case path == "":
 		name = assets.WaterfallName
-		if d, err = container.NewDemuxer(assets.Waterfall()); err != nil {
+		if d, err = mp4.NewDemuxer(assets.Waterfall()); err != nil {
 			return nil, nil, "", 0, 0, err
 		}
 		closer = io.NopCloser(nil)
 	case isMP4(path):
 		name = filepath.Base(path)
-		if d, err = container.Open(path); err != nil {
+		if d, err = mp4.Open(path); err != nil {
 			return nil, nil, "", 0, 0, err
 		}
 		closer = d

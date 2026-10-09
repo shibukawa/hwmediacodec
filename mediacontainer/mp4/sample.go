@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/Eyevinn/mp4ff/avc"
 	"github.com/Eyevinn/mp4ff/hevc"
-	"github.com/Eyevinn/mp4ff/mp4"
+	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/annexb"
@@ -52,7 +52,7 @@ func (ps *paramSets) add(t int, nal []byte) {
 func (ps *paramSets) sample(p hwmediacodec.Packet) (data []byte, sync bool, err error) {
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
-		return nil, false, errors.New("container: empty access unit")
+		return nil, false, errors.New("mp4: empty access unit")
 	}
 	sync = p.Keyframe
 	for _, nal := range nals {
@@ -77,54 +77,54 @@ func (ps *paramSets) sample(p hwmediacodec.Packet) (data []byte, sync bool, err 
 		return nil, false, nil
 	}
 	if !ps.complete() {
-		return nil, false, errors.New("container: the first video packet must carry the parameter sets (VPS/SPS/PPS)")
+		return nil, false, errors.New("mp4: the first video packet must carry the parameter sets (VPS/SPS/PPS)")
 	}
 	return data, sync, nil
 }
 
 // sampleEntry builds the avc1/hvc1 sample description and reports the
 // picture size from the SPS.
-func (ps *paramSets) sampleEntry() (entry *mp4.VisualSampleEntryBox, width, height int, err error) {
+func (ps *paramSets) sampleEntry() (entry *mp4ff.VisualSampleEntryBox, width, height int, err error) {
 	if !ps.complete() {
-		return nil, 0, 0, errors.New("container: no parameter sets")
+		return nil, 0, 0, errors.New("mp4: no parameter sets")
 	}
 	switch ps.codec {
 	case hwmediacodec.H264:
 		sps, err := avc.ParseSPSNALUnit(ps.sps[0], false)
 		if err != nil {
-			return nil, 0, 0, fmt.Errorf("container: parse SPS: %w", err)
+			return nil, 0, 0, fmt.Errorf("mp4: parse SPS: %w", err)
 		}
 		width, height = int(sps.Width), int(sps.Height)
-		avcC, err := mp4.CreateAvcC(ps.sps, ps.pps, true)
+		avcC, err := mp4ff.CreateAvcC(ps.sps, ps.pps, true)
 		if err != nil {
 			return nil, 0, 0, err
 		}
-		entry = mp4.CreateVisualSampleEntryBox("avc1", uint16(width), uint16(height), avcC)
+		entry = mp4ff.CreateVisualSampleEntryBox("avc1", uint16(width), uint16(height), avcC)
 	case hwmediacodec.HEVC:
 		sps, err := hevc.ParseSPSNALUnit(ps.sps[0])
 		if err != nil {
-			return nil, 0, 0, fmt.Errorf("container: parse SPS: %w", err)
+			return nil, 0, 0, fmt.Errorf("mp4: parse SPS: %w", err)
 		}
 		w, h := sps.ImageSize()
 		width, height = int(w), int(h)
-		hvcC, err := mp4.CreateHvcC(ps.vps, ps.sps, ps.pps, true, true, true, true)
+		hvcC, err := mp4ff.CreateHvcC(ps.vps, ps.sps, ps.pps, true, true, true, true)
 		if err != nil {
 			return nil, 0, 0, err
 		}
-		entry = mp4.CreateVisualSampleEntryBox("hvc1", uint16(width), uint16(height), hvcC)
+		entry = mp4ff.CreateVisualSampleEntryBox("hvc1", uint16(width), uint16(height), hvcC)
 	default:
-		return nil, 0, 0, fmt.Errorf("container: cannot describe %s samples", ps.codec)
+		return nil, 0, 0, fmt.Errorf("mp4: cannot describe %s samples", ps.codec)
 	}
 	return entry, width, height, nil
 }
 
 // setDescriptor fills the sample description of a fragmented-MP4 track.
-func (ps *paramSets) setDescriptor(trak *mp4.TrakBox) error {
+func (ps *paramSets) setDescriptor(trak *mp4ff.TrakBox) error {
 	switch ps.codec {
 	case hwmediacodec.H264:
 		return trak.SetAVCDescriptor("avc1", ps.sps, ps.pps, true)
 	case hwmediacodec.HEVC:
 		return trak.SetHEVCDescriptor("hvc1", ps.vps, ps.sps, ps.pps, nil, true)
 	}
-	return fmt.Errorf("container: cannot describe %s samples", ps.codec)
+	return fmt.Errorf("mp4: cannot describe %s samples", ps.codec)
 }

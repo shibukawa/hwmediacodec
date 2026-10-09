@@ -1,4 +1,4 @@
-package container_test
+package mp4_test
 
 import (
 	"os"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // These tests need ffmpeg but no hardware: they check the container layer
@@ -33,8 +33,8 @@ func normalize(pts []int64) []int64 {
 }
 
 func TestDemuxMatchesFFprobe(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	cases := []testutil.MP4Options{
+	mp4test.RequireFFmpeg(t)
+	cases := []mp4test.MP4Options{
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 2, GOP: 12, Audio: true},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 30, BFrames: 2, GOP: 10},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 20, BFrames: 0, GOP: 10, HEV1: true},
@@ -46,8 +46,8 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := testutil.GenerateMP4(t, dir, c)
-			d, err := container.Open(path)
+			path := mp4test.GenerateMP4(t, dir, c)
+			d, err := mp4.Open(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,7 +70,7 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 			}
 
 			// Presentation times and keyframes agree with ffprobe.
-			ref := testutil.Frames(t, path)
+			ref := mp4test.Frames(t, path)
 			if len(ref) != c.Frames {
 				t.Fatalf("ffprobe sees %d frames", len(ref))
 			}
@@ -123,8 +123,8 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 				f.Write(au.Data)
 			}
 			f.Close()
-			want := testutil.FrameMD5(t, path, "")
-			got := testutil.FrameMD5(t, raw, rawFormat(c.Codec))
+			want := mp4test.FrameMD5(t, path, "")
+			got := mp4test.FrameMD5(t, raw, rawFormat(c.Codec))
 			if !slices.Equal(got, want) {
 				t.Errorf("elementary stream decodes differently from the MP4 (%d vs %d frames)", len(got), len(want))
 			}
@@ -133,8 +133,8 @@ func TestDemuxMatchesFFprobe(t *testing.T) {
 }
 
 func TestMuxRoundTrip(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	cases := []testutil.MP4Options{
+	mp4test.RequireFFmpeg(t)
+	cases := []mp4test.MP4Options{
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 2, GOP: 12, Audio: true},
 		{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 20, BFrames: 0, GOP: 10},
 		{Codec: hwmediacodec.HEVC, Width: 160, Height: 120, Frames: 30, BFrames: 2, GOP: 10, Audio: true},
@@ -142,8 +142,8 @@ func TestMuxRoundTrip(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Codec.String()+"_b"+string(rune('0'+c.BFrames)), func(t *testing.T) {
 			dir := t.TempDir()
-			src := testutil.GenerateMP4(t, dir, c)
-			d, err := container.Open(src)
+			src := mp4test.GenerateMP4(t, dir, c)
+			d, err := mp4.Open(src)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -151,7 +151,7 @@ func TestMuxRoundTrip(t *testing.T) {
 			v := d.Video()
 
 			out := filepath.Join(dir, "remux.mp4")
-			m, err := container.Create(out)
+			m, err := mp4.Create(out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,8 +160,8 @@ func TestMuxRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 			type pass struct {
-				src  *container.Track
-				dst  *container.TrackWriter
+				src  *mp4.Track
+				dst  *mp4.TrackWriter
 				next int
 			}
 			var others []*pass
@@ -201,8 +201,8 @@ func TestMuxRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			testutil.CheckDecodes(t, out)
-			srcStreams, outStreams := testutil.Streams(t, src), testutil.Streams(t, out)
+			mp4test.CheckDecodes(t, out)
+			srcStreams, outStreams := mp4test.Streams(t, src), mp4test.Streams(t, out)
 			if len(srcStreams) != len(outStreams) {
 				t.Fatalf("%d streams, want %d", len(outStreams), len(srcStreams))
 			}
@@ -223,20 +223,20 @@ func TestMuxRoundTrip(t *testing.T) {
 			}
 			// Same pictures, same presentation times (the edit list hides
 			// the B-frame delay exactly as ffmpeg's does).
-			if got, want := testutil.FrameMD5(t, out, ""), testutil.FrameMD5(t, src, ""); !slices.Equal(got, want) {
+			if got, want := mp4test.FrameMD5(t, out, ""), mp4test.FrameMD5(t, src, ""); !slices.Equal(got, want) {
 				t.Errorf("remuxed video decodes differently (%d vs %d frames)", len(got), len(want))
 			}
 			var gotPTS, wantPTS []int64
-			for _, f := range testutil.Frames(t, out) {
+			for _, f := range mp4test.Frames(t, out) {
 				gotPTS = append(gotPTS, f.PTS)
 			}
-			for _, f := range testutil.Frames(t, src) {
+			for _, f := range mp4test.Frames(t, src) {
 				wantPTS = append(wantPTS, f.PTS)
 			}
 			if !slices.Equal(gotPTS, wantPTS) {
 				t.Errorf("presentation times differ:\n got %v\nwant %v", gotPTS, wantPTS)
 			}
-			if sd, od := testutil.VideoStream(t, src).Seconds(), testutil.VideoStream(t, out).Seconds(); od < sd-0.05 || od > sd+0.05 {
+			if sd, od := mp4test.VideoStream(t, src).Seconds(), mp4test.VideoStream(t, out).Seconds(); od < sd-0.05 || od > sd+0.05 {
 				t.Errorf("duration %.3fs, want %.3fs", od, sd)
 			}
 		})

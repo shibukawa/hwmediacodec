@@ -1,4 +1,4 @@
-package container_test
+package mp4_test
 
 import (
 	"os"
@@ -7,28 +7,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Eyevinn/mp4ff/mp4"
+	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mp4test"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // segmentSource feeds the access units of an ffmpeg-made file (no
 // B-frames, keyframe every 10 frames at 30 fps) through a Segmenter, so
 // the segmenter is tested without a hardware encoder.
-func segmentSource(t *testing.T, dir string, c hwmediacodec.Codec, target time.Duration) (src string, init []byte, segs []container.Segment) {
+func segmentSource(t *testing.T, dir string, c hwmediacodec.Codec, target time.Duration) (src string, init []byte, segs []mp4.Segment) {
 	t.Helper()
-	src = testutil.GenerateMP4(t, dir, testutil.MP4Options{Codec: c, Width: 160, Height: 120, Frames: 90, BFrames: 0, GOP: 10})
-	d, err := container.Open(src)
+	src = mp4test.GenerateMP4(t, dir, mp4test.MP4Options{Codec: c, Width: 160, Height: 120, Frames: 90, BFrames: 0, GOP: 10})
+	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer d.Close()
 	v := d.Video()
-	seg, err := container.NewSegmenter(c, v.TimeScale, target,
+	seg, err := mp4.NewSegmenter(c, v.TimeScale, target,
 		func(b []byte) error { init = b; return nil },
-		func(s container.Segment) error { segs = append(segs, s); return nil })
+		func(s mp4.Segment) error { segs = append(segs, s); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func segmentSource(t *testing.T, dir string, c hwmediacodec.Codec, target time.D
 }
 
 func TestSegmenter(t *testing.T) {
-	testutil.RequireFFmpeg(t)
+	mp4test.RequireFFmpeg(t)
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
 		t.Run(c.String(), func(t *testing.T) {
 			dir := t.TempDir()
@@ -72,7 +72,7 @@ func TestSegmenter(t *testing.T) {
 				}
 				// Each segment is one fragment of 30 samples starting with a
 				// sync sample and decode times continuing from the previous.
-				f, err := mp4.DecodeFile(bytesReader(s.Data))
+				f, err := mp4ff.DecodeFile(bytesReader(s.Data))
 				if err != nil {
 					t.Fatalf("segment %d: %v", i, err)
 				}
@@ -84,7 +84,7 @@ func TestSegmenter(t *testing.T) {
 				if trun.SampleCount() != 30 {
 					t.Errorf("segment %d has %d samples", i, trun.SampleCount())
 				}
-				if !mp4.IsSyncSampleFlags(trun.Samples[0].Flags) || mp4.IsSyncSampleFlags(trun.Samples[1].Flags) {
+				if !mp4ff.IsSyncSampleFlags(trun.Samples[0].Flags) || mp4ff.IsSyncSampleFlags(trun.Samples[1].Flags) {
 					t.Errorf("segment %d: sample flags %x %x", i, trun.Samples[0].Flags, trun.Samples[1].Flags)
 				}
 				if got, want := frag.Moof.Traf.Tfdt.BaseMediaDecodeTime(), uint64(i)*30*512; got != want {
@@ -102,11 +102,11 @@ func TestSegmenter(t *testing.T) {
 			if err := os.WriteFile(all, data, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			testutil.CheckDecodes(t, all)
-			if got, want := testutil.FrameMD5(t, all, ""), testutil.FrameMD5(t, src, ""); !slices.Equal(got, want) {
+			mp4test.CheckDecodes(t, all)
+			if got, want := mp4test.FrameMD5(t, all, ""), mp4test.FrameMD5(t, src, ""); !slices.Equal(got, want) {
 				t.Errorf("segments decode differently from the source (%d vs %d frames)", len(got), len(want))
 			}
-			if vs := testutil.VideoStream(t, all); vs.CodecName != c.String() || vs.Width != 160 {
+			if vs := mp4test.VideoStream(t, all); vs.CodecName != c.String() || vs.Width != 160 {
 				t.Errorf("stream is %s %dx%d", vs.CodecName, vs.Width, vs.Height)
 			}
 		})
@@ -114,7 +114,7 @@ func TestSegmenter(t *testing.T) {
 }
 
 func TestSegmenterShortTarget(t *testing.T) {
-	testutil.RequireFFmpeg(t)
+	mp4test.RequireFFmpeg(t)
 	// A target shorter than the keyframe interval cuts at every keyframe.
 	_, _, segs := segmentSource(t, t.TempDir(), hwmediacodec.H264, 100*time.Millisecond)
 	if len(segs) != 9 {

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // Playlist keeps a sliding window of fMP4 segments in memory and serves
@@ -21,7 +21,7 @@ type Playlist struct {
 
 	mu    sync.RWMutex
 	init  []byte
-	segs  []container.Segment
+	segs  []mp4.Segment
 	ended bool
 }
 
@@ -42,7 +42,7 @@ func (p *Playlist) SetInit(data []byte) error {
 }
 
 // Add appends a media segment; it is the Segmenter's onSegment.
-func (p *Playlist) Add(s container.Segment) error {
+func (p *Playlist) Add(s mp4.Segment) error {
 	p.mu.Lock()
 	p.segs = append(p.segs, s)
 	if len(p.segs) > p.window {

@@ -5,7 +5,7 @@
 //	go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
 //	go run ./convert -codec h264 -quality 0.7 -bframes input.mp4 output.mp4
 //
-// The container work is done by the container package in this module; the
+// The container work is done by the mediacontainer/mp4 package; the
 // codec work is the decoder/encoder loop below, which is the whole point of
 // the sample. Timestamps are carried through unchanged: the decoder is told
 // to use the track's time scale, so frame PTS values are the MP4 sample
@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type options struct {
@@ -158,8 +158,8 @@ func (o options) encoderOptions(timeScale uint32, fps float64) []hwmediacodec.En
 // passthrough copies the samples of one non-video track, interleaved with
 // the video by time.
 type passthrough struct {
-	src  *container.Track
-	dst  *container.TrackWriter
+	src  *mp4.Track
+	dst  *mp4.TrackWriter
 	next int
 }
 
@@ -182,7 +182,7 @@ func (p *passthrough) copyUpTo(t time.Duration) error {
 }
 
 func run(ctx context.Context, o options, inPath, outPath string, progress io.Writer) error {
-	in, err := container.Open(inPath)
+	in, err := mp4.Open(inPath)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func run(ctx context.Context, o options, inPath, outPath string, progress io.Wri
 		return errors.New("input has no H.264, HEVC or AV1 video track")
 	}
 
-	out, err := container.Create(outPath)
+	out, err := mp4.Create(outPath)
 	if err != nil {
 		return err
 	}

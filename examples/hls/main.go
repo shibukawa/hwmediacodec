@@ -5,7 +5,7 @@
 //	go run ./hls -open=false        # print the URL only
 //
 // The screen is captured and encoded by capture.Recorder, cut into
-// fragmented-MP4 segments by container.Segmenter at every keyframe once
+// fragmented-MP4 segments by mp4.Segmenter at every keyframe once
 // the segment length has passed (the encoder's keyframe interval is set to
 // exactly that length), and served from memory with a sliding-window
 // playlist. Safari plays it natively, other browsers through hls.js.
@@ -27,8 +27,8 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 type game struct {
@@ -84,7 +84,7 @@ func main() {
 		codec = hwmediacodec.HEVC
 	}
 	playlist := NewPlaylist(*window, *segment)
-	seg, err := container.NewSegmenter(codec, capture.TimeScale, *segment, playlist.SetInit, playlist.Add)
+	seg, err := mp4.NewSegmenter(codec, capture.TimeScale, *segment, playlist.SetInit, playlist.Add)
 	if err != nil {
 		log.Fatal(err)
 	}

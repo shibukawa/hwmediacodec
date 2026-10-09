@@ -59,9 +59,10 @@ Known limitations:
   use `annexb.Reader` to split a raw elementary stream. AV1 input is one
   temporal unit per `Packet` in the low-overhead OBU format (what an IVF
   frame or an ISOBMFF `av01` sample holds, with or without temporal
-  delimiters); use `ivf.Reader` to split an IVF file. Containers (MP4, MKV,
-  TS) are not parsed by the library; the `examples/container` package shows
-  how to bridge MP4 files with mp4ff. AVCC/HVCC output is not offered yet.
+  delimiters); use `ivf.Reader` to split an IVF file. The codec API does
+  not parse containers; the `mediacontainer/mp4` package reads and writes
+  MP4 files around it (see [MP4 files](#mp4-files)). MKV and TS are not
+  covered, and AVCC/HVCC output is not offered by the encoders themselves.
 - On an M3, 1080p H.264 with B-frames decodes at roughly 780 frames per
   second to NV12 in display order, 350 to BGRA and 250 to RGBA, including
   the copy; 1080p H.264 encodes at roughly 200 frames per second from NV12
@@ -315,6 +316,56 @@ layout of each format. `WithDecodeOrder()` returns frames as the hardware
 produces them, which is what a transcoder that keeps the original
 timestamps wants.
 
+## MP4 files
+
+The codec API stops at the elementary stream: packets in, frames out,
+Annex-B on both ends. Files need a container, and
+`github.com/shibukawa/hwmediacodec/mediacontainer/mp4` is the bridge for
+MP4 and MOV, built on the box parser of
+[mp4ff](https://github.com/Eyevinn/mp4ff) (the one dependency this package
+adds; programs that do not import it do not link it):
+
+```go
+d, _ := mp4.Open("movie.mp4")
+v := d.Video()                      // codec, size, time scale, sample table
+pkt, _ := v.Packet(i)               // Annex-B access unit with SPS/PPS in front of keyframes
+dec, _ := hwmediacodec.NewDecoder(ctx, v.Codec, hwmediacodec.WithTimeScale(int32(v.TimeScale)))
+dec.Send(ctx, pkt)                  // pkt.PTS is the MP4 sample time
+
+m, _ := mp4.Create("out.mp4")
+vw, _ := m.AddVideoTrack(hwmediacodec.HEVC, v.TimeScale)
+vw.WritePacket(p)                   // p from Encoder.Receive: Annex-B, PTS, DTS, Keyframe
+aw := m.AddPassthroughTrack(d.Others()[0])
+aw.WriteSample(s)                   // audio copied as is
+m.Close()                           // writes moov
+```
+
+What the package takes care of:
+
+- `Track.MediaTimeOffset` carries the edit list. A B-frame stream's first
+  picture has a PTS above its DTS and the muxer hides that delay with an
+  `elst`; sample PTS minus the offset is the time a player shows the frame.
+- The muxer learns SPS/PPS/VPS from the packets (hwmediacodec encoders put
+  them in front of every keyframe) and strips them from the samples, so the
+  output is `avc1`/`hvc1` as QuickTime and browsers expect.
+- VideoToolbox numbers decode times from the first PTS when B-frames are on,
+  so a reordered picture can carry DTS > PTS. MP4 needs DTS ≤ PTS, so the
+  muxer shifts every DTS back by the largest lag; durations are unchanged and
+  the edit list absorbs the start delay. The tests check that ffprobe sees
+  the same presentation times as in the source.
+- Progressive output only (`ftyp`, `mdat`, `moov` at the end), `stco` or
+  `co64` as the size requires, one chunk per run of samples of the same
+  track. Fragmented input is rejected.
+- `VideoTrack.PacketSource()` hands out access units with presentation
+  times and seeks by the sync-sample table, which is what
+  `ebitenvideo.NewPlayerFromSource` takes; `VideoTrack.ElementaryStream()`
+  is the same track as a raw Annex-B stream.
+- `CreateVideoFile` is the one-track file for encoder output (a
+  `capture.Sink`), and `Segmenter` cuts encoder packets into CMAF/fMP4
+  segments for live HLS: an init segment, then one `moof`+`mdat` per
+  segment, each starting at a keyframe. It needs PTS == DTS, so encode
+  without B-frames.
+
 ## Screen recording
 
 `github.com/shibukawa/hwmediacodec/capture` is a package of the core
@@ -350,10 +401,9 @@ rec.Close()                  // flushes the encoder, closes the sink
 - A `Sink` is `WritePacket(hwmediacodec.Packet)` plus `Close`, and
   `capture.Funcs` adapts closures. The packets are Annex-B access
   units with in-band parameter sets, so writing `Packet.Data` to a file
-  gives a playable elementary stream. Container formats stay out of the
-  core module: `examples/container` has an MP4 file sink
-  (`CreateVideoFile`) and an fMP4 segmenter for HLS, and `examples/webrtc`
-  a sink that feeds a pion track.
+  gives a playable elementary stream. `mediacontainer/mp4` has an MP4
+  file sink (`CreateVideoFile`) and an fMP4 segmenter for HLS, and
+  `examples/webrtc` a sink that feeds a pion track.
 - `Options` selects the codec, bitrate or quality, keyframe interval, low
   latency and profile; `Extra` appends any other `EncoderOption`.
   `RequestKeyframe` forces a keyframe on the next captured frame (a new
@@ -362,8 +412,7 @@ rec.Close()                  // flushes the encoder, closes the sink
 ## Examples
 
 The [`examples/`](examples/) directory is a third Go module with complete
-programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
-(`examples/container`, on top of mp4ff), a video file converter that keeps
+programs built on the library: a video file converter that keeps
 timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder on top
 of the `capture` package (`examples/record`), live HLS and WebRTC
@@ -412,7 +461,7 @@ Elementary streams carry no timestamps, so the frame rate is a parameter.
 Frames are skipped when decoding or the game loop falls behind
 (`Player.Skipped` counts them). `NewPlayerFromSource` takes a `Source`
 instead of a reader: anything that hands out access units with
-presentation times, such as the MP4 demuxer in `examples/container`
+presentation times, such as the MP4 demuxer in `mediacontainer/mp4`
 (`VideoTrack.PacketSource()`). A source that also implements `Seeker`
 (a keyframe index) gives the player `Seek`, `Length` and looping; an
 `io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
@@ -553,6 +602,12 @@ with ffprobe. All of them are skipped when ffmpeg is not installed, and the
 encoder tests for optional controls skip when the hardware encoder rejects
 them.
 
+The `mediacontainer/mp4` tests need only ffmpeg and ffprobe: they compare
+sample tables, presentation times and decoded frame checksums with
+ffprobe's view of the same files and feed ffmpeg-made streams through the
+segmenter. The `capture` tests and the recorder-to-MP4 test need a hardware
+encoder and skip otherwise.
+
 ```sh
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
@@ -560,7 +615,7 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
-(cd examples && go test ./...)      # separate module: MP4 container tests (ffmpeg only) and sample end-to-end tests (hardware)
+(cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
 ```
 
 Project knowledge (requirements, decisions, backend notes) lives in

@@ -391,7 +391,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: go.mod
-      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
 open_questions:
   software-av1-on-m1-m2:
     text: On an M1 or M2, NewDecoder(AV1, WithSoftwareFallback()) runs av1SessionAvailable, which on

@@ -1,4 +1,4 @@
-package container_test
+package assets_test
 
 import (
 	"testing"
@@ -6,13 +6,13 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 // TestBundledClip checks the embedded sample video the way the players
 // see it; no ffmpeg or hardware needed.
 func TestBundledClip(t *testing.T) {
-	d, err := container.NewDemuxer(assets.Waterfall())
+	d, err := mp4.NewDemuxer(assets.Waterfall())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package container
+package mp4
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func (s *PacketSource) ReadPacket() ([]byte, time.Duration, error) {
 func (s *PacketSource) SeekKeyframe(t time.Duration) (time.Duration, error) {
 	i := s.v.KeyframeAtOrBefore(t)
 	if i < 0 {
-		return 0, fmt.Errorf("container: track %d has no sync sample", s.v.ID)
+		return 0, fmt.Errorf("mp4: track %d has no sync sample", s.v.ID)
 	}
 	s.next = i
 	_, pts, _ := s.v.Info(i)

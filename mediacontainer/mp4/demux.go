@@ -1,4 +1,4 @@
-// Package container reads and writes MP4 files around hwmediacodec, which
+// Package mp4 reads and writes MP4 files around hwmediacodec, which
 // itself only handles Annex-B elementary streams. It is deliberately small:
 // progressive (non-fragmented) MP4 and MOV files with one H.264, HEVC or AV1
 // video track plus any number of other tracks that are copied through
@@ -6,7 +6,7 @@
 // hwmediacodec packets. The ISOBMFF plumbing is done by
 // github.com/Eyevinn/mp4ff; this package only maps between its sample tables
 // and the codec library's packets and frames.
-package container
+package mp4
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/Eyevinn/mp4ff/hevc"
-	"github.com/Eyevinn/mp4ff/mp4"
+	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
 )
@@ -54,7 +54,7 @@ type Track struct {
 	// time a player shows the sample at.
 	MediaTimeOffset int64
 	// Trak is the underlying box tree, exposed for passthrough copying.
-	Trak *mp4.TrakBox
+	Trak *mp4ff.TrakBox
 
 	d       *Demuxer
 	samples []sampleInfo
@@ -78,7 +78,7 @@ type VideoTrack struct {
 type Demuxer struct {
 	rs     io.ReadSeeker
 	closer io.Closer
-	file   *mp4.File
+	file   *mp4ff.File
 	video  *VideoTrack
 	others []*Track
 }
@@ -101,15 +101,15 @@ func Open(path string) (*Demuxer, error) {
 // NewDemuxer parses the movie header of rs. Sample data is read on demand,
 // so rs must stay open while the Demuxer is used.
 func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
-	file, err := mp4.DecodeFile(rs, mp4.WithDecodeMode(mp4.DecModeLazyMdat))
+	file, err := mp4ff.DecodeFile(rs, mp4ff.WithDecodeMode(mp4ff.DecModeLazyMdat))
 	if err != nil {
-		return nil, fmt.Errorf("container: parse: %w", err)
+		return nil, fmt.Errorf("mp4: parse: %w", err)
 	}
 	if file.IsFragmented() {
-		return nil, errors.New("container: fragmented MP4 files are not supported by this demuxer")
+		return nil, errors.New("mp4: fragmented MP4 files are not supported by this demuxer")
 	}
 	if file.Moov == nil || file.Mdat == nil {
-		return nil, errors.New("container: file has no moov or mdat box")
+		return nil, errors.New("mp4: file has no moov or mdat box")
 	}
 	d := &Demuxer{rs: rs, file: file}
 	for _, trak := range file.Moov.Traks {
@@ -156,9 +156,9 @@ func (d *Demuxer) Duration() time.Duration {
 	return time.Duration(mvhd.Duration) * time.Second / time.Duration(mvhd.Timescale)
 }
 
-func (d *Demuxer) newTrack(trak *mp4.TrakBox) (*Track, error) {
+func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 	if trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil || trak.Mdia.Mdhd == nil || trak.Mdia.Hdlr == nil {
-		return nil, errors.New("container: track is missing mandatory boxes")
+		return nil, errors.New("mp4: track is missing mandatory boxes")
 	}
 	t := &Track{
 		ID:        trak.Tkhd.TrackID,
@@ -180,7 +180,7 @@ func (d *Demuxer) newTrack(trak *mp4.TrakBox) (*Track, error) {
 	}
 	stbl := trak.Mdia.Minf.Stbl
 	if stbl.Stsz == nil || stbl.Stts == nil || stbl.Stsc == nil || (stbl.Stco == nil && stbl.Co64 == nil) {
-		return nil, fmt.Errorf("container: track %d has an incomplete sample table", t.ID)
+		return nil, fmt.Errorf("mp4: track %d has an incomplete sample table", t.ID)
 	}
 	n := stbl.Stsz.GetNrSamples()
 	t.samples = make([]sampleInfo, n)
@@ -202,7 +202,7 @@ func (d *Demuxer) newTrack(trak *mp4.TrakBox) (*Track, error) {
 	if stbl.Ctts != nil {
 		ctos, err := stbl.Ctts.CompositionTimeOffsets(n)
 		if err != nil {
-			return nil, fmt.Errorf("container: track %d ctts: %w", t.ID, err)
+			return nil, fmt.Errorf("mp4: track %d ctts: %w", t.ID, err)
 		}
 		for i := range ctos {
 			t.samples[i].cto = ctos[i]
@@ -249,7 +249,7 @@ func (d *Demuxer) newTrack(trak *mp4.TrakBox) (*Track, error) {
 		}
 	}
 	if sample != int(n) {
-		return nil, fmt.Errorf("container: track %d: chunk table covers %d of %d samples", t.ID, sample, n)
+		return nil, fmt.Errorf("mp4: track %d: chunk table covers %d of %d samples", t.ID, sample, n)
 	}
 	return t, nil
 }
@@ -259,7 +259,7 @@ func (d *Demuxer) newVideoTrack(t *Track) (*VideoTrack, error) {
 	if stsd == nil || len(stsd.Children) == 0 {
 		return nil, nil
 	}
-	entry, ok := stsd.Children[0].(*mp4.VisualSampleEntryBox)
+	entry, ok := stsd.Children[0].(*mp4ff.VisualSampleEntryBox)
 	if !ok {
 		return nil, nil
 	}
@@ -267,7 +267,7 @@ func (d *Demuxer) newVideoTrack(t *Track) (*VideoTrack, error) {
 	switch entry.Type() {
 	case "avc1", "avc3":
 		if entry.AvcC == nil {
-			return nil, errors.New("container: avc1 sample entry without avcC")
+			return nil, errors.New("mp4: avc1 sample entry without avcC")
 		}
 		v.Codec = hwmediacodec.H264
 		v.nalLength = 4 // avcC lengthSizeMinusOne is almost always 3; mp4ff does not expose it
@@ -275,7 +275,7 @@ func (d *Demuxer) newVideoTrack(t *Track) (*VideoTrack, error) {
 		v.paramSets = append(v.paramSets, entry.AvcC.PPSnalus...)
 	case "hvc1", "hev1":
 		if entry.HvcC == nil {
-			return nil, errors.New("container: hvc1 sample entry without hvcC")
+			return nil, errors.New("mp4: hvc1 sample entry without hvcC")
 		}
 		v.Codec = hwmediacodec.HEVC
 		v.nalLength = int(entry.HvcC.LengthSizeMinusOne) + 1
@@ -331,12 +331,12 @@ func (t *Track) PresentationTime(pts int64) time.Duration {
 // Sample reads sample i (0-based) as stored in the file.
 func (t *Track) Sample(i int) (Sample, error) {
 	if i < 0 || i >= len(t.samples) {
-		return Sample{}, fmt.Errorf("container: sample %d out of range [0, %d)", i, len(t.samples))
+		return Sample{}, fmt.Errorf("mp4: sample %d out of range [0, %d)", i, len(t.samples))
 	}
 	s := t.samples[i]
 	data, err := t.d.file.Mdat.ReadData(int64(s.offset), int64(s.size), t.d.rs)
 	if err != nil {
-		return Sample{}, fmt.Errorf("container: read sample %d: %w", i, err)
+		return Sample{}, fmt.Errorf("mp4: read sample %d: %w", i, err)
 	}
 	return Sample{Data: data, DTS: s.dts, PTS: s.dts + int64(s.cto), Duration: s.dur, Keyframe: s.sync}, nil
 }
@@ -411,7 +411,7 @@ func (v *VideoTrack) AccessUnit(i int) (Sample, error) {
 		}
 		data = data[v.nalLength:]
 		if n <= 0 || n > len(data) {
-			return Sample{}, fmt.Errorf("container: sample %d: NAL unit length %d out of range", i, n)
+			return Sample{}, fmt.Errorf("mp4: sample %d: NAL unit length %d out of range", i, n)
 		}
 		out = append(out, 0, 0, 0, 1)
 		out = append(out, data[:n]...)

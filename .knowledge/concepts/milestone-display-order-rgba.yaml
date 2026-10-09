@@ -315,7 +315,7 @@ verification:
     - path: ebitenvideo/go.mod
       input_hash: 7db4eff4b8d61e9577f4213fcb75f64de334d2db391e7b8a243ee7e5adbcaffe
     - path: go.mod
-      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
 open_questions:
   vui-less-h264-latency:
     text: H.264 streams without VUI bitstream_restriction (VideoToolbox's own encoder writes none) are
