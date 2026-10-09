@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package sys
 
@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// TestLoadCUDA checks that the driver entry points bind when libcuda is
-// installed. Without the NVIDIA driver the test is skipped.
+// TestLoadCUDA checks that the driver entry points bind when the CUDA
+// driver library is installed. Without the NVIDIA driver the test is skipped.
 func TestLoadCUDA(t *testing.T) {
 	err := LoadCUDA()
 	if errors.Is(err, ErrNotAvailable) {
-		t.Skipf("libcuda not installed: %v", err)
+		t.Skipf("CUDA driver library not installed: %v", err)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -23,12 +23,12 @@ func TestLoadCUDA(t *testing.T) {
 	t.Logf("cuGetErrorString(100) = %q", CUDAErrorString(CUDAErrorNoDevice))
 }
 
-// TestLoadCuvid checks the NVDEC and parser bindings when libnvcuvid is
-// installed.
+// TestLoadCuvid checks the NVDEC and parser bindings when the NVDEC
+// library is installed.
 func TestLoadCuvid(t *testing.T) {
 	err := LoadCuvid()
 	if errors.Is(err, ErrNotAvailable) {
-		t.Skipf("libnvcuvid not installed: %v", err)
+		t.Skipf("NVDEC library not installed: %v", err)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -38,12 +38,12 @@ func TestLoadCuvid(t *testing.T) {
 	}
 }
 
-// TestLoadNVENC checks the NVENC function table when libnvidia-encode is
+// TestLoadNVENC checks the NVENC function table when the NVENC library is
 // installed and the driver supports API 11.1.
 func TestLoadNVENC(t *testing.T) {
 	api, err := LoadNVENC()
 	if errors.Is(err, ErrNotAvailable) {
-		t.Skipf("libnvidia-encode not installed: %v", err)
+		t.Skipf("NVENC library not installed: %v", err)
 	}
 	if errors.Is(err, ErrNVENCVersion) {
 		t.Skipf("driver too old: %v", err)

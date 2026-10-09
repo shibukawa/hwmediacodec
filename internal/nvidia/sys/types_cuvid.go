@@ -39,19 +39,19 @@ const (
 
 // cudaVideoCreateFlags values.
 const (
-	CreateDefault     uint64 = 0x00
-	CreatePreferCUDA  uint64 = 0x01
-	CreatePreferDXVA  uint64 = 0x02
-	CreatePreferCUVID uint64 = 0x04
+	CreateDefault     ULong = 0x00
+	CreatePreferCUDA  ULong = 0x01
+	CreatePreferDXVA  ULong = 0x02
+	CreatePreferCUVID ULong = 0x04
 )
 
 // CUvideopacketflags values.
 const (
-	PktEndOfStream   uint64 = 0x01
-	PktTimestamp     uint64 = 0x02
-	PktDiscontinuity uint64 = 0x04
-	PktEndOfPicture  uint64 = 0x08
-	PktNotifyEOS     uint64 = 0x10
+	PktEndOfStream   ULong = 0x01
+	PktTimestamp     ULong = 0x02
+	PktDiscontinuity ULong = 0x04
+	PktEndOfPicture  ULong = 0x08
+	PktNotifyEOS     ULong = 0x10
 )
 
 // cuvidDecodeStatus values.
@@ -118,11 +118,11 @@ type ParserParams struct {
 	ExtVideoInfo         uintptr // *CUVIDEOFORMATEX, optional
 }
 
-// SourceDataPacket mirrors CUVIDSOURCEDATAPACKET on LP64 systems (the
-// flags and size are unsigned long).
+// SourceDataPacket mirrors CUVIDSOURCEDATAPACKET. The flags and size are
+// unsigned long, so the layout differs between Linux and Windows.
 type SourceDataPacket struct {
-	Flags       uint64
-	PayloadSize uint64
+	Flags       ULong
+	PayloadSize ULong
 	Payload     *byte
 	Timestamp   int64
 }
@@ -156,30 +156,30 @@ type DecodeCaps struct {
 	Reserved3            [10]uint32
 }
 
-// DecodeCreateInfo mirrors CUVIDDECODECREATEINFO on LP64 systems (the
-// tcu_ulong fields are unsigned long).
+// DecodeCreateInfo mirrors CUVIDDECODECREATEINFO. Its tcu_ulong fields are
+// unsigned long, so the layout differs between Linux and Windows.
 type DecodeCreateInfo struct {
-	Width             uint64
-	Height            uint64
-	NumDecodeSurfaces uint64
+	Width             ULong
+	Height            ULong
+	NumDecodeSurfaces ULong
 	CodecType         uint32
 	ChromaFormat      uint32
-	CreationFlags     uint64
-	BitDepthMinus8    uint64
-	IntraDecodeOnly   uint64
-	MaxWidth          uint64
-	MaxHeight         uint64
-	Reserved1         uint64
+	CreationFlags     ULong
+	BitDepthMinus8    ULong
+	IntraDecodeOnly   ULong
+	MaxWidth          ULong
+	MaxHeight         ULong
+	Reserved1         ULong
 	DisplayArea       ShortRect
 	OutputFormat      uint32
 	DeinterlaceMode   uint32
-	TargetWidth       uint64
-	TargetHeight      uint64
-	NumOutputSurfaces uint64
+	TargetWidth       ULong
+	TargetHeight      ULong
+	NumOutputSurfaces ULong
 	VidLock           uintptr
 	TargetRect        ShortRect
-	EnableHistogram   uint64
-	Reserved2         [4]uint64
+	EnableHistogram   ULong
+	Reserved2         [4]ULong
 }
 
 // PicParamsCodecSize is the size of the codec-specific union at the end of

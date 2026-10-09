@@ -9,19 +9,25 @@
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
-// Silicon) through VideoToolbox and on Windows (amd64 and arm64) through
+// Silicon) through VideoToolbox, on Linux and Windows (amd64) with the NVIDIA
+// driver through NVDEC and NVENC, and on Windows (amd64 and arm64) through
 // Media Foundation (decoding with the Microsoft decoder transforms
 // accelerated by Direct3D 11, encoding with the vendor's hardware encoder
 // transforms); H.264 decoding and encoding on Linux through VA-API (AMD Mesa
-// and Intel drivers). Raw frames are NV12, RGBA or BGRA in CPU memory (NV12
-// only on VA-API and Media Foundation for now). Decoded frames are returned
-// in display order (see NewDecoder and WithDecodeOrder; the Media Foundation
-// decoders reorder natively, so WithDecodeOrder has no effect on Windows).
+// and Intel drivers). Where the NVIDIA driver is installed its backend is
+// tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
+// return NV12 only on VA-API, NVDEC and Media Foundation for now, and the
+// VA-API and Media Foundation encoders take NV12 only). Decoded frames are
+// returned in display order (see NewDecoder and WithDecodeOrder; the Media
+// Foundation decoders reorder natively, so WithDecodeOrder has no effect on
+// that backend).
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
 //
 // On Linux the VA-API backend opens the first usable DRM render node; set
 // HWMEDIACODEC_VAAPI_DEVICE to a /dev/dri/renderD* path to choose a GPU.
+// The NVIDIA backend uses CUDA device 0; set HWMEDIACODEC_NVIDIA_DEVICE to
+// another device ordinal on machines with several NVIDIA GPUs.
 //
 // # Decoding
 //

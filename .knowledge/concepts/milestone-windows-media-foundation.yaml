@@ -243,7 +243,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_windows.go
-      input_hash: 9cd5cccd9b59e8f032c7bb5c2d4631fa0ae8787f5d2415454cfb12850c83acd6
+      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
     - path: backends_other.go
       input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
     - &mf_backend
@@ -462,3 +462,8 @@ history:
     summary: Author asked for the encoder next, appended to the same PR ("次にエンコーダーもお願いします。このまま同じPRに追記で").
       Vendor asynchronous hardware encoder MFTs driven through the event model; Codec API mapping of the
       shared encoder controls; conformance tests mirror the macOS ones. Hardware verification pending.
+  nvidia-direct-2026-10-09:
+    summary: After the merge the author asked whether the backend distinguishes GPU vendors (it does
+      not) and requested NVDEC/NVENC directly for NVIDIA; milestone:windows-nvidia-nvdec-nvenc
+      registers that backend ahead of this one on windows/amd64. backends_windows.go changed for it
+      and TestDecodeOrderOption now skips by serving backend, not by operating system.

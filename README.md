@@ -3,10 +3,10 @@
 Hardware video decoding and encoding from Go, without cgo.
 
 The library loads the operating system's codec engines at run time
-(VideoToolbox on macOS, VA-API on Linux and Media Foundation on Windows
-today; Intel VPL and NVENC/NVDEC are planned) through
-[purego](https://github.com/ebitengine/purego) on macOS and Linux and
-`golang.org/x/sys/windows` plus raw COM vtable calls on Windows, so
+(VideoToolbox on macOS, VA-API on Linux, Media Foundation on Windows and
+NVIDIA's NVDEC/NVENC on both Linux and Windows today; Intel VPL is planned)
+through [purego](https://github.com/ebitengine/purego) and, for Media
+Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
 
 ## Status
@@ -17,7 +17,8 @@ today; Intel VPL and NVENC/NVDEC are planned) through
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux | Intel VPL | planned | planned |
-| Windows x64 / ARM64, Intel, AMD, NVIDIA | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -135,6 +136,35 @@ is given it declares 30 fps.
   verify; the conformance tests skip when `Probe` reports no hardware engine,
   and the encoder tests for optional controls skip when the vendor MFT
   rejects them.
+
+### Windows (NVDEC / NVENC)
+
+On Windows x64 the NVIDIA backend (`internal/nvidia`, the same code as on
+Linux) is registered before Media Foundation, so a machine with the NVIDIA
+driver decodes through NVDEC and encodes through NVENC directly and gets the
+controls described under "Linux notes" below: RGBA and BGRA encoder input,
+B-frames, VBR/CBR, constant QP, low-latency tuning, and frames in decode order
+with `WithDecodeOrder`. Media Foundation remains the backend for Intel and
+AMD GPUs, and takes over when the NVIDIA backend reports `ErrUnsupported`.
+
+- The backend loads `nvcuda.dll`, `nvcuvid.dll` and `nvEncodeAPI64.dll` from
+  the Windows system directory only (`LOAD_LIBRARY_SEARCH_SYSTEM32`); the
+  display driver installs them there. Driver 471.41 or newer is needed for
+  NVENC API 11.1. `Probe` reports no `nvidia` capability, rather than an
+  error, when a DLL or a GPU is missing.
+- On a laptop with an integrated GPU next to an NVIDIA one, the NVIDIA GPU is
+  used whenever its driver is present. `HWMEDIACODEC_NVIDIA_DEVICE` picks the
+  CUDA device ordinal on machines with several NVIDIA GPUs; there is no
+  switch yet to prefer Media Foundation over an installed NVIDIA driver.
+- Windows on ARM has no NVIDIA driver libraries, so `windows/arm64` uses
+  Media Foundation only.
+- Encoding uses NVENC's synchronous mode (no completion events), as on Linux.
+- The two cuvid structures that contain `unsigned long` fields are 32-bit
+  there on Windows; their layout is asserted at compile time against values
+  measured with `x86_64-w64-mingw32-gcc` and
+  `clang --target=x86_64-pc-windows-msvc`, so `GOOS=windows go build` checks
+  it from any host. Like the Media Foundation backend this code has **not
+  been run on Windows hardware yet**.
 
 ## Usage
 
@@ -300,8 +330,8 @@ and header writer are checked against ffmpeg's own view of the stream
 with ffmpeg; the reorder logic is also checked without hardware, against
 the presentation timestamps ffmpeg writes into an MP4 of the same stream.
 The decode and encode conformance tests run where `Probe` reports a
-hardware engine (Apple Silicon, Linux with a VA-API driver, or Windows with
-a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
+hardware engine (Apple Silicon, Linux with a VA-API or NVIDIA driver, or
+Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
 streams must match ffmpeg's output frame for frame in display order. RGB
 output and input are compared to ffmpeg's conversion by block-averaged PSNR
 (the two converters interpolate chroma differently) and RGBA must be the

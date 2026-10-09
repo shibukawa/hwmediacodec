@@ -54,6 +54,22 @@ func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction)
 	return false
 }
 
+// decodeBackend names the backend that serves hardware decoding of c: the
+// first one Probe lists, which is the one NewDecoder tries first.
+func decodeBackend(t *testing.T, c hwmediacodec.Codec) string {
+	t.Helper()
+	caps, err := hwmediacodec.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	for _, cap := range caps {
+		if cap.Codec == c && cap.Direction == hwmediacodec.Decode && cap.Hardware {
+			return cap.Backend
+		}
+	}
+	return ""
+}
+
 func requireHardwareDecode(t *testing.T, c hwmediacodec.Codec) {
 	t.Helper()
 	requireHardware(t, c, hwmediacodec.Decode)
@@ -227,8 +243,8 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 // the hardware produces them: the same set of frames, not in display order.
 func TestDecodeOrderOption(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.H264)
-	if runtime.GOOS == "windows" {
-		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on Windows")
+	if decodeBackend(t, hwmediacodec.H264) == "mediafoundation" {
+		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on that backend")
 	}
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)

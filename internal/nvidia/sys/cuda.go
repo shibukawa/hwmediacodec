@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package sys
 
@@ -12,8 +12,8 @@ import (
 	"github.com/ebitengine/purego"
 )
 
-// Bound CUDA driver entry points (libcuda.so.1). They are valid after
-// LoadCUDA returns nil.
+// Bound CUDA driver entry points (libcuda.so.1 on Linux, nvcuda.dll on
+// Windows). They are valid after LoadCUDA returns nil.
 var (
 	CuInit                    func(flags uint32) int32
 	CuDriverGetVersion        func(version *int32) int32
@@ -43,7 +43,7 @@ type binder struct {
 }
 
 func (b *binder) fn(fptr any, name string) {
-	addr, err := purego.Dlsym(b.handle, name)
+	addr, err := lookup(b.handle, name)
 	if err != nil {
 		b.errs = append(b.errs, fmt.Sprintf("%s: %s", b.lib, name))
 		return
@@ -54,7 +54,7 @@ func (b *binder) fn(fptr any, name string) {
 // fnAlt binds the first of the given symbol names that exists.
 func (b *binder) fnAlt(fptr any, names ...string) {
 	for _, n := range names {
-		if addr, err := purego.Dlsym(b.handle, n); err == nil {
+		if addr, err := lookup(b.handle, n); err == nil {
 			purego.RegisterFunc(fptr, addr)
 			return
 		}
@@ -69,10 +69,12 @@ func (b *binder) missing() error {
 	return nil
 }
 
-func open(names ...string) (*binder, error) {
+// open loads the first of the given libraries that exists; openLibrary and
+// lookup are the platform's loader (lib_linux.go, lib_windows.go).
+func open(names []string) (*binder, error) {
 	var errs []string
 	for _, n := range names {
-		h, err := purego.Dlopen(n, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		h, err := openLibrary(n)
 		if err == nil {
 			return &binder{handle: h, lib: n}, nil
 		}
@@ -86,15 +88,15 @@ var (
 	cudaErr  error
 )
 
-// LoadCUDA opens libcuda and binds the driver entry points. It is safe to
-// call repeatedly; the result is cached.
+// LoadCUDA opens the CUDA driver library and binds the driver entry points.
+// It is safe to call repeatedly; the result is cached.
 func LoadCUDA() error {
 	cudaOnce.Do(func() { cudaErr = loadCUDA() })
 	return cudaErr
 }
 
 func loadCUDA() error {
-	b, err := open("libcuda.so.1", "libcuda.so")
+	b, err := open(cudaLibraries)
 	if err != nil {
 		return err
 	}

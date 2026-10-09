@@ -1,0 +1,371 @@
+id: milestone:windows-nvidia-nvdec-nvenc
+type: milestone
+title: Windows NVIDIA - the NVDEC/NVENC backend loaded from nvcuda.dll, nvcuvid.dll and nvEncodeAPI64.dll
+summary: 'Windows slice requested by the author on 2026-10-09 ("NVIDIAのnvdec/nvenc直叩きの方向で"), after
+  asking whether the merged Media Foundation backend also covers AMD and NVIDIA (it does, without telling
+  vendors apart). The Linux NVIDIA backend (internal/nvidia) now also builds for windows/amd64: the sys
+  package got a per-platform library loader and a platform-sized unsigned long, and the backend is
+  registered before Media Foundation. The decoder and encoder code is shared unchanged with Linux.
+  Written on a Mac: the Windows struct layouts are measured with two Windows-targeting C compilers and
+  asserted at compile time, nothing has run on Windows yet.'
+lifecycle: active
+authority: authored
+aliases:
+- Windows NVIDIA
+- Windows NVDEC
+- Windows NVENC
+- nvcuvid.dll
+- nvEncodeAPI64.dll
+scope:
+  platform: windows
+  gpu: nvidia
+  milestone: windows-nvidia
+constraints:
+- CGO_ENABLED=0. The three driver DLLs are loaded with LoadLibraryEx(LOAD_LIBRARY_SEARCH_SYSTEM32)
+  through golang.org/x/sys/windows, so a DLL of the same name next to the executable is never used;
+  entry points are bound with purego.RegisterFunc (syscall.SyscallN underneath) and the parser
+  callbacks with purego.NewCallback (syscall.NewCallback). No module dependency is added.
+- One backend for both operating systems. Everything in internal/nvidia and the bindings in
+  internal/nvidia/sys carry the build tag linux || (windows && amd64); only the library names, the
+  loader (lib_linux.go, lib_windows.go) and the width of unsigned long (ulong_lp64.go,
+  ulong_windows.go) differ.
+- windows/amd64 only. NVIDIA ships no NVDEC/NVENC libraries for Windows on ARM, so windows/arm64 keeps
+  Media Foundation alone (registerNVIDIA is a no-op there).
+- Same struct version floor as Linux (Video Codec SDK 11.1); on Windows that is driver 471.41 or newer.
+- Registered before Media Foundation in backends_windows.go, following policy:support-tiers (Windows
+  NVIDIA primary = backend:nvenc-nvdec, alternative = backend:media-foundation). Media Foundation
+  takes over when the nvidia backend reports ErrUnsupported.
+non_goals:
+- NVENC asynchronous mode (completion events), which exists only on Windows; the synchronous mode used
+  on Linux works on Windows too and keeps one code path.
+- Direct3D 11 input or output (NV_ENC_DEVICE_TYPE_DIRECTX, cudaVideoCreate_PreferDXVA); the session
+  stays on the CUDA primary context with system-memory frames.
+- A way to prefer Media Foundation over an installed NVIDIA driver, or to choose the backend per call
+  (see open_questions.backend-selection).
+- Everything the Linux slice left out (RGBA/BGRA decode output, 10-bit, interlaced, AV1, zero-copy).
+acceptance:
+  windows-struct-layout:
+    text: Every struct the backend exchanges with the driver has, for windows/amd64, the size and
+      field offsets a Windows C compiler measures. Only CUVIDSOURCEDATAPACKET and CUVIDDECODECREATEINFO
+      differ from Linux (their unsigned long fields are 32 bits wide); those two are asserted at
+      compile time, the others are covered by the shared layout test.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - windows-layout-oracle
+  windows-loader:
+    text: On a Windows machine with the NVIDIA driver every nvcuda.dll, nvcuvid.dll and
+      nvEncodeAPI64.dll entry point the backend uses binds, NvEncodeAPIGetMaxSupportedVersion reports
+      at least 11.1 and Probe lists nvidia capabilities ahead of mediafoundation ones. Without the
+      driver Probe lists only mediafoundation capabilities and nothing fails.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - windows-loader-run
+  decode-reference-windows-nvidia:
+    text: On a Windows machine with an NVIDIA GPU the decode conformance tests pass on the nvidia
+      backend (per-frame NV12 checksums equal ffmpeg's software decoder, B-frame display order,
+      TestDecodeOrderOption now running instead of skipping, parameter-set change, flush and resume).
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - hardware-decode-windows
+  encode-reference-windows-nvidia:
+    text: On the same machine the encode conformance tests and the transcode round trip pass on the
+      nvidia backend, including RGBA/BGRA input and B-frames, which the Media Foundation backend does
+      not offer.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - hardware-encode-windows
+  cross-build:
+    text: CGO_ENABLED=0 builds succeed for all six targets and go vet passes for windows/amd64 and
+      windows/arm64 with the backend wired in.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - cross-build-check
+  linux-unaffected:
+    text: The loader refactor does not change the Linux backend - every symbol still binds against a
+      real driver build and the no-driver path still yields an empty Probe result.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - linux-regression
+  host-suite-unaffected:
+    text: The full macOS test suite still passes; the test changes (the Windows probe list accepts the
+      nvidia backend on amd64, TestDecodeOrderOption skips by serving backend instead of by operating
+      system) keep the other platforms' expectations.
+    scope:
+      milestone: windows-nvidia
+    verified_by:
+    - host-suite
+verification:
+  windows-layout-oracle:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: windows-nvidia
+    test: GOOS=windows GOARCH=amd64 go build ./... and go vet ./... (the array-length assertions in
+      layout_windows.go only compile when sizes and offsets match), plus TestStructLayouts on the host
+      for the structs whose layout is the same on every 64-bit target
+    evidence:
+      path: internal/nvidia/sys/layout_windows.go
+      note: 478 sizes, offsets and constants were compiled into a table from nv-codec-headers n11.1.5.3
+        with x86_64-w64-mingw32-gcc and with clang --target=x86_64-pc-windows-msvc on the author's M3
+        (2026-10-09); both agree on every value, and against the Linux values only the 25 entries of
+        CUVIDSOURCEDATAPACKET (24 bytes instead of 32) and CUVIDDECODECREATEINFO (112 instead of 176)
+        differ. All NVENC structs and struct version tags are identical. A deliberately wrong offset
+        made the Windows build fail as intended.
+    basis:
+    - path: internal/nvidia/sys/layout_windows.go
+      input_hash: 1120b8a0a817d74e6aada964f29b5df396f519ab3659e56853b8db57b1a3e870
+    - path: internal/nvidia/sys/layout_windows_test.go
+      input_hash: 24fb641a267f41e0bba24d74bab888a9ff7f2b70d4606b6901ec02340088abd9
+    - path: internal/nvidia/sys/ulong_windows.go
+      input_hash: 7c1ee49b8ac5ea5f23a942d1b23ee589a424f35e8cdf7c9173e8b46686d9e554
+    - path: internal/nvidia/sys/types_cuvid.go
+      input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
+    - path: internal/nvidia/sys/types_nvenc.go
+      input_hash: 3e4503c8c0f33953c2fbeb8c400b3eb1a0ed67db6a57ced6757eda869da208c7
+    - path: internal/nvidia/sys/layout_test.go
+      input_hash: 2106fc5008cb1c6b622c0e3a49f8adc4d31766eb76c9ae0437e42d47fa2706f5
+  cross-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: windows-nvidia
+    test: scripts/crossbuild.sh; go vet ./... with GOOS=windows for amd64 and arm64 (test files
+      included) and GOOS=linux for amd64 and arm64
+    evidence:
+      path: scripts/crossbuild.sh
+      note: all six targets ok on 2026-10-09; vet clean for both Windows and both Linux targets. The
+        ebitenvideo module also vets for windows after its go.sum gained the golang.org/x/sys v0.48.0
+        hash it lacked since the Media Foundation slice.
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: backends_windows.go
+      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+    - path: backends_windows_amd64.go
+      input_hash: 407cec921d166b9b447250cd9c0e15f55e2dbca78d5a3a1e4a92322eb646d595
+    - path: backends_windows_arm64.go
+      input_hash: 3a33986796fd362d8e226bc75b4ebe8efb032d2c995f6fd1bca5e6090ce67961
+    - path: internal/nvidia/sys/lib_windows.go
+      input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
+    - path: ebitenvideo/go.sum
+      input_hash: 765f20a5f56b7c5201a52a73377d2c0f0e5e544d002ee551d509d0a66f8fac36
+  linux-regression:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: windows-nvidia
+    test: the CGO_ENABLED=0 linux/amd64 sys and root test binaries in the hwmc-nvlibs container
+      (debian:bookworm-slim with libcuda1, libnvcuvid1, libnvidia-encode1 535, no GPU), and the
+      linux/arm64 binaries plus the CLI in debian:bookworm-slim without any driver library
+    evidence:
+      path: internal/nvidia/sys/sys_test.go
+      note: with the libraries TestLoadCUDA, TestLoadCuvid and TestLoadNVENC pass (NVENC API 12.1) and
+        TestProbe passes; without them the three load tests skip, TestProbe passes with an empty list
+        and "hwmediacodec probe" prints that no backend is available (2026-10-09)
+    basis:
+    - path: internal/nvidia/sys/cuda.go
+      input_hash: de0897945e323debd3913aded02c2f55d8c311b1e02460967bdf855e1f776e6f
+    - path: internal/nvidia/sys/cuvid.go
+      input_hash: 472eb8c814a8f33b9d926ce95598927be5c4e88b5984e6896f227674b88ef8e3
+    - path: internal/nvidia/sys/nvenc.go
+      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+    - path: internal/nvidia/sys/lib_linux.go
+      input_hash: 98b1ee6c6dc34406993d9973bbb97981a5bceb896a08dcf37d8b84993e8d8a8f
+    - path: internal/nvidia/sys/ulong_lp64.go
+      input_hash: bbbe8d0fe27245f05aa2808caacc4d656422e146db40db4adae4c7689a93890d
+    - path: internal/nvidia/sys/sys_test.go
+      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
+  host-suite:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: windows-nvidia
+    test: go test ./... on the author's M3 (darwin/arm64, 2026-10-09), VideoToolbox conformance
+      included, and go test ./... in the ebitenvideo module
+    evidence:
+      path: probe_test.go
+    basis:
+    - path: probe_test.go
+      input_hash: f8de6961b1d5b753ff9b03aae2e11d0d236d829292b6c20ab45f2f8e04e00c12
+    - path: decode_test.go
+      input_hash: 4daf67d3508f482e362b5eaacfa636762d808b3e5fc9e750a272662e5d2efcd3
+    - path: hwmediacodec.go
+      input_hash: 1e62434bcc8e876919e41f3d519f9507be4ee69c59e078c96dac44cfdf842cd1
+  windows-loader-run:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: windows-nvidia
+    test: go test -count=1 -v ./internal/nvidia/sys and go run ./cmd/hwmediacodec probe on Windows x64,
+      once with the NVIDIA driver and once on a machine without it
+    evidence:
+      path: internal/nvidia/sys/lib_windows.go
+      note: 'Not yet run; no Windows machine or Wine was used. Points to watch: LoadLibraryEx with
+        LOAD_LIBRARY_SEARCH_SYSTEM32 must find the three DLLs (DCH drivers keep stubs in System32);
+        the symbol names are the ones ffmpeg binds on Windows (cuCtxPushCurrent_v2, cuMemcpy2D_v2,
+        cuvidMapVideoFrame64, NvEncodeAPICreateInstance); a missing DLL must surface as
+        ErrNotAvailable so that Probe stays silent.'
+    basis:
+    - path: internal/nvidia/sys/lib_windows.go
+      input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
+    - path: internal/nvidia/sys/sys_test.go
+      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
+    - path: backends_windows.go
+      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+  hardware-decode-windows:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: windows-nvidia
+    test: go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on Windows x64 with an NVIDIA GPU
+      (driver 471.41+) and ffmpeg with libx264/libx265
+    evidence:
+      path: decode_test.go
+      note: 'Not yet run. Windows-specific points on top of the Linux ones: the parser callbacks are
+        syscall.NewCallback thunks invoked re-entrantly inside cuvidParseVideoData; the driver reads
+        CUVIDSOURCEDATAPACKET and CUVIDDECODECREATEINFO in the 32-bit unsigned long layout; C code
+        runs on the Go thread''s system stack (2 MB reserve in a non-cgo Windows binary).'
+    basis:
+    - path: internal/nvidia/decoder.go
+      input_hash: d64ad2716a7b85081f02a2216a1c621be1f420d45f3a34f74933cdacf98c43f2
+    - path: internal/nvidia/device.go
+      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
+    - path: internal/nvidia/sys/types_cuvid.go
+      input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
+    - path: decode_test.go
+      input_hash: 4daf67d3508f482e362b5eaacfa636762d808b3e5fc9e750a272662e5d2efcd3
+  hardware-encode-windows:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: windows-nvidia
+    test: go test -count=1 -v -run 'Encode|Transcode' . on the same machine
+    evidence:
+      path: encode_test.go
+      note: 'Not yet run. Windows-specific points: purego passes the 16-byte GUID of
+        nvEncGetEncodeCaps and nvEncGetEncodePresetConfigEx as a pointer to a copy, which is what the
+        Win64 ABI prescribes; NVENC runs in synchronous mode with enableEncodeAsync 0, so
+        nvEncLockBitstream blocks until the picture is ready; the session uses the CUDA device type,
+        not Direct3D.'
+    basis:
+    - path: internal/nvidia/encoder.go
+      input_hash: 6853d4aa41505e51a6cc30768b1c77db07ae97edbd74a36f65ad8cf6bf7178b3
+    - path: internal/nvidia/sys/nvenc.go
+      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+    - path: encode_test.go
+      input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
+open_questions:
+  hardware-verification:
+    text: Does the backend work on a Windows machine with an NVIDIA GPU? Nothing above the compile-time
+      checks has run on Windows; the Linux hardware run is open as well, so the shared decoder and
+      encoder logic is unverified on any GPU.
+    state: open
+    resolution: Run go test ./... on a Windows x64 machine with an NVIDIA driver and ffmpeg; record
+      GPU, driver version and results in verification and flip the capability authority to observed.
+  backend-selection:
+    text: Should the caller be able to choose the backend (an option, or an environment variable such
+      as a backend list)? With the NVIDIA driver installed the nvidia backend always wins on
+      Windows x64, so the Media Foundation path cannot be exercised on such a machine and a laptop
+      with an integrated GPU always wakes the NVIDIA one.
+    state: deferred
+    resolution: Not needed for this slice's outcome. Revisit when the author tests Media Foundation on
+      an NVIDIA machine, or when a user reports the discrete GPU being used unintentionally. The same
+      question applies to nvidia versus vaapi on Linux.
+  wine-smoke-test:
+    text: Would a Wine container run be worth adding - the windows/amd64 test binaries, and stub DLLs
+      built with mingw from the SDK headers that check the arguments they receive?
+    state: deferred
+    resolution: It would exercise the Windows calling convention, the callbacks and the 32-bit unsigned
+      long layout without hardware, but needs Wine packages that were not downloaded in this session.
+      Revisit if the first hardware run fails in a way that is hard to diagnose remotely.
+facts:
+  steps:
+  - internal/nvidia/sys - cuda_linux.go, cuvid_linux.go, nvenc_linux.go and sys_linux_test.go renamed
+    to cuda.go, cuvid.go, nvenc.go and sys_test.go with the tag linux || (windows && amd64); the
+    binder now calls openLibrary/lookup from lib_linux.go (purego.Dlopen/Dlsym) or lib_windows.go
+    (windows.LoadLibraryEx with LOAD_LIBRARY_SEARCH_SYSTEM32, windows.GetProcAddress).
+  - 'internal/nvidia/sys - type ULong: uint64 off Windows, uint32 on Windows, used for the tcu_ulong
+    fields of CUVIDSOURCEDATAPACKET and CUVIDDECODECREATEINFO and for the cudaVideoCreateFlags and
+    CUvideopacketflags constants; layout_windows.go asserts the Windows layout of both structs at
+    compile time and the layout test takes its expectations for them per ABI (layout_lp64_test.go,
+    layout_windows_test.go).'
+  - internal/nvidia - build tags widened, sys.ULong conversions in decoder.go; no behavioural change.
+  - Root wiring - backends_windows.go calls registerNVIDIA() before registering Media Foundation;
+    backends_windows_amd64.go registers the backend and backends_windows_arm64.go is a no-op, so the
+    order does not depend on file init order.
+  - Tests - the Windows probe expectations accept the nvidia backend on amd64; TestDecodeOrderOption
+    skips when the serving backend is mediafoundation instead of on every Windows machine.
+  - README (status row, "Windows (NVDEC / NVENC)" notes), package documentation, ebitenvideo/go.sum.
+  oracle_recipes:
+    layout: scratch table.c generated from the Linux slice's layout.c (every sizeof/offsetof/constant
+      as an element of a const unsigned long long array), compiled to assembly with
+      x86_64-w64-mingw32-gcc -S and with clang --target=x86_64-pc-windows-msvc -ffreestanding -S
+      (stub windows.h with GUID and RECT), the .quad values paired with the names and diffed against
+      the Linux values.
+  design_choices:
+  - Share internal/nvidia with Linux rather than write a Windows-specific backend - the SDK is the same
+    on both systems and the only ABI differences are the loader and unsigned long; a second backend
+    would duplicate about 1500 lines of decoder and encoder logic.
+  - A defined type (ULong) rather than an alias, so that a plain uint64 conversion at a call site
+    fails to compile on every platform, not only in the Windows cross-build.
+  - purego.RegisterFunc on Windows too (it supports amd64 there, including struct arguments), so the
+    function variables and the NVENC function table are bound by one piece of code.
+  - CUDA device type and synchronous NVENC on Windows, as on Linux; Direct3D 11 interop and the
+    asynchronous mode would only pay off with GPU-side frames, which the API does not expose yet.
+  learned:
+  - The NVENC half of the SDK is LLP64-clean (fixed-width integers and pointers only); the cuvid half
+    uses unsigned long in exactly two structures the backend touches.
+  - mingw-w64 gcc and clang's MSVC target agree on every measured value, including the NVENC bit-field
+    structs, so either is a sufficient oracle from a Mac.
+  - purego v0.11.1 passes structs under the Win64 ABI (1, 2, 4 and 8 byte aggregates by value, larger
+    ones by pointer to a copy) and falls back to syscall.NewCallback for callbacks, which accepts
+    pointer-sized arguments only - the parser callbacks already had that shape.
+  - The ebitenvideo module could not be built for Windows since the Media Foundation slice because its
+    go.sum lacked the golang.org/x/sys v0.48.0 hash; go mod tidy fixed it.
+  known_risks:
+  - Everything above the compile-time checks is unverified on Windows; see
+    open_questions.hardware-verification.
+  - On a laptop with an integrated GPU and an NVIDIA one the NVIDIA GPU is used whenever its driver is
+    installed; see open_questions.backend-selection.
+  next_candidates:
+  - Run the sys tests and the conformance suite on Windows x64 with an NVIDIA GPU and record the result.
+  - Backend selection (option or environment variable) for machines with more than one usable backend.
+  - The Linux slice's follow-ups apply here unchanged (parameter-set cache across Flush, unit tests for
+    the encoder configure functions, RGBA decode output).
+  environment:
+    authored_on: macOS 27.0 (Apple M3), go1.27.0, mingw-w64 gcc and Homebrew clang 23.1 as layout oracles
+    date: '2026-10-09'
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: uses_backend
+  to: backend:nvenc-nvdec
+- relation: tests_decision
+  to: decision:ffi-strategy
+- relation: follows
+  to: milestone:linux-nvidia-h264-hevc
+- relation: follows
+  to: milestone:windows-media-foundation
+- relation: ranked_by
+  to: policy:support-tiers
+history:
+  requested-2026-10-09:
+    summary: Author asked whether the merged Media Foundation backend covers AMD and NVIDIA, then asked
+      for NVDEC/NVENC to be driven directly on Windows, on top of the Linux NVIDIA backend now in main.
+  implemented-2026-10-09:
+    summary: 'Code complete on branch claude/media-foundation-gpu-support-b3f3d6: shared backend builds
+      for windows/amd64, Windows layouts measured and asserted at compile time, Linux binding re-verified
+      in the container, host suite and cross builds pass; nothing has run on Windows.'

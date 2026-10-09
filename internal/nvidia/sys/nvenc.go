@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package sys
 
@@ -10,7 +10,8 @@ import (
 	"github.com/ebitengine/purego"
 )
 
-// Exported entry points of libnvidia-encode.so.1.
+// Exported entry points of libnvidia-encode.so.1 (Linux) and
+// nvEncodeAPI64.dll (Windows).
 var (
 	NvEncodeAPIGetMaxSupportedVersion func(version *uint32) uint32
 	NvEncodeAPICreateInstance         func(list *FunctionList) uint32
@@ -53,7 +54,7 @@ var (
 // API version this package was written against.
 var ErrNVENCVersion = errors.New("nvidia: the driver's NVENC API is older than 11.1")
 
-// LoadNVENC opens libnvidia-encode, checks the driver's NVENC API version
+// LoadNVENC opens the NVENC library, checks the driver's NVENC API version
 // and binds the function table. The result is cached.
 func LoadNVENC() (*API, error) {
 	nvencOnce.Do(func() { nvencAPI, nvencErr = loadNVENC() })
@@ -64,7 +65,7 @@ func loadNVENC() (*API, error) {
 	if err := LoadCUDA(); err != nil {
 		return nil, err
 	}
-	b, err := open("libnvidia-encode.so.1", "libnvidia-encode.so")
+	b, err := open(nvencLibraries)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package nvidia
 
@@ -210,7 +210,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 			}
 		}
 		d.curPTS, d.curOrder = p.PTS, codec.PacketOrder(p)
-		pkt := sys.SourceDataPacket{PayloadSize: uint64(len(data)), Payload: &data[0]}
+		pkt := sys.SourceDataPacket{PayloadSize: sys.ULong(len(data)), Payload: &data[0]}
 		if hasVCL {
 			// The packet holds exactly one picture, so the parser can
 			// emit it now instead of waiting for the next access unit.
@@ -266,19 +266,19 @@ func (d *decoder) sequence(f *sys.VideoFormat) uintptr {
 	// can go.
 	d.destroyDecoder()
 	info := sys.DecodeCreateInfo{
-		Width:             uint64(w),
-		Height:            uint64(h),
-		NumDecodeSurfaces: uint64(n),
+		Width:             sys.ULong(w),
+		Height:            sys.ULong(h),
+		NumDecodeSurfaces: sys.ULong(n),
 		CodecType:         d.codecType,
 		ChromaFormat:      sys.Chroma420,
 		CreationFlags:     sys.CreatePreferCUVID,
-		MaxWidth:          uint64(w),
-		MaxHeight:         uint64(h),
+		MaxWidth:          sys.ULong(w),
+		MaxHeight:         sys.ULong(h),
 		DisplayArea:       sys.ShortRect{Right: int16(w), Bottom: int16(h)},
 		OutputFormat:      sys.SurfaceNV12,
 		DeinterlaceMode:   sys.DeinterlaceWeave,
-		TargetWidth:       uint64(w),
-		TargetHeight:      uint64(h),
+		TargetWidth:       sys.ULong(w),
+		TargetHeight:      sys.ULong(h),
 		NumOutputSurfaces: 1,
 	}
 	if st := sys.CuvidCreateDecoder(&d.dec, &info); st != sys.CUDASuccess {
