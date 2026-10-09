@@ -25,7 +25,7 @@ capabilities:
     authority: authored
     evidence:
       path: internal/mediafoundation/decoder.go
-      note: Implemented in milestone:m3-windows-mf-decode (Microsoft H.264 decoder MFT + D3D11/DXVA);
+      note: Implemented in milestone:windows-media-foundation (Microsoft H.264 decoder MFT + D3D11/DXVA);
         not yet verified on Windows hardware.
   decode/hevc:
     state: partial
@@ -33,17 +33,27 @@ capabilities:
     authority: authored
     evidence:
       path: internal/mediafoundation/decoder.go
-      note: Implemented in milestone:m3-windows-mf-decode (HEVC Video Extensions decoder MFT +
+      note: Implemented in milestone:windows-media-foundation (HEVC Video Extensions decoder MFT +
         D3D11/DXVA, 8-bit NV12 only); not yet verified on Windows hardware.
   decode/av1:
     state: unknown
     about: capability:hwmediacodec/decode-av1
   encode/h264:
-    state: planned
+    state: partial
     about: capability:hwmediacodec/encode-h264
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/encoder.go
+      note: Implemented in milestone:windows-media-foundation (vendor hardware encoder MFT, async event
+        model, ICodecAPI controls); not yet verified on Windows hardware.
   encode/hevc:
-    state: planned
+    state: partial
     about: capability:hwmediacodec/encode-hevc
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/encoder.go
+      note: Implemented in milestone:windows-media-foundation (vendor hardware HEVC encoder MFT, Main
+        profile); not yet verified on Windows hardware.
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -123,23 +133,29 @@ facts:
     windows/arm64 is tier 1. Codec coverage unverified.
   support_tier: tier1 for Intel/AMD/NVIDIA; tier2 for Qualcomm Snapdragon X
   implementation:
-    status: decode implemented 2026-10-09 (milestone:m3-windows-mf-decode), unverified on hardware
+    status: decode and encode implemented 2026-10-09 (milestone:windows-media-foundation), unverified on
+      hardware
     package: internal/mediafoundation (+ sys for bindings)
     ffi: golang.org/x/sys/windows NewLazySystemDLL for mfplat.dll/d3d11.dll flat functions;
       COM interfaces through hand-written vtable structs and syscall.SyscallN; MFTEnumEx's by-value
       GUID has per-architecture wrappers (pointer-to-copy on amd64, two registers on arm64).
-    model: synchronous Microsoft decoder MFTs + IMFDXGIDeviceManager; vendor async hardware MFTs are
-      enumerated but skipped (see milestone open question async-hardware-mfts).
+    model: decode uses the synchronous Microsoft decoder MFTs + IMFDXGIDeviceManager (vendor async
+      hardware decoder MFTs are enumerated but skipped); encode uses the vendor asynchronous hardware
+      encoder MFTs through IMFMediaEventGenerator with system-memory NV12 input, and the synchronous
+      Microsoft H.264 encoder only with WithSoftwareFallback.
     arch: windows/amd64 and windows/arm64; 32-bit excluded by the author (2026-10-09).
-    not_yet: encode, software fallback, P010/10-bit, AV1, zero-copy textures.
+    not_yet: software decode fallback, P010/10-bit, AV1, zero-copy textures, D3D texture input for encoders.
 relations:
 - relation: implemented_by
-  to: milestone:m3-windows-mf-decode
+  to: milestone:windows-media-foundation
 - relation: candidate_for
   to: requirement:hwmediacodec
 - relation: ranked_by
   to: policy:support-tiers
 history:
   decode-implemented-2026-10-09:
-    summary: H.264/HEVC decode backend written (milestone:m3-windows-mf-decode); lifecycle moved to
+    summary: H.264/HEVC decode backend written (milestone:windows-media-foundation); lifecycle moved to
       active. Verification on Windows hardware pending.
+  encode-implemented-2026-10-09:
+    summary: H.264/HEVC encode through vendor hardware MFTs written on the same branch; verification on
+      Windows hardware pending.

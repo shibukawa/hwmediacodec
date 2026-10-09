@@ -14,7 +14,7 @@ VA-API and NVENC/NVDEC are planned for Linux) through
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC (NV12, CPU memory, decode order) | H.264, HEVC (NV12 in, Annex-B out) |
-| Windows x64 / ARM64, Intel, AMD, NVIDIA | Media Foundation + Direct3D 11 (DXVA) | H.264, HEVC (NV12, CPU memory, display order); **not yet verified on hardware** | planned |
+| Windows x64 / ARM64, Intel, AMD, NVIDIA | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC (NV12, CPU memory, display order); **not yet verified on hardware** | H.264, HEVC (NV12 in, Annex-B out); **not yet verified on hardware** |
 | Linux | Intel VPL / VA-API / NVDEC | planned | planned |
 
 Encoder controls: target bitrate with VBR or CBR, constant quality, keyframe
@@ -45,13 +45,30 @@ Known limitations:
 
 ### Windows (Media Foundation)
 
-The Windows backend drives the synchronous decoder MFTs that ship with
-Windows (`Msmpeg2vdec.dll` for H.264, the "HEVC Video Extensions" package
-for HEVC) with a Direct3D 11 device attached through `IMFDXGIDeviceManager`,
-so the GPU's DXVA engine does the decoding whatever the vendor. `Probe`
-reports a codec only when the GPU exposes the matching DXVA profile with
-NV12 output *and* a usable decoder MFT exists; `NewDecoder` fails with
-`ErrUnsupported` otherwise instead of decoding in software.
+Decoding drives the synchronous decoder MFTs that ship with Windows
+(`Msmpeg2vdec.dll` for H.264, the "HEVC Video Extensions" package for HEVC)
+with a Direct3D 11 device attached through `IMFDXGIDeviceManager`, so the
+GPU's DXVA engine does the decoding whatever the vendor. `Probe` reports a
+decoder only when the GPU exposes the matching DXVA profile with NV12 output
+*and* a usable decoder MFT exists; `NewDecoder` fails with `ErrUnsupported`
+otherwise instead of decoding in software.
+
+Encoding drives the vendor's hardware encoder MFT (Intel Quick Sync Video,
+AMD, NVIDIA), which Media Foundation exposes as an asynchronous MFT: the
+backend unlocks it, feeds NV12 frames from system memory on
+`METransformNeedInput` and collects Annex-B access units on
+`METransformHaveOutput`. Encoder controls map to `ICodecAPI`
+(`AVEncCommonRateControlMode`, `AVEncCommonMeanBitRate`, `AVEncCommonQuality`,
+`AVEncMPVGOPSize`, `AVEncMPVDefaultBPictureCount`, `AVLowLatencyMode`,
+`AVEncVideoForceKeyFrame`) and to the output media type (`MF_MT_AVG_BITRATE`,
+`MF_MT_FRAME_RATE`, `MF_MT_MPEG2_PROFILE`). Keyframes always carry in-band
+VPS/SPS/PPS: the backend stores the parameter sets it sees in the stream or in
+`MF_MT_MPEG_SEQUENCE_HEADER` and prepends them when the encoder leaves them
+out. `Probe` reports an encoder only when the driver registers a hardware
+encoder MFT; `WithSoftwareFallback` allows the synchronous Microsoft H.264
+encoder (software) instead. When no bitrate or quality is given the backend
+asks for 0.1 bit per pixel per frame (at least 200 kbit/s); when no frame rate
+is given it declares 30 fps.
 
 - Requires Windows 10 or later, a GPU driver with DXVA support, and for
   HEVC the free "HEVC Video Extensions from Device Manufacturer" (or the
@@ -59,10 +76,14 @@ NV12 output *and* a usable decoder MFT exists; `NewDecoder` fails with
 - Decoded textures are copied to CPU memory through a staging texture; the
   visible picture is cropped from the padded coded size using
   `MF_MT_MINIMUM_DISPLAY_APERTURE`.
-- `WithSoftwareFallback` is not implemented on Windows yet. Vendor
-  asynchronous hardware MFTs (for example the Intel VP9 decoder MFT) are not
-  used; H.264 and HEVC go through the Microsoft decoders, which is the
-  common path on Intel, AMD and NVIDIA.
+- `WithSoftwareFallback` is not implemented for decoding on Windows yet.
+  Vendor asynchronous hardware *decoder* MFTs (for example the Intel VP9
+  decoder MFT) are not used; H.264 and HEVC go through the Microsoft decoders,
+  which is the common path on Intel, AMD and NVIDIA.
+- Which encoder controls work depends on the vendor MFT: a control the MFT
+  rejects (constant quality, CBR, B-frames, low latency, a profile) makes
+  `NewEncoder` return `ErrUnsupported` naming the control and the MFT.
+  B-frames request up to two consecutive B-pictures.
 - 8-bit 4:2:0 only (NV12). 10-bit HEVC (P010) is rejected. Above 1920x1088
   the Microsoft H.264 decoder may fall back to software internally without
   reporting it.
@@ -71,8 +92,10 @@ NV12 output *and* a usable decoder MFT exists; `NewDecoder` fails with
 - The backend was written and cross-compiled on macOS against the Windows
   SDK headers (GUIDs, vtable layouts and structure sizes are checked at
   compile time) and has **not been run on Windows hardware yet**. Run
-  `go test ./...` on a Windows machine with ffmpeg installed to verify; the
-  conformance tests skip when `Probe` reports no hardware decoder.
+  `go test ./...` on a Windows machine with ffmpeg and ffprobe installed to
+  verify; the conformance tests skip when `Probe` reports no hardware engine,
+  and the encoder tests for optional controls skip when the vendor MFT
+  rejects them.
 
 ## Usage
 
@@ -147,10 +170,9 @@ go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc
 ## Testing
 
 Unit tests run everywhere. The decode and encode conformance tests run on
-Apple Silicon, the decode conformance tests also on Windows machines with a
-hardware decoder, and they use the `ffmpeg` and `ffprobe` commands as the
-reference (they are skipped when ffmpeg is not installed or when no hardware
-engine is present). Encoded streams are decoded by ffmpeg and compared to the
+Apple Silicon and on Windows machines with hardware engines, and use the
+`ffmpeg` and `ffprobe` commands as the reference (they are skipped when
+ffmpeg is not installed or when no hardware engine is present). Encoded streams are decoded by ffmpeg and compared to the
 source by PSNR, and their keyframe and B-frame structure is checked with
 ffprobe.
 

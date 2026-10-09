@@ -36,3 +36,30 @@ func TestHNSRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestFrameRateRatio(t *testing.T) {
+	cases := []struct {
+		fps      float64
+		num, den uint32
+	}{
+		{30, 30, 1},
+		{60, 60, 1},
+		{29.97, 30000, 1001},
+		{59.94, 60000, 1001},
+		{23.976, 24000, 1001},
+		{12.5, 12500, 1000},
+		{0, 30, 1},
+		{-1, 30, 1},
+	}
+	for _, c := range cases {
+		if n, d := frameRateRatio(c.fps); n != c.num || d != c.den {
+			t.Errorf("frameRateRatio(%g) = %d/%d, want %d/%d", c.fps, n, d, c.num, c.den)
+		}
+	}
+	if got := frameDurationHNS(30000, 1001); got != 333667 {
+		t.Errorf("frameDurationHNS(30000/1001) = %d, want 333667", got)
+	}
+	if got := frameDurationHNS(30, 1); got != 333333 {
+		t.Errorf("frameDurationHNS(30) = %d, want 333333", got)
+	}
+}

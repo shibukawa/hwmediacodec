@@ -97,3 +97,20 @@ func decodeVideoArea(b []byte) (rect, bool) {
 		h: int(int32(binary.LittleEndian.Uint32(b[12:]))),
 	}, true
 }
+
+// packNV12 copies the two planes of an NV12 frame into dst tightly packed
+// (stride = width), which is the layout the encoder's input type declares.
+// The frame must already have been validated.
+func packNV12(dst []byte, f *codecFrame) {
+	rows := [2]int{f.Height, (f.Height + 1) / 2}
+	rowBytes := [2]int{f.Width, (f.Width + 1) / 2 * 2}
+	off := 0
+	for i := 0; i < 2; i++ {
+		src := f.Planes[i]
+		stride := f.Strides[i]
+		for r := 0; r < rows[i]; r++ {
+			copy(dst[off:off+rowBytes[i]], src[r*stride:r*stride+rowBytes[i]])
+			off += rowBytes[i]
+		}
+	}
+}

@@ -296,6 +296,12 @@ func (s *IMFSample) GetBufferByIndex(index uint32, out **IMFMediaBuffer) HRESULT
 	return hres(r)
 }
 
+// ConvertToContiguousBuffer returns the sample data as one buffer.
+func (s *IMFSample) ConvertToContiguousBuffer(out **IMFMediaBuffer) HRESULT {
+	r, _, _ := syscall.SyscallN(s.vtbl.ConvertToContiguousBuffer, uintptr(unsafe.Pointer(s)), uintptr(unsafe.Pointer(out)))
+	return hres(r)
+}
+
 // AddBuffer appends a buffer to the sample.
 func (s *IMFSample) AddBuffer(b *IMFMediaBuffer) HRESULT {
 	r, _, _ := syscall.SyscallN(s.vtbl.AddBuffer, uintptr(unsafe.Pointer(s)), uintptr(unsafe.Pointer(b)))
@@ -491,6 +497,12 @@ func (t *IMFTransform) GetAttributes(out **IMFAttributes) HRESULT {
 // GetOutputStreamAttributes returns an output stream's attribute store.
 func (t *IMFTransform) GetOutputStreamAttributes(id uint32, out **IMFAttributes) HRESULT {
 	r, _, _ := syscall.SyscallN(t.vtbl.GetOutputStreamAttributes, uintptr(unsafe.Pointer(t)), uintptr(id), uintptr(unsafe.Pointer(out)))
+	return hres(r)
+}
+
+// GetInputAvailableType enumerates the input types the transform offers.
+func (t *IMFTransform) GetInputAvailableType(id, index uint32, out **IMFMediaType) HRESULT {
+	r, _, _ := syscall.SyscallN(t.vtbl.GetInputAvailableType, uintptr(unsafe.Pointer(t)), uintptr(id), uintptr(index), uintptr(unsafe.Pointer(out)))
 	return hres(r)
 }
 

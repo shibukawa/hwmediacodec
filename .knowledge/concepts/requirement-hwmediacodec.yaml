@@ -54,7 +54,7 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
   api/probe:
@@ -98,7 +98,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: f396f00bdca50dee6a6cb95257e5165e41fab9bd605aea668e22325ad1568fac
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
   encode/hevc:
@@ -113,7 +113,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: f396f00bdca50dee6a6cb95257e5165e41fab9bd605aea668e22325ad1568fac
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
   encode/av1:
@@ -141,7 +141,7 @@ capabilities:
     authority: authored
     evidence:
       path: internal/mediafoundation/backend.go
-      note: Decode only, written 2026-10-09 (milestone:m3-windows-mf-decode); hardware verification
+      note: Decode only, written 2026-10-09 (milestone:windows-media-foundation); hardware verification
         pending.
   backend/vaapi:
     state: planned
@@ -246,7 +246,7 @@ verification:
     - path: decode_darwin_test.go
       input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - path: encode_darwin_test.go
-      input_hash: 762e79efb8ce95df62692d8228ed9b3eef77aa7c1ddd605c5d0072fa06d58847
+      input_hash: 9fe72f6c962dc23841c8a6804b052369dd1c018a3d4888d4fa018570a24b80f2
     - path: probe_test.go
       input_hash: cd4c364ca11dc319fd4fdf12edceb28786944a5e0b59b4fa9904fc89a366293c
     - path: internal/testutil/ffmpeg.go
@@ -274,7 +274,7 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: decode_darwin_test.go
       input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - path: probe_test.go
@@ -297,7 +297,7 @@ verification:
     - path: probe_test.go
       input_hash: cd4c364ca11dc319fd4fdf12edceb28786944a5e0b59b4fa9904fc89a366293c
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
   cross-build-check:
     state: passed
     method: static
@@ -338,7 +338,7 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: decode_darwin_test.go
       input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - path: probe_test.go
@@ -369,11 +369,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: cf525b0587c00a4e87a716037576cc079fb2b4d9445da8a339203b561d29a435
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
     - path: encode_darwin_test.go
-      input_hash: 762e79efb8ce95df62692d8228ed9b3eef77aa7c1ddd605c5d0072fa06d58847
+      input_hash: 9fe72f6c962dc23841c8a6804b052369dd1c018a3d4888d4fa018570a24b80f2
     - path: internal/testutil/ffmpeg.go
       input_hash: 625f46487a0ca8d4b99a3d81f5b623045f295a92b2f4b45a010c378e21b2afd2
   encoder-controls-test:
@@ -400,11 +400,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: cf525b0587c00a4e87a716037576cc079fb2b4d9445da8a339203b561d29a435
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
     - path: encode_darwin_test.go
-      input_hash: 762e79efb8ce95df62692d8228ed9b3eef77aa7c1ddd605c5d0072fa06d58847
+      input_hash: 9fe72f6c962dc23841c8a6804b052369dd1c018a3d4888d4fa018570a24b80f2
     - path: internal/testutil/ffmpeg.go
       input_hash: 625f46487a0ca8d4b99a3d81f5b623045f295a92b2f4b45a010c378e21b2afd2
   transcode-test:
@@ -430,11 +430,11 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: cf525b0587c00a4e87a716037576cc079fb2b4d9445da8a339203b561d29a435
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: internal/codec/codec.go
       input_hash: 177560d3c241b19d4f434ced8bc726765a58141e9bf575272fdc02c74a2f866c
     - path: encode_darwin_test.go
-      input_hash: 762e79efb8ce95df62692d8228ed9b3eef77aa7c1ddd605c5d0072fa06d58847
+      input_hash: 9fe72f6c962dc23841c8a6804b052369dd1c018a3d4888d4fa018570a24b80f2
     - path: internal/testutil/ffmpeg.go
       input_hash: 625f46487a0ca8d4b99a3d81f5b623045f295a92b2f4b45a010c378e21b2afd2
     - path: internal/videotoolbox/decoder.go
@@ -567,8 +567,9 @@ history:
       controls; ffmpeg-decodable output at ~50 dB PSNR; batch transcode end to end; cross-builds with
       CGO_ENABLED=0.'
   m3-authored-2026-10-09:
-    summary: Windows decode backend (Media Foundation + D3D11) written for Intel/AMD/NVIDIA on
-      windows/amd64 and arm64; 32-bit excluded by the author; hardware verification pending.
+    summary: Windows backend (Media Foundation + D3D11 decode, vendor hardware MFT encode) written for
+      Intel/AMD/NVIDIA on windows/amd64 and arm64; 32-bit excluded by the author; hardware verification
+      pending; PR shibukawa/hwmediacodec#4.
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.
@@ -680,14 +681,17 @@ facts:
     - RGBA/BGRA input and output on VideoToolbox for the Ebitengine use cases.
     m3_result:
       started: '2026-10-09'
-      outcome: Windows decode backend (Media Foundation synchronous decoder MFTs + Direct3D 11 DXVA) for
-        H.264 and HEVC, NV12 to Go memory in display order, windows/amd64 and windows/arm64, hardware
-        only. See milestone:m3-windows-mf-decode.
+      outcome: Windows backend for H.264 and HEVC, decoding through Media Foundation synchronous decoder
+        MFTs + Direct3D 11 DXVA (NV12 to Go memory in display order) and encoding through the vendor's
+        asynchronous hardware encoder MFTs (NV12 in, Annex-B out, shared encoder controls via
+        ICodecAPI); windows/amd64 and windows/arm64, hardware only. See milestone:windows-media-foundation
+        and PR shibukawa/hwmediacodec#4.
       verification: cross-build, go vet and compile-time struct layout checks pass from macOS; unit
         tests for the pure-Go parts pass; the Windows conformance tests have not been run on hardware.
       notes:
       - The API needed no change for the second backend; the synchronous MFT model mapped directly to
-        Send/Receive/Flush. The async MFT model (vendor hardware MFTs) was deferred.
+        Send/Receive/Flush, and the asynchronous MFT model (vendor hardware encoders) fits it with an
+        event pump inside Send/Receive/Flush.
       - annexb.ParameterSetID was factored out of the VideoToolbox backend and is shared.
     m2_result:
       delivered: '2026-10-09'
@@ -720,10 +724,11 @@ facts:
     decode/hevc: implemented on darwin/apple-silicon (bit-exact against ffmpeg, libx265 source) and on
       windows via Media Foundation when the HEVC Video Extensions are installed (unverified).
     backend/videotoolbox: decode and encode for H.264/HEVC; AV1 and pixel-format options pending.
-    encode/h264: implemented on darwin/apple-silicon only (partial = other Tier 1 platforms pending);
-      VBR/CBR/quality, GOP, forced keyframes, B-frames, low latency, profiles; verified against ffmpeg/ffprobe.
-    encode/hevc: implemented on darwin/apple-silicon only; Main profile; same control set and verification
-      as H.264.
+    encode/h264: implemented on darwin/apple-silicon (VBR/CBR/quality, GOP, forced keyframes, B-frames,
+      low latency, profiles; verified against ffmpeg/ffprobe) and on windows via vendor hardware encoder
+      MFTs with the same control set (unverified on hardware; controls a driver rejects are ErrUnsupported).
+    encode/hevc: implemented on darwin/apple-silicon (Main profile) and on windows via vendor hardware
+      HEVC encoder MFTs (unverified).
 relations:
 - relation: governed_by
   to: policy:support-tiers
@@ -764,7 +769,7 @@ relations:
 - relation: alternative_backend
   to: backend:ffmpeg-libavcodec
 - relation: next_milestone
-  to: milestone:m3-windows-mf-decode
+  to: milestone:windows-media-foundation
 - relation: mentions
   to: reference:go-ecosystem
 - relation: excludes

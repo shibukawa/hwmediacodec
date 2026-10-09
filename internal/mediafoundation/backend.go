@@ -150,40 +150,66 @@ func enumerateDecoders(subtype *sys.GUID) ([]candidate, error) {
 	in := sys.MFT_REGISTER_TYPE_INFO{MajorType: sys.MFMediaType_Video, Subtype: *subtype}
 	flags := sys.MFT_ENUM_FLAG_SYNCMFT | sys.MFT_ENUM_FLAG_ASYNCMFT | sys.MFT_ENUM_FLAG_HARDWARE |
 		sys.MFT_ENUM_FLAG_LOCALMFT | sys.MFT_ENUM_FLAG_SORTANDFILTER
-	cands, err := enumerate(flags, &in)
+	cands, err := enumerate(sys.MFT_CATEGORY_VIDEO_DECODER, flags, &in, nil)
 	if err != nil || len(cands) > 0 {
 		return cands, err
 	}
 	// Codec packages installed from the Store may only be listed with this
 	// flag on some Windows versions; it is unknown to older releases, so a
 	// failure here is not an error.
-	if more, err := enumerate(flags|sys.MFT_ENUM_FLAG_UNTRUSTED_STOREMFT, &in); err == nil {
+	if more, err := enumerate(sys.MFT_CATEGORY_VIDEO_DECODER, flags|sys.MFT_ENUM_FLAG_UNTRUSTED_STOREMFT, &in, nil); err == nil {
 		return more, nil
 	}
 	return cands, nil
 }
 
-func enumerate(flags uint32, in *sys.MFT_REGISTER_TYPE_INFO) ([]candidate, error) {
+// enumerateEncoders lists the encoder MFTs that take NV12 and produce the
+// subtype. With hardware set only vendor hardware MFTs are returned,
+// otherwise only software ones (the Microsoft encoder). The caller must
+// releaseCandidates the result.
+func enumerateEncoders(subtype *sys.GUID, hardware bool) ([]candidate, error) {
+	in := sys.MFT_REGISTER_TYPE_INFO{MajorType: sys.MFMediaType_Video, Subtype: sys.MFVideoFormat_NV12}
+	out := sys.MFT_REGISTER_TYPE_INFO{MajorType: sys.MFMediaType_Video, Subtype: *subtype}
+	flags := sys.MFT_ENUM_FLAG_SYNCMFT | sys.MFT_ENUM_FLAG_ASYNCMFT | sys.MFT_ENUM_FLAG_SORTANDFILTER
+	if hardware {
+		flags |= sys.MFT_ENUM_FLAG_HARDWARE
+	}
+	cands, err := enumerate(sys.MFT_CATEGORY_VIDEO_ENCODER, flags, &in, &out)
+	if err != nil {
+		return nil, err
+	}
+	keep := cands[:0]
+	for _, c := range cands {
+		if (c.flags&sys.MFT_ENUM_FLAG_HARDWARE != 0) == hardware {
+			keep = append(keep, c)
+		} else {
+			c.activate.Release()
+		}
+	}
+	return keep, nil
+}
+
+func enumerate(category sys.GUID, flags uint32, in, out *sys.MFT_REGISTER_TYPE_INFO) ([]candidate, error) {
 	var arr **sys.IMFActivate
 	var n uint32
-	if hr := sys.MFTEnumEx(sys.MFT_CATEGORY_VIDEO_DECODER, flags, in, nil, &arr, &n); hr.Failed() {
+	if hr := sys.MFTEnumEx(category, flags, in, out, &arr, &n); hr.Failed() {
 		return nil, backendErr("MFTEnumEx", hr)
 	}
 	if arr == nil || n == 0 {
 		return nil, nil
 	}
 	defer sys.CoTaskMemFree(unsafe.Pointer(arr))
-	out := make([]candidate, 0, n)
+	cands := make([]candidate, 0, n)
 	for _, a := range unsafe.Slice(arr, n) {
 		c := candidate{activate: a}
 		c.name, _ = a.Attributes().String(&sys.MFT_FRIENDLY_NAME_Attribute)
 		if c.name == "" {
-			c.name = "unnamed decoder MFT"
+			c.name = "unnamed MFT"
 		}
 		c.flags, _ = a.Attributes().UINT32(&sys.MF_TRANSFORM_FLAGS_Attribute)
-		out = append(out, c)
+		cands = append(cands, c)
 	}
-	return out, nil
+	return cands, nil
 }
 
 func releaseCandidates(cands []candidate) {
@@ -193,7 +219,9 @@ func releaseCandidates(cands []candidate) {
 }
 
 // Probe implements codec.Backend. A codec is reported as hardware-decodable
-// when the GPU exposes its DXVA profile and a synchronous decoder MFT exists.
+// when the GPU exposes its DXVA profile and a synchronous decoder MFT exists,
+// and as hardware-encodable when the driver registers a hardware encoder MFT
+// for it.
 func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 	if err := sys.Load(); err != nil {
 		// Media Foundation or Direct3D 11 is absent (Windows N without the
@@ -231,6 +259,20 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		releaseCandidates(cands)
 		if usable {
 			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Decode, Hardware: true})
+		}
+	}
+	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
+		if err := ctx.Err(); err != nil {
+			return caps, err
+		}
+		info, _ := mfCodec(c)
+		encoders, err := enumerateEncoders(info.subtype, true)
+		if err != nil {
+			return caps, err
+		}
+		releaseCandidates(encoders)
+		if len(encoders) > 0 {
+			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Encode, Hardware: true})
 		}
 	}
 	return caps, nil
@@ -340,8 +382,66 @@ func attachD3D(t *sys.IMFTransform, mgr *sys.IMFDXGIDeviceManager) string {
 	return ""
 }
 
-// NewEncoder implements codec.Backend. Encoding is not implemented by this
-// backend yet.
+func unsupportedEnc(c codec.Codec, reason string) error {
+	return &codec.UnsupportedError{Backend: Name, Codec: c, Direction: codec.Encode, Reason: reason}
+}
+
+// NewEncoder implements codec.Backend. It uses the vendor's hardware encoder
+// MFT (Intel Quick Sync, AMD, NVIDIA) and only with AllowSoftware falls back
+// to the Microsoft software encoder.
 func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
-	return nil, &codec.UnsupportedError{Backend: Name, Codec: cfg.Codec, Direction: codec.Encode, Reason: "encoding is not implemented by the mediafoundation backend yet"}
+	info, ok := mfCodec(cfg.Codec)
+	if !ok {
+		return nil, unsupportedEnc(cfg.Codec, "only h264 and hevc encoding are implemented")
+	}
+	if cfg.InputFormat != codec.NV12 {
+		return nil, unsupportedEnc(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not supported; use NV12")
+	}
+	if err := sys.Load(); err != nil {
+		return nil, unsupportedEnc(cfg.Codec, err.Error())
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := sys.CoInitializeMTA(); err != nil {
+		return nil, &codec.BackendError{Backend: Name, Op: "CoInitializeEx", Message: err.Error()}
+	}
+	cands, err := enumerateEncoders(info.subtype, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(cands) == 0 && cfg.AllowSoftware {
+		if cands, err = enumerateEncoders(info.subtype, false); err != nil {
+			return nil, err
+		}
+	}
+	if len(cands) == 0 {
+		if cfg.AllowSoftware {
+			return nil, unsupportedEnc(cfg.Codec, "no encoder MFT is registered for "+cfg.Codec.String())
+		}
+		return nil, unsupportedEnc(cfg.Codec, "the graphics driver registers no hardware encoder MFT for "+cfg.Codec.String()+" (use WithSoftwareFallback to allow the Microsoft software encoder)")
+	}
+	defer releaseCandidates(cands)
+	var reasons []string
+	for _, cand := range cands {
+		var t *sys.IMFTransform
+		if hr := cand.activate.ActivateObject(&sys.IID_IMFTransform, unsafe.Pointer(&t)); hr.Failed() || t == nil {
+			reasons = append(reasons, fmt.Sprintf("%s: activation failed: %s", cand.name, hr))
+			continue
+		}
+		e := newEncoder(cfg, info, t, cand.name)
+		err := e.configure()
+		if err == nil {
+			return e, nil
+		}
+		e.Close()
+		cand.activate.ShutdownObject()
+		if len(cands) == 1 {
+			return nil, err
+		}
+		reasons = append(reasons, cand.name+": "+err.Error())
+	}
+	return nil, unsupportedEnc(cfg.Codec, "no usable encoder MFT: "+strings.Join(reasons, "; "))
 }

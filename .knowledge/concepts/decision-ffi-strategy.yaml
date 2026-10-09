@@ -110,13 +110,14 @@ facts:
       registers on ARM64) and need per-GOARCH wrappers.
     - Struct sizes are asserted at compile time with unsafe.Sizeof array-length tricks; GUIDs, vtable
       orders and HRESULTs were extracted from the mingw-w64 headers rather than typed from memory.
-    - No Go-implemented COM object was needed because the synchronous MFT model avoids
-      IMFAsyncCallback; the async model would need syscall.NewCallback-backed vtables.
+    - "No Go-implemented COM object was needed: the synchronous decoder MFTs avoid IMFAsyncCallback and
+      the asynchronous encoder MFTs are driven with IMFMediaEventGenerator::GetEvent instead of
+      BeginGetEvent callbacks, so no syscall.NewCallback-backed vtable exists yet."
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
 - relation: tested_by
-  to: milestone:m3-windows-mf-decode
+  to: milestone:windows-media-foundation
 - relation: informed_by
   to: analysis:go-hw-codec-feasibility
 - relation: informed_by

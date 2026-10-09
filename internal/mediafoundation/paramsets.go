@@ -35,6 +35,16 @@ func (s *paramSets) add(nalType int, nal []byte) (kind int, ok bool) {
 	return kind, true
 }
 
+// empty reports whether no parameter set has been stored.
+func (s *paramSets) empty() bool {
+	for _, m := range s.sets {
+		if len(m) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // covers reports whether a packet that carries the given kinds of parameter
 // sets is self-contained, so nothing needs to be prepended.
 func (s *paramSets) covers(kinds [3]bool) bool {

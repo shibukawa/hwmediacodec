@@ -9,11 +9,12 @@
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
-// Silicon) through VideoToolbox, and H.264 and HEVC decoding on Windows
-// (amd64 and arm64) through Media Foundation decoder transforms accelerated
-// with Direct3D 11 (DXVA). Raw frames are NV12 in CPU memory. Decoded frames
-// come back in decode order on macOS and in display order on Windows. The
-// Windows encoder and the Linux backends are not implemented yet.
+// Silicon) through VideoToolbox and on Windows (amd64 and arm64) through
+// Media Foundation: decoding with the Microsoft decoder transforms
+// accelerated by Direct3D 11 (DXVA), encoding with the vendor's hardware
+// encoder transforms. Raw frames are NV12 in CPU memory. Decoded frames come
+// back in decode order on macOS and in display order on Windows. The Linux
+// backends are not implemented yet.
 //
 // # Decoding
 //

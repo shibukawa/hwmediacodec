@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build windows && (amd64 || arm64)
 
 package hwmediacodec_test
 
@@ -10,15 +10,20 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
+// newTestEncoder opens a hardware encoder. Controls the vendor MFT does not
+// offer (constant quality, CBR, B-frames, low latency, a profile) make the
+// test skip rather than fail, so a run reports what the driver supports.
 func newTestEncoder(t *testing.T, c hwmediacodec.Codec, opts ...hwmediacodec.EncoderOption) hwmediacodec.Encoder {
 	t.Helper()
-	requireAppleSilicon(t)
+	requireHardware(t, c, hwmediacodec.Encode)
 	opts = append([]hwmediacodec.EncoderOption{hwmediacodec.WithFrameRate(testFPS)}, opts...)
 	enc, err := hwmediacodec.NewEncoder(context.Background(), c, encodeWidth, encodeHeight, opts...)
+	if errors.Is(err, hwmediacodec.ErrUnsupported) && len(opts) > 1 {
+		t.Skipf("encoder control not supported here: %v", err)
+	}
 	if err != nil {
 		t.Fatalf("NewEncoder: %v", err)
 	}
@@ -58,9 +63,10 @@ func TestEncodeMatchesSource(t *testing.T) {
 	}
 }
 
-// TestTranscodeRoundTrip runs the end-to-end batch transcode path: hardware
+// TestTranscodeRoundTrip runs the batch transcode path on Windows: hardware
 // encode, then hardware decode, compared to the source.
 func TestTranscodeRoundTrip(t *testing.T) {
+	requireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	src := testutil.GenerateNV12Frames(t, encodeWidth, encodeHeight, 30)
 	enc := newTestEncoder(t, hwmediacodec.H264, hwmediacodec.WithBitrate(1_500_000))
 	pkts := encodeAll(t, enc, src, encodeWidth, encodeHeight)
@@ -76,22 +82,11 @@ func TestTranscodeRoundTrip(t *testing.T) {
 		stream = append(stream, p.Data...)
 	}
 	var decoded [][]byte
-	r := annexb.NewReader(bytes.NewReader(stream), hwmediacodec.H264)
-	for {
-		au, err := r.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
-			t.Fatalf("decoder Send: %v", err)
-		}
+	collect := func() {
 		for {
 			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				break
+			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+				return
 			}
 			if err != nil {
 				t.Fatalf("decoder Receive: %v", err)
@@ -108,19 +103,16 @@ func TestTranscodeRoundTrip(t *testing.T) {
 			decoded = append(decoded, buf)
 		}
 	}
+	for _, au := range splitAccessUnits(t, hwmediacodec.H264, stream) {
+		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au}); err != nil {
+			t.Fatalf("decoder Send: %v", err)
+		}
+		collect()
+	}
 	if err := dec.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for {
-		f, err := dec.Receive(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		f.Release()
-	}
+	collect()
 	if len(decoded) != len(src) {
 		t.Fatalf("decoded %d frames, want %d", len(decoded), len(src))
 	}
@@ -220,15 +212,19 @@ func TestEncodeBitrateControl(t *testing.T) {
 	seconds := float64(len(src)) / testFPS
 	low := size(hwmediacodec.WithBitrate(400_000))
 	high := size(hwmediacodec.WithBitrate(2_000_000))
-	cbr := size(hwmediacodec.WithBitrate(1_000_000), hwmediacodec.WithRateControl(hwmediacodec.CBR))
-	t.Logf("VBR 400k: %d bytes (%.0f kbit/s), VBR 2M: %d bytes (%.0f kbit/s), CBR 1M: %d bytes (%.0f kbit/s)",
-		low, float64(low)*8/seconds/1000, high, float64(high)*8/seconds/1000, cbr, float64(cbr)*8/seconds/1000)
+	t.Logf("VBR 400k: %d bytes (%.0f kbit/s), VBR 2M: %d bytes (%.0f kbit/s)",
+		low, float64(low)*8/seconds/1000, high, float64(high)*8/seconds/1000)
 	if high < low*2 {
 		t.Errorf("2 Mbit/s output (%d bytes) is not at least twice the 400 kbit/s output (%d bytes)", high, low)
 	}
-	if rate := float64(cbr) * 8 / seconds; rate < 600_000 || rate > 1_400_000 {
-		t.Errorf("CBR 1 Mbit/s produced %.0f bit/s", rate)
-	}
+	t.Run("cbr", func(t *testing.T) {
+		cbr := size(hwmediacodec.WithBitrate(1_000_000), hwmediacodec.WithRateControl(hwmediacodec.CBR))
+		rate := float64(cbr) * 8 / seconds
+		t.Logf("CBR 1M: %d bytes (%.0f kbit/s)", cbr, rate/1000)
+		if rate < 600_000 || rate > 1_400_000 {
+			t.Errorf("CBR 1 Mbit/s produced %.0f bit/s", rate)
+		}
+	})
 }
 
 func TestEncodeQuality(t *testing.T) {
@@ -291,7 +287,7 @@ func TestEncodeProfiles(t *testing.T) {
 			}
 		})
 	}
-	requireAppleSilicon(t)
+	requireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
 	_, err := hwmediacodec.NewEncoder(context.Background(), hwmediacodec.HEVC, encodeWidth, encodeHeight, hwmediacodec.WithProfile(hwmediacodec.ProfileBaseline))
 	if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 		t.Errorf("HEVC baseline: got %v, want ErrUnsupported", err)

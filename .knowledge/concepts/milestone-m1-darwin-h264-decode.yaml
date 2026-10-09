@@ -70,7 +70,7 @@ verification:
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - &id007
       path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - &id001
       path: decode_darwin_test.go
       input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
@@ -192,7 +192,7 @@ verification:
     - path: annexb/annexb.go
       input_hash: 4cb6861775f9914a59deefaf8132383a2e822ca993277b85a6573698cb72d75d
     - path: hwmediacodec.go
-      input_hash: cf0243db218a299bb5680d597e414ecfcac20098dc714f6eb69ad5a398a51d23
+      input_hash: 7b061c1e0089d660836556ebf304bfb01c7ebea9d2569680b7a8199ff8c58dc5
     - path: decode_darwin_test.go
       input_hash: 5649ff0d0ffdf1a8207bde7f24826d7e268f712f3b0d474407366e8884b101ca
     - path: probe_test.go

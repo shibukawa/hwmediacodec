@@ -13,23 +13,24 @@ import (
 )
 
 // requireHardware skips the test when Probe does not report a Media
-// Foundation hardware decoder for c (no GPU, missing codec package).
-func requireHardware(t *testing.T, c hwmediacodec.Codec) {
+// Foundation hardware engine for c in the given direction (no GPU, missing
+// codec package, driver without an encoder MFT).
+func requireHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) {
 	t.Helper()
 	caps, err := hwmediacodec.Probe(context.Background())
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
 	for _, cap := range caps {
-		if cap.Backend == "mediafoundation" && cap.Codec == c && cap.Direction == hwmediacodec.Decode && cap.Hardware {
+		if cap.Backend == "mediafoundation" && cap.Codec == c && cap.Direction == dir && cap.Hardware {
 			return
 		}
 	}
-	t.Skipf("no Media Foundation hardware decoder for %s on this machine", c)
+	t.Skipf("no Media Foundation hardware %s for %s on this machine", dir, c)
 }
 
 func TestDecodeH264MatchesReference(t *testing.T) {
-	requireHardware(t, hwmediacodec.H264)
+	requireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	s := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 60)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 
@@ -48,7 +49,7 @@ func TestDecodeH264MatchesReference(t *testing.T) {
 }
 
 func TestDecodeHEVCMatchesReference(t *testing.T) {
-	requireHardware(t, hwmediacodec.HEVC)
+	requireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
 	s := testutil.GenerateStream(t, hwmediacodec.HEVC, 320, 240, 60)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 
@@ -68,7 +69,7 @@ func TestDecodeHEVCMatchesReference(t *testing.T) {
 func TestDecodeBFramesDisplayOrder(t *testing.T) {
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
 		t.Run(c.String(), func(t *testing.T) {
-			requireHardware(t, c)
+			requireHardware(t, c, hwmediacodec.Decode)
 			s := testutil.GenerateStreamBFrames(t, c, 320, 240, 60, 3)
 			want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
 			dec, err := hwmediacodec.NewDecoder(context.Background(), c)
@@ -98,7 +99,7 @@ func TestDecodeBFramesDisplayOrder(t *testing.T) {
 }
 
 func TestDecodeParameterSetChange(t *testing.T) {
-	requireHardware(t, hwmediacodec.H264)
+	requireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	s1 := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 30)
 	s2 := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 30)
 	want := append(testutil.ReferenceNV12(t, s1.Path, s1.Codec, s1.Width, s1.Height),
@@ -127,7 +128,7 @@ func TestDecodeParameterSetChange(t *testing.T) {
 }
 
 func TestFlushResumesAtKeyframe(t *testing.T) {
-	requireHardware(t, hwmediacodec.H264)
+	requireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	s := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 20)
 	aus := splitAccessUnits(t, hwmediacodec.H264, testutil.ReadFile(t, s.Path))
 	if len(aus) != 20 {
@@ -193,7 +194,7 @@ func TestFlushResumesAtKeyframe(t *testing.T) {
 }
 
 func TestInvalidData(t *testing.T) {
-	requireHardware(t, hwmediacodec.H264)
+	requireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264)
 	if err != nil {
 		t.Fatal(err)
