@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 // fakeScreen stands in for *ebiten.Image: a gradient that slides every
@@ -65,20 +65,20 @@ func rgbPSNR(a *image.RGBA, b image.Image) float64 {
 	return 10 * math.Log10(255*255/(se/n))
 }
 
-// TestVideoFileRecordsScreencast runs a screencast.Recorder into a
+// TestVideoFileRecordsCapture runs a capture.Recorder into a
 // VideoFile and checks the MP4 with ffprobe: this one needs a hardware
 // encoder.
-func TestVideoFileRecordsScreencast(t *testing.T) {
+func TestVideoFileRecordsCapture(t *testing.T) {
 	testutil.RequireFFmpeg(t)
 	testutil.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "rec.mp4")
-	sink, err := container.CreateVideoFile(out, hwmediacodec.H264, screencast.TimeScale)
+	sink, err := container.CreateVideoFile(out, hwmediacodec.H264, capture.TimeScale)
 	if err != nil {
 		t.Fatal(err)
 	}
 	const w, h, fps, frames = 320, 240, 30, 60
-	rec, err := screencast.New(w, h, sink, screencast.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
+	rec, err := capture.New(w, h, sink, capture.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
 	}

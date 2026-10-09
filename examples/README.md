@@ -35,7 +35,7 @@ Without arguments, `player` and `texture` play the bundled clip in
 | Directory | What it shows |
 | --- | --- |
 | [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
-| [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units, a progressive MP4 muxer fed with encoder packets and the MP4 file sink for `screencast.Recorder` |
+| [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units, a progressive MP4 muxer fed with encoder packets and the MP4 file sink for `capture.Recorder` |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
@@ -125,14 +125,14 @@ carry the presentation time (`movie_00-01-30.000.jpg`).
 
 ## Screen recording
 
-The game samples capture their window with `screencast.Recorder`, a
+The game samples capture their window with `capture.Recorder`, a
 package of the core module
-(`github.com/shibukawa/hwmediacodec/screencast`; see the main README).
+(`github.com/shibukawa/hwmediacodec/capture`; see the main README).
 What this module adds are the sinks the recorder writes into:
 
 ```go
-sink, _ := container.CreateVideoFile("capture.mp4", hwmediacodec.H264, screencast.TimeScale)
-rec, _ := screencast.New(1280, 720, sink, screencast.Options{FPS: 60, Bitrate: 8_000_000})
+sink, _ := container.CreateVideoFile("capture.mp4", hwmediacodec.H264, capture.TimeScale)
+rec, _ := capture.New(1280, 720, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
 
 func (g *game) Draw(screen *ebiten.Image) {
 	g.scene.Draw(screen)
@@ -258,7 +258,7 @@ presentation times, the sync-sample table for seeking, the track length),
 so `ebitenvideo.NewPlayerFromSource` plays it without an `-fps` flag and
 the arrow keys seek five seconds (`Home` restarts). Raw `.h264`/`.hevc`
 files go through `NewPlayer` and seek as well, after a one-time scan for
-keyframes. `-record` turns the screencast recorder on the window itself.
+keyframes. `-record` turns the capture recorder on the window itself.
 
 ## webrtc
 

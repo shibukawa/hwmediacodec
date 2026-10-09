@@ -4,7 +4,7 @@
 //	go run ./hls -addr :8080
 //	go run ./hls -open=false        # print the URL only
 //
-// The screen is captured and encoded by screencast.Recorder, cut into
+// The screen is captured and encoded by capture.Recorder, cut into
 // fragmented-MP4 segments by container.Segmenter at every keyframe once
 // the segment length has passed (the encoder's keyframe interval is set to
 // exactly that length), and served from memory with a sliding-window
@@ -26,14 +26,14 @@ import (
 	"github.com/pkg/browser"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type game struct {
 	scene *fireworks.Scene
-	rec   *screencast.Recorder
+	rec   *capture.Recorder
 	url   string
 
 	minimize bool
@@ -84,11 +84,11 @@ func main() {
 		codec = hwmediacodec.HEVC
 	}
 	playlist := NewPlaylist(*window, *segment)
-	seg, err := container.NewSegmenter(codec, screencast.TimeScale, *segment, playlist.SetInit, playlist.Add)
+	seg, err := container.NewSegmenter(codec, capture.TimeScale, *segment, playlist.SetInit, playlist.Add)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rec, err := screencast.New(w, h, seg, screencast.Options{
+	rec, err := capture.New(w, h, seg, capture.Options{
 		Codec:            codec,
 		FPS:              *fps,
 		Bitrate:          *bitrate,

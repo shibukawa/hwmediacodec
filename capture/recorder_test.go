@@ -1,4 +1,4 @@
-package screencast_test
+package capture_test
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 // requireHardwareEncode skips the test unless Probe reports a hardware
@@ -74,7 +74,7 @@ func TestRecorderEncodes(t *testing.T) {
 	var pts []int64
 	var keys []bool
 	closed := false
-	sink := screencast.Funcs{
+	sink := capture.Funcs{
 		Write: func(p hwmediacodec.Packet) error {
 			stream.Write(p.Data)
 			pts = append(pts, p.PTS)
@@ -83,7 +83,7 @@ func TestRecorderEncodes(t *testing.T) {
 		},
 		Done: func() error { closed = true; return nil },
 	}
-	rec, err := screencast.New(w, h, sink, screencast.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
+	rec, err := capture.New(w, h, sink, capture.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,8 +119,8 @@ func TestRecorderEncodes(t *testing.T) {
 		t.Error("the first packet is not a keyframe")
 	}
 	for i := 1; i < len(pts); i++ {
-		if pts[i]-pts[i-1] != screencast.TimeScale/fps {
-			t.Errorf("packet %d pts step %d, want %d", i, pts[i]-pts[i-1], screencast.TimeScale/fps)
+		if pts[i]-pts[i-1] != capture.TimeScale/fps {
+			t.Errorf("packet %d pts step %d, want %d", i, pts[i]-pts[i-1], capture.TimeScale/fps)
 		}
 	}
 
@@ -144,14 +144,14 @@ func TestRecorderRequestKeyframe(t *testing.T) {
 	requireHardwareEncode(t)
 	var keys []int
 	n := 0
-	sink := screencast.Funcs{Write: func(p hwmediacodec.Packet) error {
+	sink := capture.Funcs{Write: func(p hwmediacodec.Packet) error {
 		if p.Keyframe {
 			keys = append(keys, n)
 		}
 		n++
 		return nil
 	}}
-	rec, err := screencast.New(320, 240, sink, screencast.Options{FPS: 30, KeyframeInterval: 300, Queue: 64})
+	rec, err := capture.New(320, 240, sink, capture.Options{FPS: 30, KeyframeInterval: 300, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +175,8 @@ func TestRecorderRequestKeyframe(t *testing.T) {
 func TestRecorderDropsWhenBehind(t *testing.T) {
 	requireHardwareEncode(t)
 	var packets int
-	sink := screencast.Funcs{Write: func(hwmediacodec.Packet) error { packets++; return nil }}
-	rec, err := screencast.New(320, 240, sink, screencast.Options{FPS: 60, Queue: 2})
+	sink := capture.Funcs{Write: func(hwmediacodec.Packet) error { packets++; return nil }}
+	rec, err := capture.New(320, 240, sink, capture.Options{FPS: 60, Queue: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

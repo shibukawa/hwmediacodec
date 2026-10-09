@@ -112,7 +112,7 @@ verification:
     - path: examples/internal/fireworks/shader.go
       input_hash: fdd60fd3e663e55eefd7b11ac81b3dfde8430578eec9291e8e8d5f8d7c37c3ec
     - path: examples/record/main.go
-      input_hash: da04aa9fe7b76715951ce0b277972b5b4b39ff5256387661945005e4a1afd32e
+      input_hash: 08cbf0ae1a930726761a73d9d23a7a8a5f0fae4a8dafc22f278b736b2caee9f6
 facts:
   api:
     fireworks: 'NewScene(w, h, tps) -> Scene{HandleInput, Update, Draw, Launch(kind, x), Particles, Status,

@@ -34,7 +34,7 @@ type peer struct {
 // Broadcaster fans one encoded stream out to every connected browser. It
 // is an http.Handler for the player page (/) and the signalling endpoint
 // (POST /offer with the browser's SDP, answered with ours) and a
-// screencast.Sink for the packets.
+// capture.Sink for the packets.
 type Broadcaster struct {
 	fps             float64
 	iceServers      []string
@@ -175,7 +175,7 @@ func (b *Broadcaster) remove(p *peer) {
 	}
 }
 
-// WritePacket implements screencast.Sink: one Annex-B access unit goes to
+// WritePacket implements capture.Sink: one Annex-B access unit goes to
 // every viewer. pion's H.264 payloader splits the NAL units into RTP
 // packets (STAP-A for the parameter sets, FU-A for large slices).
 func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
@@ -205,7 +205,7 @@ func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
 	return nil
 }
 
-// Close implements screencast.Sink: it disconnects every viewer.
+// Close implements capture.Sink: it disconnects every viewer.
 func (b *Broadcaster) Close() error {
 	b.mu.Lock()
 	b.closed = true

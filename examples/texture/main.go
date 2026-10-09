@@ -32,10 +32,10 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
 	"github.com/shibukawa/hwmediacodec/examples/container"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type mode int
@@ -51,7 +51,7 @@ type game struct {
 	w, h   int
 	player *ebitenvideo.Player
 	shader *ebiten.Shader
-	rec    *screencast.Recorder
+	rec    *capture.Recorder
 	mode   mode
 	auto   bool
 	tick   int
@@ -197,11 +197,11 @@ func main() {
 	}
 	g := &game{w: w, h: h, player: player, shader: shader, auto: true, limit: time.Duration(*seconds * float64(time.Second))}
 	if *record != "" {
-		sink, err := container.CreateVideoFile(*record, hwmediacodec.H264, screencast.TimeScale)
+		sink, err := container.CreateVideoFile(*record, hwmediacodec.H264, capture.TimeScale)
 		if err != nil {
 			log.Fatal(err)
 		}
-		g.rec, err = screencast.New(w, h, sink, screencast.Options{FPS: 60, Bitrate: 8_000_000})
+		g.rec, err = capture.New(w, h, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
 		if err != nil {
 			log.Fatal(err)
 		}

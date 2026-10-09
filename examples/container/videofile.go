@@ -3,7 +3,7 @@ package container
 import "github.com/shibukawa/hwmediacodec"
 
 // VideoFile is an MP4 file with a single video track fed with encoder
-// packets. It satisfies screencast.Sink, so a Recorder can write straight
+// packets. It satisfies capture.Sink, so a Recorder can write straight
 // into it.
 type VideoFile struct {
 	m  *Muxer
@@ -12,7 +12,7 @@ type VideoFile struct {
 
 // CreateVideoFile creates the file at path with one H.264 or HEVC track.
 // The time scale is the unit of Packet.PTS and Packet.DTS
-// (screencast.TimeScale for a Recorder).
+// (capture.TimeScale for a Recorder).
 func CreateVideoFile(path string, c hwmediacodec.Codec, timeScale uint32) (*VideoFile, error) {
 	m, err := Create(path)
 	if err != nil {

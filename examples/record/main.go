@@ -6,7 +6,7 @@
 //	go run ./record -o capture.mp4 -codec hevc -bitrate 12M -fps 60
 //
 // Close the window (or wait for -seconds) to finish the file. The capture
-// is the screencast.Recorder: screen.ReadPixels in Draw, RGBA frames to
+// is the capture.Recorder: screen.ReadPixels in Draw, RGBA frames to
 // the encoder on a goroutine, packets into the MP4 muxer.
 package main
 
@@ -22,14 +22,14 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type game struct {
 	scene   *fireworks.Scene
-	rec     *screencast.Recorder
+	rec     *capture.Recorder
 	limit   time.Duration
 	start   time.Time
 	capTime time.Duration // time spent in Capture (ReadPixels), for the summary
@@ -90,11 +90,11 @@ func main() {
 	if strings.EqualFold(*codecName, "hevc") {
 		codec = hwmediacodec.HEVC
 	}
-	sink, err := container.CreateVideoFile(*out, codec, screencast.TimeScale)
+	sink, err := container.CreateVideoFile(*out, codec, capture.TimeScale)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rec, err := screencast.New(w, h, sink, screencast.Options{Codec: codec, FPS: *fps, Bitrate: *bitrate})
+	rec, err := capture.New(w, h, sink, capture.Options{Codec: codec, FPS: *fps, Bitrate: *bitrate})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -317,13 +317,13 @@ timestamps wants.
 
 ## Screen recording
 
-`github.com/shibukawa/hwmediacodec/screencast` is a package of the core
+`github.com/shibukawa/hwmediacodec/capture` is a package of the core
 module that records what a game or any other renderer draws. A `Recorder`
 reads the pixels of a `Source` on every frame, encodes them on a
 background goroutine and pushes the packets into a `Sink`:
 
 ```go
-rec, err := screencast.New(1280, 720, sink, screencast.Options{FPS: 60, Bitrate: 8_000_000})
+rec, err := capture.New(1280, 720, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
 
 func (g *game) Draw(screen *ebiten.Image) {
 	g.scene.Draw(screen)
@@ -343,12 +343,12 @@ rec.Close()                  // flushes the encoder, closes the sink
   number); the buffer then goes through a bounded queue to the encoder,
   and when the queue is full the frame is dropped and counted (`Dropped`).
 - PTS come from the wall clock quantised to the frame rate, in units of
-  `screencast.TimeScale` (90 kHz), so a dropped frame leaves a gap instead
+  `capture.TimeScale` (90 kHz), so a dropped frame leaves a gap instead
   of speeding the recording up, and a 120 Hz display showing a 60 fps game
   does not record every frame twice. `CaptureAt` takes the time stamp
   explicitly.
 - A `Sink` is `WritePacket(hwmediacodec.Packet)` plus `Close`, and
-  `screencast.Funcs` adapts closures. The packets are Annex-B access
+  `capture.Funcs` adapts closures. The packets are Annex-B access
   units with in-band parameter sets, so writing `Packet.Data` to a file
   gives a playable elementary stream. Container formats stay out of the
   core module: `examples/container` has an MP4 file sink
@@ -366,7 +366,7 @@ programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
 (`examples/container`, on top of mp4ff), a video file converter that keeps
 timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder on top
-of the `screencast` package (`examples/record`), live HLS and WebRTC
+of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
 player
 (`examples/player`), video as a texture on a box and in a Kage shader

@@ -1,4 +1,4 @@
-package screencast
+package capture
 
 import "github.com/shibukawa/hwmediacodec"
 

@@ -1,7 +1,7 @@
 id: milestone:examples-screencast-hls
 type: milestone
 title: Examples - Ebitengine screen recording to MP4 and live HLS streaming
-summary: 'Second usage-sample slice: screencast.Recorder captures an Ebitengine screen with ReadPixels
+summary: 'Second usage-sample slice: screencast.Recorder (capture.Recorder since milestone:capture-package) captures an Ebitengine screen with ReadPixels
   on every Draw and feeds the hardware encoder (RGBA input) on a background goroutine; sinks write the
   packets to an MP4 file (examples/record) or through container.Segmenter into CMAF/fMP4 segments
   served by an in-memory sliding-window HLS playlist (examples/hls). Verified on the M3 with ffmpeg/ffprobe
@@ -88,23 +88,23 @@ verification:
       milestone: examples-screencast-hls
       platform: darwin
       gpu: apple-silicon
-    test: TestVideoFileRecordsScreencast (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
+    test: TestVideoFileRecordsCapture (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
     evidence:
       path: examples/container/videofile_test.go
-      locator: TestVideoFileRecordsScreencast
+      locator: TestVideoFileRecordsCapture
       note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09, re-run the same day after the recorder
-        moved to the core module (milestone:screencast-package)
+        moved to the core module (milestone:capture-package)
     basis:
-    - path: screencast/recorder.go
-      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
-    - path: screencast/sinks.go
-      input_hash: 102398acec892e063bbf63c66a905dd38d5251430569b0f22134c72977f420ef
-    - path: screencast/recorder_test.go
-      input_hash: 2c837fa22605b76d31c93287ff7c8e07e17f140cc3c640cac4e91cbb4b211c54
+    - path: capture/recorder.go
+      input_hash: 17c71cd862907bdeaccfd7dbb0d492b0d7b2afb2c4bb457f4236eb4858309250
+    - path: capture/sinks.go
+      input_hash: 886b58fe675995d986c1b643878763f581154dbed7bf575fbc9d004168440927
+    - path: capture/recorder_test.go
+      input_hash: 2731f5638900b66e796d95fa40a89d749a1effb2ebbed8bbed9bf9039842aea7
     - path: examples/container/videofile.go
-      input_hash: 76443a8c29435f7dab4dac9106d4f50793c5d95a0d4a8db2ae2a76c05bcf2c6f
+      input_hash: 1585739a2167b8b1f314538d5df7861ef744880a59c08acb10b9b4d4de691253
     - path: examples/container/videofile_test.go
-      input_hash: 9d1f9513be8005678e64379a568d54d40853fabaaa62f7ffc7067e923c7a9613
+      input_hash: d7dd5de0fc3db9aac8e3cc26603f5ea7af28683035e98924f7ac9644c8bba4cf
     - path: examples/container/mux.go
       input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
   segmenter-test:
@@ -162,7 +162,7 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: a0f02852c3d3773575fcafc2683372f6efcc0b766f742c288aae2e4e4b20f63f
+      input_hash: 3279d0146fc1b58288b22562a23953f909ece736fc52ec0700a19cc769d811b4
     - path: examples/hls/server.go
       input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
   record-run:
@@ -181,7 +181,7 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: da04aa9fe7b76715951ce0b277972b5b4b39ff5256387661945005e4a1afd32e
+      input_hash: 08cbf0ae1a930726761a73d9d23a7a8a5f0fae4a8dafc22f278b736b2caee9f6
     - path: examples/internal/fireworks/scene.go
       input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
 open_questions:
@@ -196,8 +196,8 @@ facts:
     screencast: 'New(width, height, sink, Options{Codec, FPS, Bitrate, Quality, CBR, KeyframeInterval,
       LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
       Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink =
-      WritePacket+Close; Funcs{Write, Done}; TimeScale 90000. Since milestone:screencast-package the package
-      is github.com/shibukawa/hwmediacodec/screencast in the core module and the MP4 sink is container.CreateVideoFile(path,
+      WritePacket+Close; Funcs{Write, Done}; TimeScale 90000. Since milestone:capture-package the package
+      is github.com/shibukawa/hwmediacodec/capture in the core module and the MP4 sink is container.CreateVideoFile(path,
       codec, timeScale)'
     segmenter: 'NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
       Data, Start, Duration}'
@@ -213,7 +213,7 @@ history:
     summary: Second sample slice (screen recording and HLS) delivered after the converter/thumbnails slice;
       all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
   moved-2026-10-09:
-    summary: screencast.Recorder left the examples module for the core module (milestone:screencast-package);
+    summary: screencast.Recorder left the examples module for the core module as capture.Recorder (milestone:capture-package);
       NewMP4File became container.CreateVideoFile and the MP4 acceptance test moved to examples/container.
 relations:
 - relation: implements_part_of

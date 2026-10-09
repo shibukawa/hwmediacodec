@@ -5,7 +5,7 @@
 //	go run ./webrtc -addr :8080
 //	go run ./webrtc -open=false     # print the URL only
 //
-// The screen is captured and encoded by screencast.Recorder (H.264,
+// The screen is captured and encoded by capture.Recorder (H.264,
 // low-latency mode, no B-frames) and every access unit is written to a
 // pion track per viewer; pion packetises the Annex-B NAL units into RTP.
 // Signalling is one HTTP POST of the browser's SDP offer. A viewer joining
@@ -25,13 +25,13 @@ import (
 	"github.com/pkg/browser"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type game struct {
 	scene *fireworks.Scene
-	rec   *screencast.Recorder
+	rec   *capture.Recorder
 	bc    *Broadcaster
 	url   string
 
@@ -80,13 +80,13 @@ func main() {
 	if *stun != "" {
 		ice = []string{*stun}
 	}
-	var rec *screencast.Recorder
+	var rec *capture.Recorder
 	bc := NewBroadcaster(*fps, ice, func() {
 		if rec != nil {
 			rec.RequestKeyframe()
 		}
 	})
-	rec, err := screencast.New(w, h, bc, screencast.Options{
+	rec, err := capture.New(w, h, bc, capture.Options{
 		Codec:            hwmediacodec.H264,
 		FPS:              *fps,
 		Bitrate:          *bitrate,

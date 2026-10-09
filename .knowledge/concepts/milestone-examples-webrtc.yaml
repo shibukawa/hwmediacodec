@@ -77,7 +77,7 @@ verification:
         2026-10-09
     basis:
     - path: examples/webrtc/server.go
-      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
+      input_hash: 3ba4679c4af13aa4216a65e2c50dda0b5e80e39fe4fdd20a1f4fb0bb516189ef
     - path: examples/webrtc/server_test.go
       input_hash: 67200c94f010aff568fda9b47d5593b46f93385817e9d157230627b3cab67a0a
     - path: examples/container/demux.go
@@ -92,14 +92,14 @@ verification:
       gpu: apple-silicon
     test: TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
     evidence:
-      path: screencast/recorder_test.go
+      path: capture/recorder_test.go
       locator: TestRecorderRequestKeyframe
       note: Apple M3; run 2026-10-09
     basis:
-    - path: screencast/recorder.go
-      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
-    - path: screencast/recorder_test.go
-      input_hash: 2c837fa22605b76d31c93287ff7c8e07e17f140cc3c640cac4e91cbb4b211c54
+    - path: capture/recorder.go
+      input_hash: 17c71cd862907bdeaccfd7dbb0d492b0d7b2afb2c4bb457f4236eb4858309250
+    - path: capture/recorder_test.go
+      input_hash: 2731f5638900b66e796d95fa40a89d749a1effb2ebbed8bbed9bf9039842aea7
   webrtc-live-run:
     state: passed
     method: manual
@@ -119,9 +119,9 @@ verification:
         rendered black and reported dropped frames because it was a hidden tab'
     basis:
     - path: examples/webrtc/main.go
-      input_hash: b992ee98147a232b2408e9bbc500dc5b0b1383b5afb04a197155d9e896d0937a
+      input_hash: 94d856c6b61ec26d78e726022be5b7d701e4e91c02f4235df53496440b01ca41
     - path: examples/webrtc/server.go
-      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
+      input_hash: 3ba4679c4af13aa4216a65e2c50dda0b5e80e39fe4fdd20a1f4fb0bb516189ef
 open_questions:
   latency-measurement:
     text: End-to-end glass-to-glass latency was not measured (the pane could not be filmed); jitter buffer

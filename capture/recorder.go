@@ -1,8 +1,9 @@
-// Package screencast records what an Ebitengine game draws. A Recorder
-// reads the pixels of the screen (or any *ebiten.Image) on every Draw,
-// hands them to the hardware encoder on a background goroutine as RGBA
-// frames, and pushes the resulting packets into a Sink: an MP4 file, an
-// HLS segmenter or a WebRTC track.
+// Package capture records what a game or any other renderer draws. A
+// Recorder reads the pixels of a Source (an Ebitengine screen or any other
+// *ebiten.Image, for example) on every frame, hands them to the hardware
+// encoder on a background goroutine as RGBA frames, and pushes the
+// resulting packets into a Sink: an MP4 file, an HLS segmenter or a WebRTC
+// track.
 //
 // ReadPixels is a GPU read-back, so it costs a synchronisation per frame
 // (around a millisecond at 1080p on Apple Silicon); the encode itself runs
@@ -10,7 +11,7 @@
 // behind, frames are dropped rather than slowing the game down, and the
 // presentation timestamps come from the wall clock quantised to the frame
 // rate, so dropped frames leave gaps instead of speeding the recording up.
-package screencast
+package capture
 
 import (
 	"context"
@@ -101,7 +102,7 @@ func (o Options) encoderOptions() []hwmediacodec.EncoderOption {
 	return append(opts, o.Extra...)
 }
 
-type capture struct {
+type frame struct {
 	pix []byte
 	pts int64
 	key bool
@@ -117,7 +118,7 @@ type Recorder struct {
 
 	enc    hwmediacodec.Encoder
 	free   chan []byte
-	frames chan capture
+	frames chan frame
 	done   chan struct{}
 
 	start    time.Time
@@ -149,7 +150,7 @@ func New(width, height int, sink Sink, opts Options) (*Recorder, error) {
 		step:    int64(float64(TimeScale)/opts.FPS + 0.5),
 		enc:     enc,
 		free:    make(chan []byte, opts.Queue+1),
-		frames:  make(chan capture, opts.Queue),
+		frames:  make(chan frame, opts.Queue),
 		done:    make(chan struct{}),
 		lastPTS: -1,
 	}
@@ -176,7 +177,7 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 	}
 	b := src.Bounds()
 	if b.Dx() != r.width || b.Dy() != r.height {
-		r.fail(fmt.Errorf("screencast: captured image is %dx%d, recorder is %dx%d", b.Dx(), b.Dy(), r.width, r.height))
+		r.fail(fmt.Errorf("capture: image is %dx%d, recorder is %dx%d", b.Dx(), b.Dy(), r.width, r.height))
 		return
 	}
 	if r.start.IsZero() {
@@ -197,7 +198,7 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 	src.ReadPixels(pix)
 	r.lastPTS = pts
 	select {
-	case r.frames <- capture{pix: pix, pts: pts, key: r.wantKey.Swap(false)}:
+	case r.frames <- frame{pix: pix, pts: pts, key: r.wantKey.Swap(false)}:
 		r.captured.Add(1)
 	default:
 		// The queue filled up between the buffer check and now.
