@@ -30,15 +30,14 @@ same programs from the working tree.
 
 Without arguments, `player` and `texture` play the bundled clip in
 `assets/`. The library-only directories (`assets`, `container`,
-`screencast`, `internal/fireworks`) have no program of their own.
+`internal/fireworks`) have no program of their own.
 
 | Directory | What it shows |
 | --- | --- |
 | [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
-| [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units and a progressive MP4 muxer fed with encoder packets |
+| [`container/`](container/) | The glue the other samples share: an MP4 demuxer that hands out Annex-B access units, a progressive MP4 muxer fed with encoder packets and the MP4 file sink for `screencast.Recorder` |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
-| [`screencast/`](screencast/) | Captures an Ebitengine screen into the hardware encoder on a background goroutine; sinks for MP4 files and anything else |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
 | [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server); opens the player page |
@@ -124,12 +123,15 @@ buffer. `-every` picks the keyframe at or before each instant; `-all`
 takes every keyframe; `-width` downsamples with a box filter. File names
 carry the presentation time (`movie_00-01-30.000.jpg`).
 
-## screencast
+## Screen recording
 
-`screencast.Recorder` is the capture path the game samples share:
+The game samples capture their window with `screencast.Recorder`, a
+package of the core module
+(`github.com/shibukawa/hwmediacodec/screencast`; see the main README).
+What this module adds are the sinks the recorder writes into:
 
 ```go
-sink, _ := screencast.NewMP4File("capture.mp4", hwmediacodec.H264)
+sink, _ := container.CreateVideoFile("capture.mp4", hwmediacodec.H264, screencast.TimeScale)
 rec, _ := screencast.New(1280, 720, sink, screencast.Options{FPS: 60, Bitrate: 8_000_000})
 
 func (g *game) Draw(screen *ebiten.Image) {
@@ -140,17 +142,11 @@ func (g *game) Draw(screen *ebiten.Image) {
 rec.Close()                  // flushes the encoder, finishes the file
 ```
 
-- `Capture` calls `screen.ReadPixels` (about 2 ms at 720p on an M3; the
-  GPU has to finish the frame first, so a heavy scene shows up in this
-  number) and hands the RGBA buffer to a goroutine that feeds the encoder
-  with `WithInputFormat(RGBA)`. The game loop never waits for the encoder;
-  if the queue is full the frame is dropped and counted.
-- PTS come from the wall clock quantised to the frame rate, so a dropped
-  frame leaves a gap instead of speeding the recording up, and a 120 Hz
-  display showing a 60 fps game does not record every frame twice.
-- A `Sink` is just `WritePacket` + `Close`; `NewMP4File` writes through the
-  container muxer, `Funcs` adapts closures, and the HLS and WebRTC samples
-  plug their own in.
+- `container.CreateVideoFile` is an MP4 file with one video track
+  (`record`, and `-record` of `texture`).
+- `container.Segmenter` cuts the packets into fMP4 segments for the HLS
+  playlist server (`hls`).
+- The broadcaster in `webrtc` hands each access unit to a pion track.
 
 ## The fireworks scene
 
@@ -361,9 +357,10 @@ only ffmpeg and ffprobe: they compare sample tables, presentation times and
 decoded frame checksums with ffprobe's view of the same files, feed
 ffmpeg-made streams through the segmenter and the WebRTC track and let
 ffprobe play the served playlist over HTTP.
-The convert, thumbnails, screencast and heif tests also need a hardware
-codec and skip otherwise; they check codec, frame count, PSNR against the source,
-copied audio, identical presentation times and the recorder's timing. The
+The convert, thumbnails, heif and recorder-to-MP4 (`container`) tests also
+need a hardware codec and skip otherwise; they check codec, frame count,
+PSNR against the source, copied audio, identical presentation times and the
+recorder's timing. The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
 test and the player opens the bundled clip through a seek; the rendering
 was checked by recording the window.

@@ -35,7 +35,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
 	"github.com/shibukawa/hwmediacodec/examples/container"
-	"github.com/shibukawa/hwmediacodec/examples/screencast"
+	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type mode int
@@ -197,7 +197,7 @@ func main() {
 	}
 	g := &game{w: w, h: h, player: player, shader: shader, auto: true, limit: time.Duration(*seconds * float64(time.Second))}
 	if *record != "" {
-		sink, err := screencast.NewMP4File(*record, hwmediacodec.H264)
+		sink, err := container.CreateVideoFile(*record, hwmediacodec.H264, screencast.TimeScale)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -15,6 +15,9 @@ RENAMES = {
     "internal/nvidia/sys/cuvid_linux.go": "internal/nvidia/sys/cuvid.go",
     "internal/nvidia/sys/nvenc_linux.go": "internal/nvidia/sys/nvenc.go",
     "internal/nvidia/sys/sys_linux_test.go": "internal/nvidia/sys/sys_test.go",
+    "examples/screencast/recorder.go": "screencast/recorder.go",
+    "examples/screencast/recorder_test.go": "screencast/recorder_test.go",
+    "examples/screencast/sinks.go": "screencast/sinks.go",
 }
 root = sys.argv[1]
 apply = "--apply" in sys.argv

@@ -88,18 +88,23 @@ verification:
       milestone: examples-screencast-hls
       platform: darwin
       gpu: apple-silicon
-    test: TestRecorderWritesMP4, TestRecorderDropsWhenBehind
+    test: TestVideoFileRecordsScreencast (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
     evidence:
-      path: examples/screencast/recorder_test.go
-      locator: TestRecorderWritesMP4
-      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09
+      path: examples/container/videofile_test.go
+      locator: TestVideoFileRecordsScreencast
+      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09, re-run the same day after the recorder
+        moved to the core module (milestone:screencast-package)
     basis:
-    - path: examples/screencast/recorder.go
+    - path: screencast/recorder.go
       input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
-    - path: examples/screencast/sinks.go
-      input_hash: e704e00e480014d45d1bd0e43ed69fa5440eb78e3e93f4a96f214604551b17ef
-    - path: examples/screencast/recorder_test.go
-      input_hash: 5294d300c6b38e7f5d914383548f4d8eefc2058dba43e06e4d6eb90081c9fff9
+    - path: screencast/sinks.go
+      input_hash: 102398acec892e063bbf63c66a905dd38d5251430569b0f22134c72977f420ef
+    - path: screencast/recorder_test.go
+      input_hash: 2c837fa22605b76d31c93287ff7c8e07e17f140cc3c640cac4e91cbb4b211c54
+    - path: examples/container/videofile.go
+      input_hash: 76443a8c29435f7dab4dac9106d4f50793c5d95a0d4a8db2ae2a76c05bcf2c6f
+    - path: examples/container/videofile_test.go
+      input_hash: 9d1f9513be8005678e64379a568d54d40853fabaaa62f7ffc7067e923c7a9613
     - path: examples/container/mux.go
       input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
   segmenter-test:
@@ -157,7 +162,7 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 692a5db347b184d1ea672e981be3827c53310726e54d57f610566ac228037443
+      input_hash: a0f02852c3d3773575fcafc2683372f6efcc0b766f742c288aae2e4e4b20f63f
     - path: examples/hls/server.go
       input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
   record-run:
@@ -176,7 +181,7 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: 7476b06195102e780f16aeec52645e8662f39b2dd0392d07103ffcc9c29afafa
+      input_hash: da04aa9fe7b76715951ce0b277972b5b4b39ff5256387661945005e4a1afd32e
     - path: examples/internal/fireworks/scene.go
       input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
 open_questions:
@@ -191,7 +196,9 @@ facts:
     screencast: 'New(width, height, sink, Options{Codec, FPS, Bitrate, Quality, CBR, KeyframeInterval,
       LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
       Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink =
-      WritePacket+Close; NewMP4File(path, codec); Funcs{Write, Done}; TimeScale 90000'
+      WritePacket+Close; Funcs{Write, Done}; TimeScale 90000. Since milestone:screencast-package the package
+      is github.com/shibukawa/hwmediacodec/screencast in the core module and the MP4 sink is container.CreateVideoFile(path,
+      codec, timeScale)'
     segmenter: 'NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
       Data, Start, Duration}'
     hls: 'Playlist{SetInit, Add, End, M3U8, ServeHTTP} serving /, /index.m3u8, /init.mp4, /seg_N.m4s;
@@ -205,6 +212,9 @@ history:
   delivered-2026-10-09:
     summary: Second sample slice (screen recording and HLS) delivered after the converter/thumbnails slice;
       all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
+  moved-2026-10-09:
+    summary: screencast.Recorder left the examples module for the core module (milestone:screencast-package);
+      NewMP4File became container.CreateVideoFile and the MP4 acceptance test moved to examples/container.
 relations:
 - relation: implements_part_of
   to: requirement:hwmediacodec

@@ -22,8 +22,9 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/examples/screencast"
+	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type game struct {
@@ -89,7 +90,7 @@ func main() {
 	if strings.EqualFold(*codecName, "hevc") {
 		codec = hwmediacodec.HEVC
 	}
-	sink, err := screencast.NewMP4File(*out, codec)
+	sink, err := container.CreateVideoFile(*out, codec, screencast.TimeScale)
 	if err != nil {
 		log.Fatal(err)
 	}

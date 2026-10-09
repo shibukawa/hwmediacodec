@@ -28,7 +28,7 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/examples/container"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/examples/screencast"
+	"github.com/shibukawa/hwmediacodec/screencast"
 )
 
 type game struct {

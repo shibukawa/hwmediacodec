@@ -1,20 +1,40 @@
 package screencast_test
 
 import (
+	"bytes"
+	"context"
 	"image"
 	"image/color"
-	"image/png"
-	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/examples/screencast"
+	"github.com/shibukawa/hwmediacodec/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/screencast"
 )
+
+// requireHardwareEncode skips the test unless Probe reports a hardware
+// H.264 encoder on this machine.
+func requireHardwareEncode(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
+		t.Skip("hardware tests target Apple Silicon (Intel Macs are out of scope)")
+	}
+	caps, err := hwmediacodec.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	for _, cap := range caps {
+		if cap.Codec == hwmediacodec.H264 && cap.Direction == hwmediacodec.Encode && cap.Hardware {
+			return
+		}
+	}
+	t.Skipf("no hardware H.264 encoder on this machine (%s/%s)", runtime.GOOS, runtime.GOARCH)
+}
 
 // fakeScreen stands in for *ebiten.Image: a gradient that slides every
 // frame.
@@ -47,46 +67,33 @@ func (f *fakeScreen) advance() {
 func (f *fakeScreen) Bounds() image.Rectangle { return f.img.Rect }
 func (f *fakeScreen) ReadPixels(p []byte)     { copy(p, f.img.Pix) }
 
-func psnr(a *image.RGBA, b image.Image) float64 {
-	var se, n float64
-	for y := 0; y < a.Rect.Dy(); y++ {
-		for x := 0; x < a.Rect.Dx(); x++ {
-			r1, g1, b1, _ := a.At(x, y).RGBA()
-			r2, g2, b2, _ := b.At(x, y).RGBA()
-			for _, d := range []float64{float64(r1>>8) - float64(r2>>8), float64(g1>>8) - float64(g2>>8), float64(b1>>8) - float64(b2>>8)} {
-				se += d * d
-				n++
-			}
-		}
-	}
-	if se == 0 {
-		return math.Inf(1)
-	}
-	return 10 * math.Log10(255*255/(se/n))
-}
-
-func TestRecorderWritesMP4(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	testutil.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
-	dir := t.TempDir()
-	out := filepath.Join(dir, "rec.mp4")
-	sink, err := screencast.NewMP4File(out, hwmediacodec.H264)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestRecorderEncodes(t *testing.T) {
+	requireHardwareEncode(t)
 	const w, h, fps, frames = 320, 240, 30, 60
+	var stream bytes.Buffer
+	var pts []int64
+	var keys []bool
+	closed := false
+	sink := screencast.Funcs{
+		Write: func(p hwmediacodec.Packet) error {
+			stream.Write(p.Data)
+			pts = append(pts, p.PTS)
+			keys = append(keys, p.Keyframe)
+			return nil
+		},
+		Done: func() error { closed = true; return nil },
+	}
 	rec, err := screencast.New(w, h, sink, screencast.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
 	}
 	screen := newFakeScreen(w, h)
 	start := time.Now()
-	var first *image.RGBA
+	var first []byte
 	for i := 0; i < frames; i++ {
 		screen.advance()
 		if i == 0 {
-			first = image.NewRGBA(screen.img.Rect)
-			copy(first.Pix, screen.img.Pix)
+			first = slices.Clone(screen.img.Pix)
 		}
 		// Two captures per frame slot: the second must be ignored.
 		at := start.Add(time.Duration(i) * time.Second / fps)
@@ -96,45 +103,45 @@ func TestRecorderWritesMP4(t *testing.T) {
 	if err := rec.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Captured() != frames || rec.Dropped() != 0 {
-		t.Errorf("captured %d dropped %d, want %d and 0", rec.Captured(), rec.Dropped(), frames)
+	if !closed {
+		t.Error("Close did not close the sink")
+	}
+	if rec.Captured() != frames || rec.Dropped() != 0 || rec.Encoded() != frames {
+		t.Errorf("captured %d dropped %d encoded %d, want %d, 0 and %d", rec.Captured(), rec.Dropped(), rec.Encoded(), frames, frames)
 	}
 	if d := rec.Duration(); d != 2*time.Second {
 		t.Errorf("duration %v, want 2 s", d)
 	}
-
-	testutil.CheckDecodes(t, out)
-	vs := testutil.VideoStream(t, out)
-	if vs.CodecName != "h264" || vs.Width != w || vs.Height != h || vs.FrameCount() != frames {
-		t.Errorf("stream %s %dx%d %d frames", vs.CodecName, vs.Width, vs.Height, vs.FrameCount())
+	if len(pts) != frames {
+		t.Fatalf("sink received %d packets, want %d", len(pts), frames)
 	}
-	if d := vs.Seconds(); d < 1.99 || d > 2.01 {
-		t.Errorf("duration %.3f s, want 2", d)
+	if !keys[0] {
+		t.Error("the first packet is not a keyframe")
 	}
-	fr := testutil.Frames(t, out)
-	for i := 1; i < len(fr); i++ {
-		if fr[i].PTS-fr[i-1].PTS != 3000 { // 90000 / 30
-			t.Errorf("frame %d pts step %d", i, fr[i].PTS-fr[i-1].PTS)
+	for i := 1; i < len(pts); i++ {
+		if pts[i]-pts[i-1] != screencast.TimeScale/fps {
+			t.Errorf("packet %d pts step %d, want %d", i, pts[i]-pts[i-1], screencast.TimeScale/fps)
 		}
 	}
-	// The first decoded frame is the first captured image (RGBA order and
-	// colour conversion right).
-	f, err := os.Open(testutil.ExtractFrame(t, out, 0, dir))
-	if err != nil {
+
+	// ffmpeg decodes the stream to the same number of pictures and its
+	// first one is the first captured image (RGBA order and colour
+	// conversion right).
+	path := filepath.Join(t.TempDir(), "rec.h264")
+	if err := os.WriteFile(path, stream.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	ref, err := png.Decode(f)
-	if err != nil {
-		t.Fatal(err)
+	got := testutil.ReferenceFrames(t, path, hwmediacodec.H264, hwmediacodec.RGBA, w, h)
+	if len(got) != frames {
+		t.Fatalf("ffmpeg decoded %d frames, want %d", len(got), frames)
 	}
-	if p := psnr(first, ref); p < 30 {
-		t.Errorf("first frame PSNR %.1f dB, want at least 30", p)
+	if p := testutil.BlockPSNR(first, got[0], w, h, 8); p < 30 {
+		t.Errorf("first frame 8x8-block PSNR %.1f dB, want at least 30", p)
 	}
 }
 
 func TestRecorderRequestKeyframe(t *testing.T) {
-	testutil.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
+	requireHardwareEncode(t)
 	var keys []int
 	n := 0
 	sink := screencast.Funcs{Write: func(p hwmediacodec.Packet) error {
@@ -166,7 +173,7 @@ func TestRecorderRequestKeyframe(t *testing.T) {
 }
 
 func TestRecorderDropsWhenBehind(t *testing.T) {
-	testutil.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Encode)
+	requireHardwareEncode(t)
 	var packets int
 	sink := screencast.Funcs{Write: func(hwmediacodec.Packet) error { packets++; return nil }}
 	rec, err := screencast.New(320, 240, sink, screencast.Options{FPS: 60, Queue: 2})
