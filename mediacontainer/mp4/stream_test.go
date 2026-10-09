@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/mp4test"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )

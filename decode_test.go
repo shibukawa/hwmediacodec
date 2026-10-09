@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/ivf"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
 
 // requireHardware skips the test unless Probe reports a hardware engine for

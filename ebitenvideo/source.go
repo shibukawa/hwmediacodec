@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 )
 
 // Source feeds a Player with coded pictures in decode order. The container

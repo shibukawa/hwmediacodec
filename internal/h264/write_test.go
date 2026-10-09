@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )

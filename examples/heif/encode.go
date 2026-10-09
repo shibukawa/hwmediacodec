@@ -13,7 +13,7 @@ import (
 	"github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 )
 
 // Options control Encode.

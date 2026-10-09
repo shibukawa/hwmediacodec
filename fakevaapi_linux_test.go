@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/bitstream/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/hevc"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"

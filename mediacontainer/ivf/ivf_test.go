@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/ivf"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
 
 var frames = [][]byte{
