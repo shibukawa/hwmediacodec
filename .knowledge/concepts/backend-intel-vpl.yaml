@@ -54,8 +54,18 @@ capabilities:
     - symbol-binding
     - hardware-decode
   decode/av1:
-    state: unknown
+    state: partial
     about: capability:hwmediacodec/decode-av1
+    authority: inferred
+    scope:
+      platform: linux
+      gpu: intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vpl/decoder.go
+      note: Code complete 2026-10-09 in milestone:av1-decode-linux-windows (MFX_CODEC_AV1, 8-bit to NV12,
+        Tiger Lake and newer); constants checked against the headers, never run on hardware.
   encode/h264:
     state: implemented
     about: capability:hwmediacodec/encode-h264
@@ -185,7 +195,7 @@ facts:
       GetVideoParam when a keyframe lacks them, DTS = input PTS of the k-th frame minus
       (GopRefDist - 1) frame durations.
     limitations:
-    - 8-bit 4:2:0 NV12 only in both directions (no RGBA/BGRA, no 10-bit); no AV1.
+    - 8-bit 4:2:0 NV12 only in both directions (no RGBA/BGRA, no 10-bit); AV1 is decoded only (8-bit Main profile).
     - WithDecodeOrder has no effect; the runtime's own reorder delay applies.
     - Even picture dimensions for encoding; one synchronous operation per frame.
     - Needs libvpl (the legacy libmfx.so.1 dispatcher alone is not used); Linux only.
@@ -221,9 +231,9 @@ verification:
       note: see milestone:linux-intel-vpl for the oracle recipe
     basis:
     - path: internal/vpl/sys/types.go
-      input_hash: 255204a39eedc3f30e68e371c69913b5f44c2749b4e6ee4b08c538102ce4c361
+      input_hash: f61232720bdf423681638033bf1f609192a23528c4de750e27c84e44effdce3a
     - path: internal/vpl/sys/layout_test.go
-      input_hash: 5816fab5455e22aacc1560070a88061121175e33164208c2a5a8744ed5ea1993
+      input_hash: 38c7290c61dbcc8c896b59c113158909508ab281825c4478a85519931b7d4584
   symbol-binding:
     state: passed
     method: integration
@@ -255,11 +265,11 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/decoder.go
-      input_hash: 21a3ad01b8c896ebe38411e230fbee4fe993108c9e924b67f64196c8d927ca07
+      input_hash: fa18a69ffb0bf02a7436ea69397c0f3d90578ce294e7b43d31056e43d4a4e88d
     - path: internal/vpl/session.go
       input_hash: 8cab8713e6b7e2477f0058df004cad170d6dff036ec6ed8560ad547782a8f586
     - path: internal/vpl/backend.go
-      input_hash: a67e205ed2332fa2b958527c327240f864bbaf4cb785754c2e05d14680af5367
+      input_hash: 9a117eb1af538b586de2e3d973aae9969c97ba24d2563f5db166c6b81040763d
   hardware-encode:
     state: not_run
     method: integration
@@ -278,7 +288,7 @@ verification:
     - path: internal/vpl/encparam.go
       input_hash: fd8c9d5b10ab65d32620c8982e18fe94512881952e5a0759c4ff7c2e69139113
     - path: internal/vpl/backend.go
-      input_hash: a67e205ed2332fa2b958527c327240f864bbaf4cb785754c2e05d14680af5367
+      input_hash: 9a117eb1af538b586de2e3d973aae9969c97ba24d2563f5db166c6b81040763d
 history:
   researched-2026-10-08:
     summary: Backend landscape entry written from Intel and Debian documentation (libraries, API model,

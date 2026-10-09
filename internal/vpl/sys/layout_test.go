@@ -223,6 +223,8 @@ func TestConstants(t *testing.T) {
 	}{
 		{"MFX_CODEC_AVC", uint64(CodecAVC), 541283905},
 		{"MFX_CODEC_HEVC", uint64(CodecHEVC), 1129727304},
+		{"MFX_CODEC_AV1", uint64(CodecAV1), 540104257},
+		{"MFX_PROFILE_AV1_MAIN", uint64(ProfileAV1Main), 1},
 		{"MFX_FOURCC_NV12", uint64(FourCCNV12), 842094158},
 		{"MFX_EXTBUFF_CODING_OPTION", uint64(ExtBuffCodingOption), 1347372099},
 		{"MFX_EXTBUFF_CODING_OPTION2", uint64(ExtBuffCodingOption2), 844055619},

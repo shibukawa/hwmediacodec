@@ -14,11 +14,16 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
-| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
-| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
+| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
+
+AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
+decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
+has no AV1 encoder; on the other platforms the encoders exist in newer GPUs
+and are not wired up).
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -148,10 +153,58 @@ encoder, so `NewEncoder` with `AV1` reports `ErrUnsupported`.
   820 frames per second to NV12, 310 to BGRA and 220 to RGBA, including the
   copy.
 
+### AV1 on Linux and Windows
+
+A `Packet` is one temporal unit in the low-overhead OBU format, with or
+without temporal delimiter OBUs, as on macOS. Every unit yields exactly one
+frame, in presentation order and with the packet's PTS, so the reorder layer
+is not involved and `WithDecodeOrder` has no effect. Decoding starts, and
+resumes after `Flush`, at a unit with a shown key frame; the sequence header
+is kept in Go and handed to the decoder again when such a unit does not
+carry one. These backends decode the Main profile at 8 bits to NV12: 10-bit
+streams, the High and Professional profiles and monochrome streams report
+`ErrUnsupported` (10-bit AV1 decodes on macOS only for now).
+
+- **VA-API** (AMD from the RX 6000 series, Intel from Tiger Lake): VA-API
+  takes one frame at a time, described by a picture parameter buffer and one
+  entry per tile, so `internal/av1` parses the whole frame header and
+  maintains what later headers depend on: the eight reference slots with
+  their frame sizes, order hints, loop filter deltas, segmentation data,
+  global motion parameters and film grain parameters, including the derived
+  values (the references of `frame_refs_short_signaling`, skip mode, warp
+  validity, lossless mode). Tiles may be spread over several tile groups.
+  With film grain the driver is given two surfaces, the reference picture
+  and the picture to show; `show_existing_frame` shows the latter again.
+  Super-resolution and reference scaling pass through, and frames smaller
+  than the sequence maximum come back at their own size. Streams with
+  several spatial layers and large-scale-tile streams report
+  `ErrUnsupported`.
+- **NVDEC** (Linux and Windows): the driver's parser reads the stream.
+  Frames are picked up in its display callback instead of the decode
+  callback the other codecs use, because AV1 decodes frames that are shown
+  later or never; film grain is applied by the driver.
+- **Intel VPL**: the runtime reads the stream and applies film grain. A
+  temporal unit that holds a hidden frame in front of the shown one is fed
+  until the runtime has taken all of it.
+- **Media Foundation**: the Microsoft AV1 decoder from the free "AV1 Video
+  Extension" Store package, on a GPU whose driver exposes the AV1 DXVA
+  profile. Its input type needs the frame size, so the transform is
+  configured when the first sequence header arrives; each temporal unit is
+  one sample, without its temporal delimiters.
+
+None of this has run on a GPU yet. The VA-API path is verified up to the
+driver (see Testing): for 24 stream configurations every buffer it submits
+equals, byte for byte, the one ffmpeg's VA-API decoder submits for the same
+frame. The NVDEC, VPL and Media Foundation paths leave the stream to the
+driver's own parser and add little to their H.264/HEVC code, but what they
+add (the display callback, feeding a unit in several calls, the deferred
+input type) is untested until `go test ./...` runs on such a machine.
+
 ### Windows (Media Foundation)
 
 Decoding drives the synchronous decoder MFTs that ship with Windows
-(`Msmpeg2vdec.dll` for H.264, the "HEVC Video Extensions" package for HEVC)
+(`Msmpeg2vdec.dll` for H.264, the "HEVC Video Extensions" package for HEVC,
+the "AV1 Video Extension" package for AV1)
 with a Direct3D 11 device attached through `IMFDXGIDeviceManager`, so the
 GPU's DXVA engine does the decoding whatever the vendor. `Probe` reports a
 decoder only when the GPU exposes the matching DXVA profile with NV12 output
@@ -175,9 +228,10 @@ encoder (software) instead. When no bitrate or quality is given the backend
 asks for 0.1 bit per pixel per frame (at least 200 kbit/s); when no frame rate
 is given it declares 30 fps.
 
-- Requires Windows 10 or later, a GPU driver with DXVA support, and for
+- Requires Windows 10 or later, a GPU driver with DXVA support, for
   HEVC the free "HEVC Video Extensions from Device Manufacturer" (or the
-  paid "HEVC Video Extensions") Store package.
+  paid "HEVC Video Extensions") Store package, and for AV1 the free "AV1
+  Video Extension" package.
 - Decoded textures are copied to CPU memory through a staging texture; the
   visible picture is cropped from the padded coded size using
   `MF_MT_MINIMUM_DISPLAY_APERTURE`.
@@ -395,7 +449,7 @@ go run ./cmd/hwmediacodec probe
 go run ./cmd/hwmediacodec decode -hash input.h264                       # display order, NV12
 go run ./cmd/hwmediacodec decode -format rgba -o out.rgba input.hevc -codec hevc
 go run ./cmd/hwmediacodec decode -decode-order -hash input.h264
-go run ./cmd/hwmediacodec decode -codec av1 -hash input.ivf                  # AV1: IVF input (macOS, M3+)
+go run ./cmd/hwmediacodec decode -codec av1 -hash input.ivf                  # AV1: IVF input (needs a GPU with an AV1 decoder)
 go run ./cmd/hwmediacodec encode -size 1920x1080 -bitrate 8M -gop 60 -o out.h264 input.nv12
 go run ./cmd/hwmediacodec encode -size 1920x1080 -format rgba -o out.h264 input.rgba
 go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc input.h264
@@ -405,8 +459,8 @@ go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc
 
 The NVIDIA backend (`internal/nvidia`) loads `libcuda.so.1`, `libnvcuvid.so.1`
 and `libnvidia-encode.so.1` from the proprietary driver (470.57 or newer for
-NVENC API 11.1). Decoding uses the driver's own parser, so H.264 and HEVC both
-work; frames are 8-bit 4:2:0 NV12 (10-bit and 4:4:4 streams report
+NVENC API 11.1). Decoding uses the driver's own parser, so H.264, HEVC and AV1
+all work; frames are 8-bit 4:2:0 NV12 (10-bit and 4:4:4 streams report
 `ErrUnsupported`), progressive only, copied to CPU memory per picture.
 Encoding accepts NV12, RGBA and BGRA (RGB is converted by NVENC with BT.601
 and the stream is tagged so), supports B-frames (two consecutive, when the GPU
@@ -473,19 +527,30 @@ buffers built from HEVC streams (reference frames and their set flags,
 reference list indices, `slice_data_byte_offset`, `st_rps_bits`, prediction
 weights) are compared with the same two oracles on any platform, and the
 parameter sets and slice headers the HEVC encoder writes are read back by
-ffmpeg and ffprobe. The AV1 OBU splitter, sequence header and frame header
-parsers are checked against `trace_headers` on SVT-AV1 streams (8-bit and
-10-bit), and the `av1C` record against the one ffmpeg writes into an MP4 of
-the same stream; the `ivf` package is checked against ffmpeg's own IVF
-files. These tests skip when ffmpeg lacks libsvtav1. The AV1 decode
+ffmpeg and ffprobe. The AV1 OBU splitter and sequence header parser are
+checked against `trace_headers` on SVT-AV1 streams (8-bit and 10-bit), and
+the `av1C` record against the one ffmpeg writes into an MP4 of the same
+stream; the `ivf` package is checked against ffmpeg's own IVF files. The AV1
+frame header parser is checked the same way on 32 stream configurations
+written by SVT-AV1, libaom (through ffmpeg and through `aomenc`) and rav1e,
+chosen to reach the branches of the header syntax: tiles and tile groups,
+film grain, super-resolution, reference scaling, S-frames and error
+resilience with frame numbers, screen content tools, lossless and
+segmented coding, quantiser matrices, global motion, 4:4:4, monochrome and
+still pictures. Every syntax element ffmpeg prints must match, and so must
+the length of every header, with the headers parsed against the reference
+state the parser keeps itself. These tests skip the configurations whose
+encoder is missing (a plain ffmpeg with libsvtav1 runs three of them; the
+container of the fake VA driver below has all the encoders). The AV1 decode
 conformance tests need libdav1d as well: every NV12 frame of an 8-bit
 stream with hidden frames and `show_existing_frame` must equal dav1d's
 output exactly, and a 10-bit stream is compared by PSNR.
 
 The VA-API backend itself runs without a GPU against a fake VA driver
-(`internal/vaapi/testdata/fakedriver`, about 1,400 lines of C).
+(`internal/vaapi/testdata/fakedriver`, about 1,600 lines of C).
 `scripts/vaapi_fake_driver_test.sh` builds it in a container and runs the
-backend through the real libva, for H.264 and HEVC, decoding and encoding.
+backend through the real libva, for H.264 and HEVC, decoding and encoding,
+and for AV1 decoding.
 The driver decodes nothing; it checks what it is handed through the libva C
 headers (buffer sizes, that every reference picture is in the surface the
 backend names, reference list indices, slice data offsets, the encoder's
@@ -496,6 +561,22 @@ cropped and in display order. It runs as several driver personalities
 (packed headers as Mesa or as Intel, with and without HEVC capability
 attributes, with and without `vaDeriveImage`), and `PLATFORM=linux/amd64`
 runs it on that architecture through emulation.
+
+For AV1 the same driver serves as a second oracle. It logs the picture
+parameters and the tile parameters of every frame, with surfaces named by
+the number of the picture they hold, and each test stream is decoded twice
+against it: by the backend, and by ffmpeg's own VA-API AV1 decoder (`ffmpeg
+-hwaccel vaapi -c:v av1`). The two logs must be identical byte for byte, for
+every frame of 22 stream configurations, which covers the values no header
+trace shows: reference slot contents, global motion parameters carried from
+frame to frame, loop filter and segmentation state inherited from the
+primary reference frame, tile offsets, and the two surfaces of a frame with
+film grain. No encoder at hand writes `frame_refs_short_signaling`, so two
+further streams are rewritten in the test to signal two references and
+leave five to the decoder; the references the backend derives must again be
+ffmpeg's. The frames that come back are checked as for the other codecs:
+each temporal unit must show the right picture (the grained one where film
+grain applies) at the frame's own size.
 The decode and encode conformance tests run where `Probe` reports a
 hardware engine (Apple Silicon, Linux with an NVIDIA, Intel VPL or VA-API
 driver, or Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame

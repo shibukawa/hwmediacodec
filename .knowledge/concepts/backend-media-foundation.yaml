@@ -36,8 +36,14 @@ capabilities:
       note: Implemented in milestone:windows-media-foundation (HEVC Video Extensions decoder MFT +
         D3D11/DXVA, 8-bit NV12 only); not yet verified on Windows hardware.
   decode/av1:
-    state: unknown
+    state: partial
     about: capability:hwmediacodec/decode-av1
+    authority: authored
+    evidence:
+      path: internal/mediafoundation/decoder.go
+      note: Implemented in milestone:av1-decode-linux-windows (Microsoft AV1 decoder MFT from the AV1
+        Video Extension with D3D11/DXVA, input type configured at the first sequence header, 8-bit NV12
+        only); not yet verified on Windows hardware.
   encode/h264:
     state: partial
     about: capability:hwmediacodec/encode-h264

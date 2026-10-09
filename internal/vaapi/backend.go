@@ -3,7 +3,8 @@
 // Package vaapi implements the Linux backend on top of VA-API (libva),
 // loaded at run time with purego. VA-API is a slice-level interface: the
 // bitstream is parsed and the decoded picture buffer is managed in Go
-// (packages h264 and hevc) and the driver only accelerates the slice data.
+// (packages h264, hevc and av1) and the driver only accelerates the slice
+// data (for AV1, the tile data).
 package vaapi
 
 import (
@@ -48,7 +49,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		return nil, ctx.Err()
 	}
 	var caps []codec.Capability
-	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
+	for _, c := range []codec.Codec{codec.H264, codec.HEVC, codec.AV1} {
 		for _, p := range decodeProfiles(c) {
 			if d.decodeProfiles[p] {
 				w, h := d.maxPictureSize(p, sys.EntrypointVLD)
@@ -77,14 +78,31 @@ func decodeProfiles(c codec.Codec) []int32 {
 		// A driver with only the Main 10 profile still decodes Main
 		// streams, but none is known to omit Main; Probe keys on it.
 		return hevcProfiles[:1]
+	case codec.AV1:
+		return av1Profiles
+	}
+	return nil
+}
+
+// decodeCandidates lists every VA profile a decoder for the codec can use,
+// or nil for codecs the backend does not decode.
+func decodeCandidates(c codec.Codec) []int32 {
+	switch c {
+	case codec.H264:
+		return h264Profiles
+	case codec.HEVC:
+		return hevcProfiles
+	case codec.AV1:
+		return av1Profiles
 	}
 	return nil
 }
 
 // NewDecoder implements codec.Backend.
 func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.Decoder, error) {
-	if cfg.Codec != codec.H264 && cfg.Codec != codec.HEVC {
-		return nil, unsupported(cfg.Codec, "only h264 and hevc decoding are implemented on the vaapi backend")
+	candidates := decodeCandidates(cfg.Codec)
+	if candidates == nil {
+		return nil, unsupported(cfg.Codec, "only h264, hevc and av1 decoding are implemented on the vaapi backend")
 	}
 	if cfg.OutputFormat != codec.NV12 {
 		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not available on the vaapi backend yet; use NV12")
@@ -95,10 +113,6 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 			return nil, unsupported(cfg.Codec, err.Error())
 		}
 		return nil, err
-	}
-	candidates := h264Profiles
-	if cfg.Codec == codec.HEVC {
-		candidates = hevcProfiles
 	}
 	found := false
 	for _, p := range candidates {

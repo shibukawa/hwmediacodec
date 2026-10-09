@@ -117,7 +117,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -147,7 +147,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -177,7 +177,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -208,7 +208,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -238,7 +238,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -268,7 +268,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -299,7 +299,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -329,7 +329,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -359,7 +359,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -392,7 +392,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -422,7 +422,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: encode_test.go
@@ -444,7 +444,7 @@ verification:
       note: videotoolbox h264/hevc decode and encode hardware=true on 2026-10-09
     basis:
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
   option-validation-test:
@@ -459,9 +459,9 @@ verification:
       locator: TestEncoderOptionValidation
     basis:
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 8643bea2e849bbb36596a4da3419a95fd25c55bb4453f2ad0ba739cf500ce43c
   cross-build-check:
     state: passed
     method: static

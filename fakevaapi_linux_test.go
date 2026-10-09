@@ -111,7 +111,10 @@ func TestFakeVAAPIProbe(t *testing.T) {
 		}
 		found[c.Codec.String()+"/"+c.Direction.String()] = true
 	}
-	for _, want := range []string{"h264/decode", "h264/encode", "hevc/decode", "hevc/encode"} {
+	if found["av1/encode"] {
+		t.Error("Probe reports av1/encode, which the driver does not offer")
+	}
+	for _, want := range []string{"h264/decode", "h264/encode", "hevc/decode", "hevc/encode", "av1/decode"} {
 		if !found[want] {
 			t.Errorf("Probe does not report %s (got %v)", want, found)
 		}
