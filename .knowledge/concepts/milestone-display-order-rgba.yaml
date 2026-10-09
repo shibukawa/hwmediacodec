@@ -313,9 +313,9 @@ verification:
       note: ebiten v2.10.4; the core go.mod still requires only purego
     basis:
     - path: ebitenvideo/go.mod
-      input_hash: 59eb7433ee6d00e34874dca6d65c0d3aac7a049ab97592d5133f8274a6d25155
+      input_hash: 7db4eff4b8d61e9577f4213fcb75f64de334d2db391e7b8a243ee7e5adbcaffe
     - path: go.mod
-      input_hash: a41ea348c18cf502e3d470c51a770f33c9d357fc955376d160c2341fe38e5f45
+      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
 open_questions:
   vui-less-h264-latency:
     text: H.264 streams without VUI bitstream_restriction (VideoToolbox's own encoder writes none) are
