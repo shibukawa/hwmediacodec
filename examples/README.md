@@ -20,6 +20,7 @@ code runs wherever `hwmediacodec.Probe` reports a hardware engine.
 | [`hls/`](hls/) | Ebitengine game streamed live to browsers as fMP4 HLS (segmenter + in-memory playlist server) |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning cube with `DrawTriangles`, and through a Kage shader; plays MP4 files directly |
 | [`webrtc/`](webrtc/) | Ebitengine game streamed to browsers over WebRTC with pion, about 100 ms of latency |
+| [`heif/`](heif/), [`heifconv/`](heifconv/) | HEIC and AVIF still images: decode (single pictures, grids, rotation, clean aperture) and encode HEIC with the HEVC encoder, AVIF where an AV1 encoder exists |
 
 ## container
 
@@ -213,6 +214,53 @@ sample builder, compared NAL unit by NAL unit with what was sent, and
 decoded by ffmpeg to the source's frame checksums; a PLI from the viewer
 must reach the keyframe callback.
 
+## heif and heifconv
+
+```sh
+cd examples
+go run ./heifconv photo.heic photo.png              # iPhone photos: HEVC tiles in a grid, irot
+go run ./heifconv -quality 0.8 picture.png picture.heic
+go run ./heifconv -tile 512 -rotate 90 picture.jpg picture.heic
+go run ./heifconv picture.avif picture.png          # AV1 decode (M3 and newer)
+go run ./heifconv -info photo.heic
+```
+
+A HEIF file is an ISOBMFF `meta` box of items (coded pictures, a `grid`
+that tiles them) with properties (`hvcC`/`av1C` decoder configuration,
+`ispe` size, `irot`, `imir`, `clap`, `colr`, `pixi`) and an `mdat` with the
+coded data. The `heif` package parses and writes that by hand (about 600
+lines, no dependency beyond mp4ff's record parsers) and leaves the pictures
+to hwmediacodec:
+
+- **Decode**: for each coded item, `hvcC`'s parameter sets plus the
+  length-prefixed NAL units become one Annex-B packet (AV1: the temporal
+  unit, with the sequence header from `av1C` if the item lacks one); all
+  items go through one decoder opened with `WithOutputFormat(RGBA)` and
+  `WithDecodeOrder()`, grids are stitched tile by tile and cropped to the
+  grid size, then `clap`, `irot` and `imir` are applied in their stored
+  order. `Decode` returns an `*image.RGBA` and an `Info` (codec, size,
+  tiles, rotation).
+- **Encode**: one keyframe per picture or tile (`WithKeyframeInterval(1)`,
+  `ForceKeyframe`, `WithQuality`), VPS/SPS/PPS from the packet into `hvcC`,
+  the slices as the item data. `TileSize` writes a grid like phone cameras
+  do; `Rotation` stores an `irot`. Odd sizes are padded by a replicated
+  row or column and declared through `clap`, because the hardware encoders
+  work on even 4:2:0 pictures (VideoToolbox rounds an odd request down to
+  320x202 for 321x203).
+- **AVIF**: decoding works wherever `Probe` lists an AV1 decoder (M3 and
+  newer Macs); encoding needs an AV1 encoder, which no Apple Silicon chip
+  has, so `Encode` with `Codec: AV1` returns `ErrUnsupported` there and
+  works unchanged on a platform that gains one.
+
+Tests use macOS ImageIO (`sips`) as the reference for the files this
+package writes (single, grid, rotated, odd sizes) and for HEIC input, and
+ffmpeg for AVIF input and for the rotation direction (ffmpeg maps `irot` to
+a display matrix and autorotates; ImageIO keeps it as orientation
+metadata). ImageIO resamples `clap`-cropped pictures instead of cropping,
+and ffmpeg rounds odd `clap` sizes to even, so odd pictures are compared
+with the source instead. 8-bit 4:2:0 only; iPhone HDR photos (10-bit) are
+out of scope.
+
 ## Testing
 
 ```sh
@@ -225,8 +273,8 @@ only ffmpeg and ffprobe: they compare sample tables, presentation times and
 decoded frame checksums with ffprobe's view of the same files, feed
 ffmpeg-made streams through the segmenter and the WebRTC track and let
 ffprobe play the served playlist over HTTP.
-The convert, thumbnails and screencast tests also need a hardware codec and
-skip otherwise; they check codec, frame count, PSNR against the source,
+The convert, thumbnails, screencast and heif tests also need a hardware
+codec and skip otherwise; they check codec, frame count, PSNR against the source,
 copied audio, identical presentation times and the recorder's timing. The
 texture sample's mesh (projection, culling, texture coordinates) has a unit
 test; its rendering was checked by recording the window.
