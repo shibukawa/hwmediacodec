@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
 package nvidia
 
@@ -29,8 +29,8 @@ var (
 	initErr  error
 )
 
-// initCUDA loads libcuda and initialises the driver once per process. Any
-// cuInit failure (no GPU, kernel module missing or mismatched) counts as
+// initCUDA loads the CUDA driver library and initialises it once per process. Any
+// cuInit failure (no GPU, kernel driver missing or mismatched) counts as
 // "no device": the GPU cannot be used either way.
 func initCUDA() error {
 	initOnce.Do(func() {

@@ -144,6 +144,12 @@ facts:
       encoder MFTs through IMFMediaEventGenerator with system-memory NV12 input, and the synchronous
       Microsoft H.264 encoder only with WithSoftwareFallback.
     arch: windows/amd64 and windows/arm64; 32-bit excluded by the author (2026-10-09).
+    vendor_handling: The backend does not tell GPU vendors apart - decode goes through DXVA on the
+      default Direct3D 11 adapter and encode through whichever hardware encoder MFT MFTEnumEx lists
+      first, so Intel, AMD and NVIDIA share one code path and a machine with two GPUs cannot choose.
+      On windows/amd64 the nvidia backend (backend:nvenc-nvdec) is registered first since
+      milestone:windows-nvidia-nvdec-nvenc, so with the NVIDIA driver installed Media Foundation is
+      only the fallback.
     not_yet: software decode fallback, P010/10-bit, AV1, zero-copy textures, D3D texture input for encoders.
 relations:
 - relation: implemented_by
@@ -159,3 +165,7 @@ history:
   encode-implemented-2026-10-09:
     summary: H.264/HEVC encode through vendor hardware MFTs written on the same branch; verification on
       Windows hardware pending.
+  nvidia-registered-first-2026-10-09:
+    summary: Author asked whether this backend also covers AMD and NVIDIA (it does, vendor-agnostic)
+      and then had NVDEC/NVENC driven directly on Windows; on amd64 this backend is now tried after
+      the nvidia backend (milestone:windows-nvidia-nvdec-nvenc).

@@ -186,7 +186,7 @@ verification:
     - path: backends_linux.go
       input_hash: 1b87aae2a21fe6d756e32a80481a97ca51faa2fbb2fdbb88b969dc9785f3064b
     - path: probe_test.go
-      input_hash: 8affc8594a1025d383214778955cfd97aefa3366d90a868a320595dfecd91726
+      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
   hardware-conformance:
     state: not_run
     method: integration

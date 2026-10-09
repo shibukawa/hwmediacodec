@@ -24,7 +24,9 @@ capabilities:
     about: capability:hwmediacodec/decode-h264
     authority: inferred
     scope:
-      platform: linux
+      platform:
+      - linux
+      - windows
       gpu: nvidia
     implements:
     - requirement:hwmediacodec
@@ -32,6 +34,8 @@ capabilities:
       path: internal/nvidia/decoder.go
       note: Code complete 2026-10-09 (cuvid parser + NVDEC, NV12 host copy); struct layouts and symbol
         binding verified without a GPU; hardware conformance not yet run, hence authority inferred.
+        The same code builds for windows/amd64 since milestone:windows-nvidia-nvdec-nvenc (layouts
+        asserted at compile time, not yet run on Windows).
     verified_by:
     - layout-test
     - symbol-binding
@@ -41,7 +45,9 @@ capabilities:
     about: capability:hwmediacodec/decode-hevc
     authority: inferred
     scope:
-      platform: linux
+      platform:
+      - linux
+      - windows
       gpu: nvidia
     implements:
     - requirement:hwmediacodec
@@ -61,7 +67,9 @@ capabilities:
     about: capability:hwmediacodec/encode-h264
     authority: inferred
     scope:
-      platform: linux
+      platform:
+      - linux
+      - windows
       gpu: nvidia
     implements:
     - requirement:hwmediacodec
@@ -78,7 +86,9 @@ capabilities:
     about: capability:hwmediacodec/encode-hevc
     authority: inferred
     scope:
-      platform: linux
+      platform:
+      - linux
+      - windows
       gpu: nvidia
     implements:
     - requirement:hwmediacodec
@@ -151,8 +161,16 @@ facts:
   support_tier: tier1 (Linux and Windows NVIDIA)
   implementation:
     package: internal/nvidia (backend.go, device.go, decoder.go, encoder.go) over internal/nvidia/sys
-      (purego loaders per library, SDK 11.1 struct mirrors checked by layout_test.go against clang
-      offsetof output for linux/amd64 and linux/arm64).
+      (purego bindings per library in cuda.go, cuvid.go and nvenc.go; the library names and the loader
+      in lib_linux.go and lib_windows.go; SDK 11.1 struct mirrors checked by layout_test.go against
+      C compiler output for linux/amd64, linux/arm64 and windows/amd64). Build tag linux || (windows
+      && amd64).
+    platform_differences: 'Windows loads nvcuda.dll, nvcuvid.dll and nvEncodeAPI64.dll with
+      LoadLibraryEx(LOAD_LIBRARY_SEARCH_SYSTEM32) and needs driver 471.41+; unsigned long is 32 bits
+      there, which changes CUVIDSOURCEDATAPACKET (24 bytes instead of 32) and CUVIDDECODECREATEINFO
+      (112 instead of 176) and nothing else - sys.ULong carries the difference. The NVENC structs,
+      the symbol names, the CUDA device type and the synchronous encode mode are the same on both.
+      On Windows the backend is registered before Media Foundation (amd64 only).'
     sdk_version: Video Codec SDK 11.1 headers (nv-codec-headers n11.1.5.3); NVENC API 11.1 is the floor
       the driver must report (470.57+), struct version tags are computed in Go from NVENCAPI_VERSION.
     device: cuInit once per process; device ordinal from HWMEDIACODEC_NVIDIA_DEVICE (default 0);
@@ -182,13 +200,17 @@ facts:
     - Synchronous per-picture decode and host copy inside Send.
     - Parameter sets are not cached across Flush; the next IDR must carry SPS/PPS in band (the usual
       case for streams the library's own encoders and ffmpeg produce).
-    - Linux only; the Windows DLL loader is not written yet.
+    - No Windows on ARM (NVIDIA ships no driver libraries for it); NVENC asynchronous mode and
+      Direct3D 11 interop on Windows are not used.
   host_verification_2026-10-09:
     layouts: 482 sizes/offsets equal the C compiler's values for both Linux targets; version tags equal
       the header macros.
     symbols: all entry points bind against libcuda/libnvcuvid/libnvidia-encode 535.309.01 in a Debian
       container (NVENC API 12.1 reported); without the libraries Probe returns an empty list.
     pending: decode and encode conformance on real NVIDIA hardware (see milestone:linux-nvidia-h264-hevc).
+    windows: 478 sizes, offsets and constants measured with x86_64-w64-mingw32-gcc and clang's MSVC
+      target; 25 differ from Linux, all in the two unsigned long structs, and are asserted at compile
+      time (see milestone:windows-nvidia-nvdec-nvenc). Nothing has run on Windows.
 relations:
 - relation: candidate_for
   to: requirement:hwmediacodec
@@ -196,6 +218,8 @@ relations:
   to: policy:support-tiers
 - relation: implemented_in
   to: milestone:linux-nvidia-h264-hevc
+- relation: implemented_in
+  to: milestone:windows-nvidia-nvdec-nvenc
 verification:
   layout-test:
     state: passed
@@ -204,16 +228,21 @@ verification:
     test: internal/nvidia/sys TestStructLayouts, TestVersionConstants
     evidence:
       path: internal/nvidia/sys/layout_test.go
-      note: see milestone:linux-nvidia-h264-hevc for the oracle recipe
+      note: see milestone:linux-nvidia-h264-hevc for the oracle recipe and
+        milestone:windows-nvidia-nvdec-nvenc for the Windows values
     basis:
+    - path: internal/nvidia/sys/layout_lp64_test.go
+      input_hash: 90f80807d6638afc04f460b2ce57311b5140526f09dcef6b3233b9244130645c
+    - path: internal/nvidia/sys/layout_windows.go
+      input_hash: 1120b8a0a817d74e6aada964f29b5df396f519ab3659e56853b8db57b1a3e870
     - path: internal/nvidia/sys/types_cuda.go
-      input_hash: 86ef9a87d3600b8c13407e0f1a941ad2eebb026e19e28087c5a78ac6ef539575
+      input_hash: 010e28cf11dcb537c38661dbc24fb0e3b15f230033f2539c6a47a42469728393
     - path: internal/nvidia/sys/types_cuvid.go
-      input_hash: 3198584c34bec348e132e486f3eb877dda44c6b328cc5c4ecea4d84b71d718c2
+      input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: internal/nvidia/sys/types_nvenc.go
       input_hash: 3e4503c8c0f33953c2fbeb8c400b3eb1a0ed67db6a57ced6757eda869da208c7
     - path: internal/nvidia/sys/layout_test.go
-      input_hash: 23c83f4699817d241020047ed7867c66569f5e13ad3cdff5054db59ca6f509f4
+      input_hash: 2106fc5008cb1c6b622c0e3a49f8adc4d31766eb76c9ae0437e42d47fa2706f5
   symbol-binding:
     state: passed
     method: integration
@@ -223,16 +252,20 @@ verification:
     test: internal/nvidia/sys TestLoadCUDA, TestLoadCuvid, TestLoadNVENC in a debian:bookworm-slim
       linux/amd64 container with the 535.309.01 user-space libraries
     evidence:
-      path: internal/nvidia/sys/sys_linux_test.go
+      path: internal/nvidia/sys/sys_test.go
+      note: re-run 2026-10-09 after the loader was split per platform; binding on Windows is not yet
+        run (milestone:windows-nvidia-nvdec-nvenc verification windows-loader-run)
     basis:
-    - path: internal/nvidia/sys/cuda_linux.go
-      input_hash: e5e9de53e593feba32b2ffdc72594bccd12963927f61364f8df35d8a04b63603
-    - path: internal/nvidia/sys/cuvid_linux.go
-      input_hash: 1b6c2fc93a1b6f3e327439f3fb6f9282f6dd02b8319c9956e5f749f3b4816e65
-    - path: internal/nvidia/sys/nvenc_linux.go
-      input_hash: 6ae9e3ec17be17fdbf22f42546040ecb804fea3d87e4796f00d5a57b42b59507
-    - path: internal/nvidia/sys/sys_linux_test.go
-      input_hash: 6bbe93a666d2f6eb3f9902bcbcaf2600a36a115ad13af400440ddfab198aa46d
+    - path: internal/nvidia/sys/lib_linux.go
+      input_hash: 98b1ee6c6dc34406993d9973bbb97981a5bceb896a08dcf37d8b84993e8d8a8f
+    - path: internal/nvidia/sys/cuda.go
+      input_hash: de0897945e323debd3913aded02c2f55d8c311b1e02460967bdf855e1f776e6f
+    - path: internal/nvidia/sys/cuvid.go
+      input_hash: 472eb8c814a8f33b9d926ce95598927be5c4e88b5984e6896f227674b88ef8e3
+    - path: internal/nvidia/sys/nvenc.go
+      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+    - path: internal/nvidia/sys/sys_test.go
+      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
   hardware-decode:
     state: not_run
     method: integration
@@ -246,11 +279,11 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 79a80fbcec1b94fa8eb92999933e6f767a9c690be9d5379390e1d15cc56482db
+      input_hash: d64ad2716a7b85081f02a2216a1c621be1f420d45f3a34f74933cdacf98c43f2
     - path: internal/nvidia/backend.go
-      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
     - path: internal/nvidia/device.go
-      input_hash: 7b248f20a22c2a5c5823ae4280f77ad579176a1f8e0b321353ef6e37f0783276
+      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
   hardware-encode:
     state: not_run
     method: integration
@@ -264,9 +297,9 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 3aaed75e93591292e848bdb2e31e83a2e0578d371a8c522500b64acc23afd0b2
+      input_hash: 6853d4aa41505e51a6cc30768b1c77db07ae97edbd74a36f65ad8cf6bf7178b3
     - path: internal/nvidia/backend.go
-      input_hash: fa24a249390cb96e40b62bd23c3612d293fedfabec854242addad428580e03dd
+      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
 history:
   researched-2026-10-08:
     summary: Backend landscape entry written from NVIDIA documentation (libraries, API model, session
@@ -275,3 +308,7 @@ history:
     summary: Linux backend implemented in internal/nvidia with purego (milestone:linux-nvidia-h264-hevc);
       lifecycle moved to active; capabilities implemented with inferred authority until the hardware
       run.
+  windows-loader-2026-10-09:
+    summary: The backend was extended to windows/amd64 (milestone:windows-nvidia-nvdec-nvenc) by a
+      per-platform loader and a platform-sized unsigned long; registered before Media Foundation.
+      Unverified on Windows.

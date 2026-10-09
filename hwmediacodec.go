@@ -9,25 +9,32 @@
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
-// Silicon) through VideoToolbox, on Windows (amd64 and arm64) through Media
-// Foundation (decoding with the Microsoft decoder transforms accelerated by
-// Direct3D 11, encoding with the vendor's hardware encoder transforms), and
-// on Linux through NVDEC/NVENC (NVIDIA) and Intel VPL (Intel GPUs with a VPL
-// or Media SDK runtime); VA-API on Linux (AMD Mesa and Intel drivers) covers
-// H.264 decoding and encoding. Raw frames are NV12, RGBA or BGRA in CPU
-// memory (NV12 only on VA-API, Intel VPL and Media Foundation for now).
+// Silicon) through VideoToolbox, on Linux and Windows (amd64) with the NVIDIA
+// driver through NVDEC and NVENC, on Linux with an Intel GPU through Intel
+// VPL (a VPL or Media SDK runtime), and on Windows (amd64 and arm64) through
+// Media Foundation (decoding with the Microsoft decoder transforms
+// accelerated by Direct3D 11, encoding with the vendor's hardware encoder
+// transforms); H.264 decoding and encoding on Linux through VA-API (AMD Mesa
+// and Intel drivers). Where the NVIDIA driver is installed its backend is
+// tried first. Raw frames are NV12, RGBA or BGRA in CPU memory (decoders
+// return NV12 only on VA-API, NVDEC, Intel VPL and Media Foundation for now,
+// and the VA-API, Intel VPL and Media Foundation encoders take NV12 only).
 // Decoded frames are returned in display order (see NewDecoder and
 // WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
-// natively, so WithDecodeOrder has no effect on them). The separate module
-// github.com/shibukawa/hwmediacodec/ebitenvideo plays streams in Ebitengine.
+// natively, so WithDecodeOrder has no effect on those backends).
+// The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
+// streams in Ebitengine.
 //
 // On Linux the VA-API backend opens the first usable DRM render node and the
 // Intel VPL backend the first Intel one; set HWMEDIACODEC_VAAPI_DEVICE or
-// HWMEDIACODEC_VPL_DEVICE to a /dev/dri/renderD* path to choose a GPU. When
-// several backends can serve a request the first registered one wins (on
-// Linux: nvidia, vpl, vaapi); set HWMEDIACODEC_BACKENDS to a comma-separated
-// list of backend names, for example "vaapi" or "vaapi,vpl", to restrict and
-// reorder them.
+// HWMEDIACODEC_VPL_DEVICE to a /dev/dri/renderD* path to choose a GPU.
+// The NVIDIA backend uses CUDA device 0; set HWMEDIACODEC_NVIDIA_DEVICE to
+// another device ordinal on machines with several NVIDIA GPUs.
+//
+// When several backends can serve a request the first registered one wins
+// (on Linux: nvidia, vpl, vaapi; on Windows: nvidia, mediafoundation); set
+// HWMEDIACODEC_BACKENDS to a comma-separated list of backend names, for
+// example "vaapi" or "vaapi,vpl", to restrict and reorder them.
 //
 // # Decoding
 //

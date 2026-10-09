@@ -54,16 +54,16 @@ func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction)
 	return false
 }
 
-// servingBackend names the backend NewDecoder or NewEncoder would pick for
-// c: the first one in Probe's list, which follows the backend order.
-func servingBackend(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) string {
+// decodeBackend names the backend that serves hardware decoding of c: the
+// first one Probe lists, which is the one NewDecoder tries first.
+func decodeBackend(t *testing.T, c hwmediacodec.Codec) string {
 	t.Helper()
 	caps, err := hwmediacodec.Probe(context.Background())
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
 	for _, cap := range caps {
-		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
+		if cap.Codec == c && cap.Direction == hwmediacodec.Decode && cap.Hardware {
 			return cap.Backend
 		}
 	}
@@ -243,11 +243,11 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 // the hardware produces them: the same set of frames, not in display order.
 func TestDecodeOrderOption(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.H264)
-	if runtime.GOOS == "windows" {
-		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on Windows")
-	}
-	if b := servingBackend(t, hwmediacodec.H264, hwmediacodec.Decode); b == "vpl" {
-		t.Skip("the Intel VPL decoder reorders natively; WithDecodeOrder has no effect on it")
+	switch decodeBackend(t, hwmediacodec.H264) {
+	case "mediafoundation":
+		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on that backend")
+	case "vpl":
+		t.Skip("the Intel VPL decoder reorders natively; WithDecodeOrder has no effect on that backend")
 	}
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)

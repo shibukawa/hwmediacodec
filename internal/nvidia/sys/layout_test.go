@@ -5,19 +5,28 @@ import (
 	"unsafe"
 )
 
+// layoutCheck compares one size or field offset with the value a C compiler
+// reports.
+type layoutCheck struct {
+	name string
+	got  uintptr
+	want uintptr
+}
+
 // The expected values were printed by a C program (offsetof/sizeof)
 // compiled against nv-codec-headers n11.1.5.3 (dynlink_cuda.h,
 // dynlink_cuviddec.h, dynlink_nvcuvid.h, nvEncodeAPI.h) and cross-checked
 // with clang -fsyntax-only static assertions for x86_64-linux-gnu and
-// aarch64-linux-gnu; both targets agree on every value.
+// aarch64-linux-gnu; both targets agree on every value. Windows x64
+// (x86_64-w64-mingw32-gcc and clang --target=x86_64-pc-windows-msvc) agrees
+// with them too, except for the two structures with unsigned long fields,
+// whose expectations live in ulongLayoutChecks per ABI.
 func TestStructLayouts(t *testing.T) {
 	var mc Memcpy2D
 	var vf VideoFormat
 	var pp ParserParams
-	var sp SourceDataPacket
 	var di ParserDispInfo
 	var dc DecodeCaps
-	var ci DecodeCreateInfo
 	var dp DecodePicParams
 	var pr ProcParams
 	var ds GetDecodeStatus
@@ -46,11 +55,7 @@ func TestStructLayouts(t *testing.T) {
 	var os OpenEncodeSessionExParams
 	var fl FunctionList
 
-	checks := []struct {
-		name string
-		got  uintptr
-		want uintptr
-	}{
+	checks := []layoutCheck{
 		{"sizeof CUDA_MEMCPY2D", unsafe.Sizeof(mc), 128},
 		{"CUDA_MEMCPY2D.srcMemoryType", unsafe.Offsetof(mc.SrcMemoryType), 16},
 		{"CUDA_MEMCPY2D.srcHost", unsafe.Offsetof(mc.SrcHost), 24},
@@ -88,11 +93,6 @@ func TestStructLayouts(t *testing.T) {
 		{"CUVIDPARSERPARAMS.pvReserved2", unsafe.Offsetof(pp.Reserved2), 80},
 		{"CUVIDPARSERPARAMS.pExtVideoInfo", unsafe.Offsetof(pp.ExtVideoInfo), 128},
 
-		{"sizeof CUVIDSOURCEDATAPACKET", unsafe.Sizeof(sp), 32},
-		{"CUVIDSOURCEDATAPACKET.payload_size", unsafe.Offsetof(sp.PayloadSize), 8},
-		{"CUVIDSOURCEDATAPACKET.payload", unsafe.Offsetof(sp.Payload), 16},
-		{"CUVIDSOURCEDATAPACKET.timestamp", unsafe.Offsetof(sp.Timestamp), 24},
-
 		{"sizeof CUVIDPARSERDISPINFO", unsafe.Sizeof(di), 24},
 		{"CUVIDPARSERDISPINFO.timestamp", unsafe.Offsetof(di.Timestamp), 16},
 
@@ -109,27 +109,6 @@ func TestStructLayouts(t *testing.T) {
 		{"CUVIDDECODECAPS.bIsHistogramSupported", unsafe.Offsetof(dc.IsHistogramSupported), 44},
 		{"CUVIDDECODECAPS.nMaxHistogramBins", unsafe.Offsetof(dc.MaxHistogramBins), 46},
 		{"CUVIDDECODECAPS.reserved3", unsafe.Offsetof(dc.Reserved3), 48},
-
-		{"sizeof CUVIDDECODECREATEINFO", unsafe.Sizeof(ci), 176},
-		{"CUVIDDECODECREATEINFO.ulNumDecodeSurfaces", unsafe.Offsetof(ci.NumDecodeSurfaces), 16},
-		{"CUVIDDECODECREATEINFO.CodecType", unsafe.Offsetof(ci.CodecType), 24},
-		{"CUVIDDECODECREATEINFO.ChromaFormat", unsafe.Offsetof(ci.ChromaFormat), 28},
-		{"CUVIDDECODECREATEINFO.ulCreationFlags", unsafe.Offsetof(ci.CreationFlags), 32},
-		{"CUVIDDECODECREATEINFO.bitDepthMinus8", unsafe.Offsetof(ci.BitDepthMinus8), 40},
-		{"CUVIDDECODECREATEINFO.ulIntraDecodeOnly", unsafe.Offsetof(ci.IntraDecodeOnly), 48},
-		{"CUVIDDECODECREATEINFO.ulMaxWidth", unsafe.Offsetof(ci.MaxWidth), 56},
-		{"CUVIDDECODECREATEINFO.ulMaxHeight", unsafe.Offsetof(ci.MaxHeight), 64},
-		{"CUVIDDECODECREATEINFO.Reserved1", unsafe.Offsetof(ci.Reserved1), 72},
-		{"CUVIDDECODECREATEINFO.display_area", unsafe.Offsetof(ci.DisplayArea), 80},
-		{"CUVIDDECODECREATEINFO.OutputFormat", unsafe.Offsetof(ci.OutputFormat), 88},
-		{"CUVIDDECODECREATEINFO.DeinterlaceMode", unsafe.Offsetof(ci.DeinterlaceMode), 92},
-		{"CUVIDDECODECREATEINFO.ulTargetWidth", unsafe.Offsetof(ci.TargetWidth), 96},
-		{"CUVIDDECODECREATEINFO.ulTargetHeight", unsafe.Offsetof(ci.TargetHeight), 104},
-		{"CUVIDDECODECREATEINFO.ulNumOutputSurfaces", unsafe.Offsetof(ci.NumOutputSurfaces), 112},
-		{"CUVIDDECODECREATEINFO.vidLock", unsafe.Offsetof(ci.VidLock), 120},
-		{"CUVIDDECODECREATEINFO.target_rect", unsafe.Offsetof(ci.TargetRect), 128},
-		{"CUVIDDECODECREATEINFO.enableHistogram", unsafe.Offsetof(ci.EnableHistogram), 136},
-		{"CUVIDDECODECREATEINFO.Reserved2", unsafe.Offsetof(ci.Reserved2), 144},
 
 		{"sizeof CUVIDPICPARAMS", unsafe.Sizeof(dp), 4280},
 		{"CUVIDPICPARAMS.CurrPicIdx", unsafe.Offsetof(dp.CurrPicIdx), 8},
@@ -357,7 +336,7 @@ func TestStructLayouts(t *testing.T) {
 		{"FUNCTION_LIST.nvEncGetSequenceParamEx", unsafe.Offsetof(fl.GetSequenceParamEx), 328},
 		{"FUNCTION_LIST.reserved2", unsafe.Offsetof(fl.Reserved2), 336},
 	}
-	for _, c := range checks {
+	for _, c := range append(checks, ulongLayoutChecks()...) {
 		if c.got != c.want {
 			t.Errorf("%s: got %d want %d", c.name, c.got, c.want)
 		}

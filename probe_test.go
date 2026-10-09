@@ -50,9 +50,11 @@ func TestProbe(t *testing.T) {
 			}
 		}
 	case runtime.GOOS == "windows" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64"):
-		// Hardware depends on the machine; only the backend identity is fixed.
+		// Hardware depends on the machine; only the backend identity is
+		// fixed. The NVIDIA backend exists on amd64 only.
 		for _, c := range caps {
-			if c.Backend != "mediafoundation" || !c.Hardware {
+			nvidia := c.Backend == "nvidia" && runtime.GOARCH == "amd64"
+			if (c.Backend != "mediafoundation" && !nvidia) || !c.Hardware {
 				t.Errorf("unexpected capability on windows: %+v", c)
 			}
 		}

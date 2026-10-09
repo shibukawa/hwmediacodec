@@ -1,10 +1,12 @@
-//go:build linux
+//go:build linux || (windows && amd64)
 
-// Package nvidia implements the NVIDIA backend on Linux: decoding through
-// NVDEC (the cuvid parser and decoder in libnvcuvid) and encoding through
-// NVENC (libnvidia-encode), both on top of the CUDA driver API in libcuda.
-// The three libraries are loaded at run time with purego; a machine without
-// the proprietary driver yields no capabilities and ErrUnsupported.
+// Package nvidia implements the NVIDIA backend on Linux and on Windows
+// (amd64): decoding through NVDEC (the cuvid parser and decoder in
+// libnvcuvid / nvcuvid.dll) and encoding through NVENC (libnvidia-encode /
+// nvEncodeAPI64.dll), both on top of the CUDA driver API in libcuda /
+// nvcuda.dll. The three libraries are loaded at run time and called through
+// purego; a machine without the proprietary driver yields no capabilities
+// and ErrUnsupported.
 //
 // NVDEC is a full decoder: the driver's parser handles parameter sets,
 // picture boundaries and reference management, so unlike the VA-API
