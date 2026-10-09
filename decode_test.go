@@ -243,8 +243,11 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 // the hardware produces them: the same set of frames, not in display order.
 func TestDecodeOrderOption(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.H264)
-	if decodeBackend(t, hwmediacodec.H264) == "mediafoundation" {
+	switch decodeBackend(t, hwmediacodec.H264) {
+	case "mediafoundation":
 		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on that backend")
+	case "vpl":
+		t.Skip("the Intel VPL decoder reorders natively; WithDecodeOrder has no effect on that backend")
 	}
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)

@@ -172,9 +172,9 @@ verification:
         (2026-10-09; re-run after the Windows slice)
     basis:
     - path: backends_linux.go
-      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
+      input_hash: 1b87aae2a21fe6d756e32a80481a97ca51faa2fbb2fdbb88b969dc9785f3064b
     - path: probe_test.go
-      input_hash: f8de6961b1d5b753ff9b03aae2e11d0d236d829292b6c20ab45f2f8e04e00c12
+      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
     - path: internal/nvidia/backend.go
       input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
     - path: internal/nvidia/device.go
@@ -202,7 +202,7 @@ verification:
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: decode_test.go
-      input_hash: 4daf67d3508f482e362b5eaacfa636762d808b3e5fc9e750a272662e5d2efcd3
+      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
   hardware-encode:
     state: not_run
     method: integration
@@ -240,7 +240,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_linux.go
-      input_hash: e0f093954ab0fc9dc38c4bea894e6d2a661726ab9d7f1e4a634db710e64f3b59
+      input_hash: 1b87aae2a21fe6d756e32a80481a97ca51faa2fbb2fdbb88b969dc9785f3064b
     - path: backends_other.go
       input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
   host-suite:
@@ -256,9 +256,9 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: f8de6961b1d5b753ff9b03aae2e11d0d236d829292b6c20ab45f2f8e04e00c12
+      input_hash: abb890a84523703128359ac0f61efc83fd01def08203bd1184d2236eaceac8a2
     - path: decode_test.go
-      input_hash: 4daf67d3508f482e362b5eaacfa636762d808b3e5fc9e750a272662e5d2efcd3
+      input_hash: ee8d76b744c5a76acf92812e8237a4407712a98792acb16eff47c6506afa5f68
     - path: encode_test.go
       input_hash: c416a943436d99051e74f4298b76bb875cc5fc769a0cc2c1504d69a2b7d7d5e7
 facts:

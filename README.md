@@ -3,8 +3,8 @@
 Hardware video decoding and encoding from Go, without cgo.
 
 The library loads the operating system's codec engines at run time
-(VideoToolbox on macOS, VA-API on Linux, Media Foundation on Windows and
-NVIDIA's NVDEC/NVENC on both Linux and Windows today; Intel VPL is planned)
+(VideoToolbox on macOS, NVDEC/NVENC, Intel VPL and VA-API on Linux, and
+NVDEC/NVENC and Media Foundation on Windows)
 through [purego](https://github.com/ebitengine/purego) and, for Media
 Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
@@ -16,7 +16,7 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264; display order; NV12 in CPU memory | H.264; NV12 in, Annex-B out |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Linux | Intel VPL | planned | planned |
+| Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC; display order; NV12 in CPU memory; **not yet verified on hardware** | H.264, HEVC; NV12 in, Annex-B out; **not yet verified on hardware** |
 
@@ -47,11 +47,12 @@ Known limitations:
   RGBA as a destination. Untagged streams are converted with the matrix
   VideoToolbox assumes (BT.601 for standard definition in our tests).
   RGB input is converted with BT.709 and the stream is tagged accordingly.
-  Alpha is 255 on output and ignored on input. The VA-API and Media
-  Foundation backends offer NV12 only for now; requesting RGBA or BGRA there
-  reports `ErrUnsupported`.
+  Alpha is 255 on output and ignored on input. The VA-API, Intel VPL and
+  Media Foundation backends offer NV12 only for now; requesting RGBA or BGRA
+  there reports `ErrUnsupported`.
 - On Windows the display order comes from the Media Foundation decoder
-  itself, so `WithDecodeOrder` has no effect there.
+  itself, and on Linux with Intel VPL from the VPL runtime, so
+  `WithDecodeOrder` has no effect there.
 - Input and output are Annex-B, one access unit per `Packet`; use
   `annexb.Reader` to split a raw elementary stream. Containers (MP4, MKV, TS)
   are not parsed. AVCC/HVCC output is not offered yet.
@@ -314,6 +315,37 @@ layouts are verified against the SDK headers with clang and every symbol binds
 against driver 535 in a container, but no NVIDIA hardware conformance run has
 happened yet.
 
+The Intel VPL backend (`internal/vpl`) loads the VPL dispatcher
+`libvpl.so.2`, which finds the GPU runtime: `libmfx-gen.so.1.2` for Tiger
+Lake (Gen12) and newer including Arc, or the legacy Media SDK runtime
+`libmfxhw64.so.1` for older GPUs when it is installed. The runtime renders
+through VA-API, so `libva2`, `libva-drm2` and the iHD driver
+(`intel-media-va-driver`) are needed as well; on Debian and Ubuntu the
+packages are `libvpl2` and `libmfx-gen1.2`. VPL is a full codec API: the
+runtime parses the bitstream and returns frames in display order, and its
+encoders write complete access units, so H.264 and HEVC both work and no
+slice-level bookkeeping runs in Go. Decoding yields 8-bit 4:2:0 NV12 (10-bit
+streams report `ErrUnsupported`), copied to CPU memory per picture; field
+pairs of interlaced streams come back as one woven frame. Encoding takes
+NV12 with even dimensions and supports B-frames (two consecutive, when the
+GPU has them), VBR/CBR, constant QP for `WithQuality` (and QP 26 without a
+bitrate or quality), low latency (no B-frames) and profiles; keyframes are
+IDR pictures with in-band VPS/SPS/PPS, placed by `WithKeyframeInterval` and
+`Frame.ForceKeyframe` only. The backend opens the first render node that
+belongs to an Intel device; set `HWMEDIACODEC_VPL_DEVICE` to a render node
+path to choose one. It is registered before VA-API, so on an Intel GPU with
+a VPL runtime it serves the requests, and VA-API takes over when the runtime
+is missing or rejects a configuration. Like the NVIDIA backend it was written
+on a Mac: struct layouts are verified against the VPL headers with gcc, every
+symbol binds against libvpl 2.8 and the dispatcher accepts the session filter
+in a container, but no run on Intel hardware has happened yet.
+
+`HWMEDIACODEC_BACKENDS` restricts and orders the backends, as a
+comma-separated list of the names `Probe` reports: `HWMEDIACODEC_BACKENDS=vaapi`
+bypasses Intel VPL to exercise the VA-API backend on the same GPU, and
+`HWMEDIACODEC_BACKENDS=vpl,nvidia` prefers the integrated Intel GPU on a
+machine that also has an NVIDIA card. Unknown names are ignored.
+
 The VA-API backend opens the first DRM render node (`/dev/dri/renderD128`
 and up) that libva can initialise. Set `HWMEDIACODEC_VAAPI_DEVICE` to a
 render node path to pick a GPU on multi-GPU machines. The user needs read
@@ -330,8 +362,8 @@ and header writer are checked against ffmpeg's own view of the stream
 with ffmpeg; the reorder logic is also checked without hardware, against
 the presentation timestamps ffmpeg writes into an MP4 of the same stream.
 The decode and encode conformance tests run where `Probe` reports a
-hardware engine (Apple Silicon, Linux with a VA-API or NVIDIA driver, or
-Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
+hardware engine (Apple Silicon, Linux with an NVIDIA, Intel VPL or VA-API
+driver, or Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
 streams must match ffmpeg's output frame for frame in display order. RGB
 output and input are compared to ffmpeg's conversion by block-averaged PSNR
 (the two converters interpolate chroma differently) and RGBA must be the
@@ -345,6 +377,7 @@ them.
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
+HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
 ```
 
