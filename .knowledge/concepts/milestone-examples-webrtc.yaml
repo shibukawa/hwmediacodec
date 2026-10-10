@@ -97,7 +97,7 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: capture/recorder.go
-      input_hash: f11ec3e5cf44a3d0548988f3f1b6994b9c30a3578ba04054eb6a650d73b452dc
+      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
     - path: capture/recorder_test.go
       input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
   webrtc-live-run:

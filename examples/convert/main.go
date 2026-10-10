@@ -181,6 +181,67 @@ func (p *passthrough) copyUpTo(t time.Duration) error {
 	return nil
 }
 
+// interleaved writes the video packets and keeps the other tracks
+// interleaved up to the video position.
+type interleaved struct {
+	video  *mp4.VideoWriter
+	scale  time.Duration // video time scale
+	others []*passthrough
+}
+
+func (w *interleaved) WritePacket(p hwmediacodec.Packet) error {
+	if err := w.video.WritePacket(p); err != nil {
+		return err
+	}
+	for _, pt := range w.others {
+		if err := pt.copyUpTo(time.Duration(p.DTS) * time.Second / w.scale); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// encoding is the frame writer of the conversion: it opens the encoder
+// for the size of the first decoded picture and reports progress.
+type encoding struct {
+	o      options
+	scale  uint32
+	fps    float64
+	dst    hwmediacodec.PacketWriter
+	enc    hwmediacodec.Encoder
+	w      *hwmediacodec.EncodeWriter
+	width  int
+	height int
+	frames int
+	total  int
+	start  time.Time
+	last   time.Time
+	out    io.Writer
+}
+
+func (e *encoding) WriteFrame(ctx context.Context, f *hwmediacodec.Frame) error {
+	if e.enc == nil {
+		e.width, e.height = f.Width, f.Height
+		enc, err := hwmediacodec.NewEncoder(ctx, e.o.codec, e.width, e.height, e.o.encoderOptions(e.scale, e.fps)...)
+		if err != nil {
+			return fmt.Errorf("open %s encoder: %w", e.o.codec, err)
+		}
+		e.enc, e.w = enc, hwmediacodec.NewEncodeWriter(enc, e.dst)
+	}
+	if f.Width != e.width || f.Height != e.height {
+		return fmt.Errorf("picture size changed from %dx%d to %dx%d", e.width, e.height, f.Width, f.Height)
+	}
+	if err := e.w.WriteFrame(ctx, f); err != nil {
+		return err
+	}
+	e.frames++
+	if now := time.Now(); now.Sub(e.last) >= time.Second {
+		e.last = now
+		fmt.Fprintf(e.out, "\r%d/%d frames, %.0f fps", e.frames, e.total, float64(e.frames)/now.Sub(e.start).Seconds())
+	}
+	return nil
+}
+
 func run(ctx context.Context, o options, inPath, outPath string, progress io.Writer) error {
 	in, err := mp4.Open(inPath)
 	if err != nil {
@@ -201,139 +262,48 @@ func run(ctx context.Context, o options, inPath, outPath string, progress io.Wri
 	if err != nil {
 		return err
 	}
-	var others []*passthrough
+	dst := &interleaved{video: vw, scale: time.Duration(video.TimeScale)}
 	for _, t := range in.Others() {
-		others = append(others, &passthrough{src: t, dst: out.AddPassthroughTrack(t)})
+		dst.others = append(dst.others, &passthrough{src: t, dst: out.AddPassthroughTrack(t)})
 	}
 
-	decOpts := []hwmediacodec.DecoderOption{hwmediacodec.WithTimeScale(int32(video.TimeScale))}
+	// The whole conversion: packets from the track into the decoder, its
+	// frames into the encoder, the encoder's packets into the muxer.
+	src := video.PacketSource()
+	decOpts := []hwmediacodec.DecoderOption{hwmediacodec.WithTimeScale(src.TimeScale())}
 	if o.software {
 		decOpts = append(decOpts, hwmediacodec.WithSoftwareFallback())
 	}
-	dec, err := hwmediacodec.NewDecoder(ctx, video.Codec, decOpts...)
+	dec, err := hwmediacodec.NewDecoder(ctx, src.Codec(), decOpts...)
 	if err != nil {
 		return fmt.Errorf("open %s decoder: %w", video.Codec, err)
 	}
 	defer dec.Close()
-
-	var enc hwmediacodec.Encoder
+	enc := &encoding{o: o, scale: video.TimeScale, fps: video.FrameRate(), dst: dst,
+		total: video.SampleCount(), start: time.Now(), last: time.Now(), out: progress}
 	defer func() {
-		if enc != nil {
-			enc.Close()
+		if enc.enc != nil {
+			enc.enc.Close()
 		}
 	}()
-
-	frames, start, lastReport := 0, time.Now(), time.Now()
-	var width, height int
-	var lastDTS int64 = -1
-
-	// drainEncoder moves finished packets to the muxer and keeps the other
-	// tracks interleaved up to the video position.
-	drainEncoder := func() error {
-		for {
-			p, err := enc.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := vw.WritePacket(p); err != nil {
-				return err
-			}
-			lastDTS = p.DTS
-			for _, pt := range others {
-				if err := pt.copyUpTo(video.TimeOf(p.DTS)); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	encodeFrame := func(f *hwmediacodec.Frame) error {
-		defer f.Release()
-		if enc == nil {
-			width, height = f.Width, f.Height
-			e, err := hwmediacodec.NewEncoder(ctx, o.codec, width, height, o.encoderOptions(video.TimeScale, video.FrameRate())...)
-			if err != nil {
-				return fmt.Errorf("open %s encoder: %w", o.codec, err)
-			}
-			enc = e
-		}
-		if f.Width != width || f.Height != height {
-			return fmt.Errorf("picture size changed from %dx%d to %dx%d", width, height, f.Width, f.Height)
-		}
-		if err := enc.Send(ctx, f); err != nil {
-			return err
-		}
-		frames++
-		if now := time.Now(); now.Sub(lastReport) >= time.Second {
-			lastReport = now
-			fmt.Fprintf(progress, "\r%d/%d frames, %.0f fps", frames, video.SampleCount(), float64(frames)/now.Sub(start).Seconds())
-		}
-		return drainEncoder()
-	}
-	drainDecoder := func() error {
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := encodeFrame(f); err != nil {
-				return err
-			}
-		}
-	}
-
-	for i := 0; i < video.SampleCount(); i++ {
-		pkt, err := video.Packet(i)
-		if err != nil {
-			return err
-		}
-		for {
-			err := dec.Send(ctx, pkt)
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				// The decoder's output queue is full (VA-API): make room.
-				if err := drainDecoder(); err != nil {
-					return err
-				}
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("decode sample %d: %w", i, err)
-			}
-			break
-		}
-		if err := drainDecoder(); err != nil {
-			return err
-		}
-	}
-	if err := dec.Flush(ctx); err != nil {
+	if _, err := hwmediacodec.CopyFrames(ctx, enc, hwmediacodec.NewDecodeReader(dec, src)); err != nil {
 		return err
 	}
-	if err := drainDecoder(); err != nil {
-		return err
-	}
-	if enc == nil {
+	if enc.w == nil {
 		return errors.New("the decoder produced no frames")
 	}
-	if err := enc.Flush(ctx); err != nil {
+	if err := enc.w.Flush(ctx); err != nil {
 		return err
 	}
-	if err := drainEncoder(); err != nil {
-		return err
-	}
-	for _, pt := range others {
+	for _, pt := range dst.others {
 		if err := pt.copyUpTo(-1); err != nil {
 			return err
 		}
 	}
-	_ = lastDTS
 	if err := out.Close(); err != nil {
 		return err
 	}
-	fmt.Fprintf(progress, "\r%d frames in %.1fs (%.0f fps)\n", frames, time.Since(start).Seconds(), float64(frames)/time.Since(start).Seconds())
+	elapsed := time.Since(enc.start).Seconds()
+	fmt.Fprintf(progress, "\r%d frames in %.1fs (%.0f fps)\n", enc.frames, elapsed, float64(enc.frames)/elapsed)
 	return nil
 }

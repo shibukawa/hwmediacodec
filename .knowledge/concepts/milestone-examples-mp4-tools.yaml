@@ -135,7 +135,7 @@ verification:
         quality 0.7 with B-frames; run 2026-10-09
     basis:
     - path: examples/convert/main.go
-      input_hash: 1afa2df16639c922f1539e3688ce5625a13a2c2ce2a7fa93a4a4e7faee72dbdf
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
     - path: mediacontainer/mp4/mux.go
       input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
     - path: mediacontainer/mp4/demux.go
@@ -158,7 +158,7 @@ verification:
         duration 10.000 s, AAC 469 packets copied, ffmpeg decodes without errors, PSNR 47.1 dB
     basis:
     - path: examples/convert/main.go
-      input_hash: 1afa2df16639c922f1539e3688ce5625a13a2c2ce2a7fa93a4a4e7faee72dbdf
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
   thumbnails-test:
     state: passed
     method: integration
@@ -175,7 +175,7 @@ verification:
         PSNR vs ffmpeg's frames, -every 1.5s gives two files, -width 80 gives 80x60; run 2026-10-09
     basis:
     - path: examples/thumbnails/main.go
-      input_hash: f108ce049c301a3902d1a33fadf04384b6411eb63acb07a7c1084f0371f8851f
+      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: mediacontainer/mp4/demux.go

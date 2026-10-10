@@ -15,10 +15,8 @@ package capture
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"image"
-	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -203,21 +201,10 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 
 func (r *Recorder) run(ctx context.Context) {
 	defer close(r.done)
-	drain := func() error {
-		for {
-			p, err := r.enc.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			r.encoded.Add(1)
-			if err := r.sink.WritePacket(p); err != nil {
-				return err
-			}
-		}
-	}
+	w := hwmediacodec.NewEncodeWriter(r.enc, hwmediacodec.PacketWriterFunc(func(p hwmediacodec.Packet) error {
+		r.encoded.Add(1)
+		return r.sink.WritePacket(p)
+	}))
 	for c := range r.frames {
 		if r.Err() != nil {
 			r.free <- c.pix
@@ -228,19 +215,14 @@ func (r *Recorder) run(ctx context.Context) {
 			Planes: [][]byte{c.pix}, Strides: []int{4 * r.width}, PTS: c.pts,
 			ForceKeyframe: c.key,
 		}
-		err := r.enc.Send(ctx, f) // the frame is copied before Send returns
+		err := w.WriteFrame(ctx, f) // the frame is copied before the encoder returns
 		r.free <- c.pix
-		if err == nil {
-			err = drain()
-		}
 		if err != nil {
 			r.fail(err)
 		}
 	}
 	if r.Err() == nil {
-		if err := r.enc.Flush(ctx); err != nil {
-			r.fail(err)
-		} else if err := drain(); err != nil {
+		if err := w.Flush(ctx); err != nil {
 			r.fail(err)
 		}
 	}

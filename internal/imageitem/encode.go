@@ -135,32 +135,18 @@ func encodeTiles(tiles []*image.RGBA, o Options) ([]codedItem, error) {
 	defer enc.Close()
 
 	var packets []hwmediacodec.Packet
-	drain := func() error {
-		for {
-			p, err := enc.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			packets = append(packets, p)
-		}
-	}
+	ew := hwmediacodec.NewEncodeWriter(enc, hwmediacodec.PacketWriterFunc(func(p hwmediacodec.Packet) error {
+		packets = append(packets, p)
+		return nil
+	}))
 	for i, t := range tiles {
 		f := hwmediacodec.RGBAFrame(t, int64(i)*int64(hwmediacodec.DefaultTimeScale))
 		f.ForceKeyframe = true
-		if err := enc.Send(ctx, f); err != nil {
-			return nil, err
-		}
-		if err := drain(); err != nil {
+		if err := ew.WriteFrame(ctx, f); err != nil {
 			return nil, err
 		}
 	}
-	if err := enc.Flush(ctx); err != nil {
-		return nil, err
-	}
-	if err := drain(); err != nil {
+	if err := ew.Flush(ctx); err != nil {
 		return nil, err
 	}
 	if len(packets) != len(tiles) {

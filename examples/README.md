@@ -61,10 +61,14 @@ Flags: `-codec h264|hevc`, `-bitrate 6M|2500k` (VBR, `-cbr` for constant),
 `-profile baseline|main|high`, `-software` to allow the OS software codec,
 `-q` to silence progress.
 
-The pipeline is decoder → encoder with the MP4 sample times as PTS:
-`WithTimeScale(track.TimeScale)` on both ends means the frame PTS the
-decoder returns are the sample times, the encoder's packets come back with
-PTS and DTS in that same unit, and the muxer stores them unchanged. The
+The pipeline is `hwmediacodec.CopyFrames` from a `DecodeReader` over the
+track's `PacketSource` into an `EncodeWriter` over the muxer's video track
+(see "Readers, writers and pipelines" in the main README); the sample adds
+a frame writer that opens the encoder for the size of the first picture
+and a packet writer that interleaves the copied tracks. The presentation
+times are the PTS: `WithTimeScale(track.TimeScale)` on both ends means the
+frame PTS the decoder returns are the packet times, the encoder's packets
+come back with PTS and DTS in that same unit, and the muxer stores them. The
 decoder runs in display order (the default), which is the order an encoder
 wants its input in. Audio and any other track are copied sample by sample,
 interleaved with the video by time. On an M3, 1080p H.264 with B-frames
@@ -81,7 +85,7 @@ go run ./thumbnails -all -format png movie.mp4
 Only sync samples go to the decoder. An IDR / IRAP / AV1 keyframe decodes
 without any other picture, so a two-hour file costs one decode per
 thumbnail. The decoder is opened with `WithOutputFormat(RGBA)`, whose
-planes map straight onto `image.RGBA`, and `WithDecodeOrder()`, so that
+frames `Frame.RGBAImage()` turns into an `image.RGBA`, and `WithDecodeOrder()`, so that
 each keyframe comes out immediately instead of waiting in the reorder
 buffer. `-every` picks the keyframe at or before each instant; `-all`
 takes every keyframe; `-width` downsamples with a box filter. File names

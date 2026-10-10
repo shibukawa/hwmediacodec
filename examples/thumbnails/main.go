@@ -143,47 +143,19 @@ func run(ctx context.Context, o options, path string) ([]string, error) {
 		}
 		return err
 	}
-	drain := func() error {
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := save(f); err != nil {
-				return err
-			}
+	// Only the chosen keyframes go into the decoder.
+	frames := hwmediacodec.NewDecodeReader(dec, &keyframes{v: video, picks: pick(video, o)})
+	for {
+		f, err := frames.ReadFrame(ctx)
+		if err == io.EOF {
+			break
 		}
-	}
-	for _, i := range pick(video, o) {
-		pkt, err := video.Packet(i)
 		if err != nil {
 			return nil, err
 		}
-		for {
-			err := dec.Send(ctx, pkt)
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				if err := drain(); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			if err != nil {
-				return nil, fmt.Errorf("decode keyframe %d: %w", i, err)
-			}
-			break
-		}
-		if err := drain(); err != nil {
+		if err := save(f); err != nil {
 			return nil, err
 		}
-	}
-	if err := dec.Flush(ctx); err != nil {
-		return nil, err
-	}
-	if err := drain(); err != nil {
-		return nil, err
 	}
 	return files, nil
 }
@@ -192,4 +164,28 @@ func run(ctx context.Context, o options, path string) ([]string, error) {
 func stamp(d time.Duration) string {
 	ms := d.Milliseconds()
 	return fmt.Sprintf("%02d-%02d-%02d.%03d", ms/3600000, ms/60000%60, ms/1000%60, ms%1000)
+}
+
+// keyframes reads the chosen samples of a track as packets, with the
+// sample times as stored.
+type keyframes struct {
+	v     *mp4.VideoTrack
+	picks []int
+	next  int
+}
+
+func (k *keyframes) Codec() hwmediacodec.Codec { return k.v.Codec }
+func (k *keyframes) TimeScale() int32          { return int32(k.v.TimeScale) }
+
+func (k *keyframes) ReadPacket() (hwmediacodec.Packet, error) {
+	if k.next >= len(k.picks) {
+		return hwmediacodec.Packet{}, io.EOF
+	}
+	i := k.picks[k.next]
+	k.next++
+	p, err := k.v.Packet(i)
+	if err != nil {
+		return p, fmt.Errorf("keyframe %d: %w", i, err)
+	}
+	return p, nil
 }

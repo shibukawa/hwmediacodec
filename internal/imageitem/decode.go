@@ -636,16 +636,54 @@ func (f *file) packet(it *item) ([]byte, hwmediacodec.Codec, error) {
 	return nil, 0, fmt.Errorf("item %d is a %q, not a coded picture", it.id, it.typ)
 }
 
+// itemReader hands the coded items to the decoder as packets, one
+// keyframe each.
+type itemReader struct {
+	f     *file
+	items []*item
+	codec hwmediacodec.Codec
+	first []byte // the first item's packet, built by load to learn the codec
+	next  int
+}
+
+func (r *itemReader) load() error {
+	var err error
+	r.first, r.codec, err = r.f.packet(r.items[0])
+	return err
+}
+
+func (r *itemReader) Codec() hwmediacodec.Codec { return r.codec }
+func (r *itemReader) TimeScale() int32          { return 1 }
+
+func (r *itemReader) ReadPacket() (hwmediacodec.Packet, error) {
+	if r.next >= len(r.items) {
+		return hwmediacodec.Packet{}, io.EOF
+	}
+	data := r.first
+	if r.next > 0 {
+		var c hwmediacodec.Codec
+		var err error
+		if data, c, err = r.f.packet(r.items[r.next]); err != nil {
+			return hwmediacodec.Packet{}, err
+		} else if c != r.codec {
+			return hwmediacodec.Packet{}, errors.New("tiles use different codecs")
+		}
+	}
+	r.next++
+	return hwmediacodec.Packet{Data: data, PTS: int64(r.next - 1), Keyframe: true}, nil
+}
+
 // decodeCoded decodes items of one codec in order and hands each frame to
 // place (or returns the single frame when place is nil).
 func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) error, opts []hwmediacodec.DecoderOption) (*image.RGBA, hwmediacodec.Codec, error) {
 	if len(items) == 0 {
 		return nil, 0, errors.New("nothing to decode")
 	}
-	first, codec, err := f.packet(items[0])
-	if err != nil {
+	src := &itemReader{f: f, items: items}
+	if err := src.load(); err != nil {
 		return nil, 0, err
 	}
+	codec := src.codec
 	ctx := context.Background()
 	// Decode order: the pictures are all keyframes, and this way each one
 	// comes out as soon as it is decoded instead of waiting in the
@@ -658,7 +696,9 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 	if convert {
 		format = hwmediacodec.NV12
 	}
-	all := append([]hwmediacodec.DecoderOption{hwmediacodec.WithOutputFormat(format), hwmediacodec.WithDecodeOrder()}, opts...)
+	all := append([]hwmediacodec.DecoderOption{
+		hwmediacodec.WithOutputFormat(format), hwmediacodec.WithDecodeOrder(), hwmediacodec.WithTimeScale(src.TimeScale()),
+	}, opts...)
 	dec, err := hwmediacodec.NewDecoder(ctx, codec, all...)
 	if err != nil {
 		return nil, 0, err
@@ -667,63 +707,31 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 
 	var single *image.RGBA
 	got := 0
-	drain := func() error {
-		for {
-			fr, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			var img *image.RGBA
-			if convert {
-				img = nv12Image(fr, colours)
-			} else if img, err = fr.RGBAImage(); err != nil {
-				fr.Release()
-				return err
-			}
-			fr.Release()
-			if place == nil {
-				single = img
-			} else if err := place(got, img); err != nil {
-				return err
-			}
-			got++
-		}
-	}
-	for i, it := range items {
-		pkt := first
-		if i > 0 {
-			var c hwmediacodec.Codec
-			if pkt, c, err = f.packet(it); err != nil {
-				return nil, 0, err
-			} else if c != codec {
-				return nil, 0, errors.New("tiles use different codecs")
-			}
-		}
-		for {
-			err := dec.Send(ctx, hwmediacodec.Packet{Data: pkt, PTS: int64(i) * 90000, Keyframe: true})
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				if err := drain(); err != nil {
-					return nil, 0, err
-				}
-				continue
-			}
-			if err != nil {
-				return nil, 0, fmt.Errorf("decode item %d: %w", it.id, err)
-			}
+	frames := hwmediacodec.NewDecodeReader(dec, src)
+	for {
+		fr, err := frames.ReadFrame(ctx)
+		if err == io.EOF {
 			break
 		}
-		if err := drain(); err != nil {
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode picture %d of %d: %w", got+1, len(items), err)
+		}
+		var img *image.RGBA
+		if convert {
+			img = nv12Image(fr, colours)
+		} else {
+			img, err = fr.RGBAImage()
+		}
+		fr.Release()
+		if err != nil {
 			return nil, 0, err
 		}
-	}
-	if err := dec.Flush(ctx); err != nil {
-		return nil, 0, err
-	}
-	if err := drain(); err != nil {
-		return nil, 0, err
+		if place == nil {
+			single = img
+		} else if err := place(got, img); err != nil {
+			return nil, 0, err
+		}
+		got++
 	}
 	if got != len(items) {
 		return nil, 0, fmt.Errorf("decoded %d pictures for %d items", got, len(items))

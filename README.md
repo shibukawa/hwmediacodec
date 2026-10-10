@@ -337,6 +337,49 @@ layout of each format. `WithDecodeOrder()` returns frames as the hardware
 produces them, which is what a transcoder that keeps the original
 timestamps wants.
 
+## Readers, writers and pipelines
+
+The Send/Receive loops above are written once in the root package, around
+four small interfaces that the other packages implement:
+
+| Interface | Role | Implemented by |
+| --- | --- | --- |
+| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader` |
+| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
+| `FrameReader` | raw frames out | `DecodeReader` (a `Decoder` fed from a `PacketReader`) |
+| `FrameWriter` | raw frames in | `EncodeWriter` (an `Encoder` drained into a `PacketWriter`) |
+
+A transcoder is the four of them in a row:
+
+```go
+src := video.PacketSource()                                   // *mp4.VideoTrack
+dec, _ := hwmediacodec.NewDecoder(ctx, src.Codec(), hwmediacodec.WithTimeScale(src.TimeScale()))
+enc, _ := hwmediacodec.NewEncoder(ctx, hwmediacodec.HEVC, w, h,
+	hwmediacodec.WithTimeScale(src.TimeScale()), hwmediacodec.WithBitrate(6_000_000))
+out := hwmediacodec.NewEncodeWriter(enc, track)               // track: *mp4.VideoWriter
+
+n, err := hwmediacodec.CopyFrames(ctx, out, hwmediacodec.NewDecodeReader(dec, src))
+err = out.Flush(ctx)                                          // the frames the encoder still holds
+```
+
+- `DecodeReader.ReadFrame` returns one frame at a time (release it when
+  done) and `io.EOF` at the end; after `PacketSeeker.SeekKeyframe`, call
+  `Reset` to drop what the decoder still holds.
+- `EncodeWriter.WriteFrame` encodes a frame and writes the packets that
+  became ready; `Flush` ends the stream.
+- `CopyFrames` moves frames between any `FrameReader` and `FrameWriter`,
+  so a filter (a scaler, an overlay) is a type that implements one of them
+  around the other; `examples/convert` opens its encoder that way, for the
+  size of the first decoded picture.
+- `HasHardware(ctx, codec, direction)` tells in advance whether `NewDecoder`
+  or `NewEncoder` can succeed without the software fallback.
+- `Frame.RGBAImage()` copies an RGBA or BGRA frame into an `*image.RGBA`,
+  and `RGBAFrame(img, pts)` wraps an image as encoder input without
+  copying.
+- `annexb.FromLengthPrefixed`, `AppendLengthPrefixed` and `AppendUnit`
+  convert between Annex-B and the length-prefixed samples of MP4 and HEIF
+  (AVCC, HVCC).
+
 ## MP4 files
 
 The codec API stops at the elementary stream: packets in, frames out,
