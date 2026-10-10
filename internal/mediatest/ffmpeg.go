@@ -1,8 +1,9 @@
 // Package mediatest drives ffmpeg, ffprobe and sips as test oracles for
 // the container and image packages: it generates MP4 inputs, inspects
 // outputs and converts pictures. Nothing here is used at run time. The
-// examples module keeps its own copy of the ffmpeg helpers
-// (examples/internal/testutil), since it cannot import this one.
+// other modules of the repository (examples, net/webrtc) use it too: their
+// import paths lie below the module root, which is all the internal rule
+// asks for.
 package mediatest
 
 import (

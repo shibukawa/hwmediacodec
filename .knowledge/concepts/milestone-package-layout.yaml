@@ -25,7 +25,8 @@ constraints:
   renamed the same day.'
 - 'encoding/, mediacontainer/ and image/ are namespace directories without Go files, named after their
   standard-library counterparts where one exists (encoding, image).'
-- 'ebitenvideo and examples remain separate modules because of Ebitengine and pion; both import the new
+- 'ebitenvideo, net/webrtc (added 2026-10-10, milestone:net-webrtc) and examples are separate modules
+  because of Ebitengine and pion; both import the new
   paths and, like the other moves, need a core release before their go.mod can require it.'
 - 'HLS is under net/ (net/hls, first placed at mediacontainer/hls): it is an HTTP delivery protocol on
   top of the mp4 segments, not a container; the author asked for net/hls and net/webrtc.'
@@ -64,9 +65,9 @@ facts:
     encoding: encoding/annexb
     mediacontainer: mediacontainer/mp4, mediacontainer/ivf
     image: image/heif, image/avif
-    net: net/hls
+    net: net/hls (core module), net/webrtc (module of its own)
     capture: capture
-    separate_modules: ebitenvideo, examples
+    separate_modules: ebitenvideo, net/webrtc, examples
   result:
     status: delivered 2026-10-10
 history:

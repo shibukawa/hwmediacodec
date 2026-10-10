@@ -27,12 +27,13 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/net/webrtc"
 )
 
 type game struct {
 	scene *fireworks.Scene
 	rec   *capture.Recorder
-	bc    *Broadcaster
+	bc    *webrtc.Broadcaster
 	url   string
 
 	minimize bool
@@ -81,7 +82,7 @@ func main() {
 		ice = []string{*stun}
 	}
 	var rec *capture.Recorder
-	bc := NewBroadcaster(*fps, ice, func() {
+	bc := webrtc.NewBroadcaster(*fps, ice, func() {
 		if rec != nil {
 			rec.RequestKeyframe()
 		}
@@ -98,7 +99,7 @@ func main() {
 		log.Fatal(err)
 	}
 	go func() {
-		if err := http.ListenAndServe(*addr, bc); err != nil {
+		if err := http.ListenAndServe(*addr, withPage(bc)); err != nil {
 			log.Fatal(err)
 		}
 	}()

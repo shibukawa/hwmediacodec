@@ -6,13 +6,13 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 )
 
 // TestPlaysBundledClip opens the embedded waterfall clip the way main does
 // and drives the player through a seek with Update ticks.
 func TestPlaysBundledClip(t *testing.T) {
-	testutil.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
 	p, closer, name, w, h, err := open("", "h264", 30, []ebitenvideo.Option{ebitenvideo.WithLoop()})
 	if err != nil {
 		t.Fatal(err)

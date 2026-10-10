@@ -71,15 +71,15 @@ verification:
       milestone: examples-webrtc
     test: TestBroadcasterDeliversAccessUnits, TestBroadcasterStartsViewersAtKeyframes
     evidence:
-      path: examples/webrtc/server_test.go
+      path: net/webrtc/broadcaster_test.go
       locator: TestBroadcasterDeliversAccessUnits
       note: no hardware - packets from demuxing ffmpeg-made files, pion on both ends over loopback; run
         2026-10-09
     basis:
-    - path: examples/webrtc/server.go
-      input_hash: 3ba4679c4af13aa4216a65e2c50dda0b5e80e39fe4fdd20a1f4fb0bb516189ef
-    - path: examples/webrtc/server_test.go
-      input_hash: bb3178b7648b266035bc4a6080fbe6e7f60e20c67a310cde0ee11896a0972cc9
+    - path: net/webrtc/broadcaster.go
+      input_hash: 498d259f31413af392fa29d86a086e8ebeb121370c5af6af195a89e316c376b8
+    - path: net/webrtc/broadcaster_test.go
+      input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
   recorder-keyframe-test:
@@ -119,9 +119,9 @@ verification:
         rendered black and reported dropped frames because it was a hidden tab'
     basis:
     - path: examples/webrtc/main.go
-      input_hash: 94d856c6b61ec26d78e726022be5b7d701e4e91c02f4235df53496440b01ca41
-    - path: examples/webrtc/server.go
-      input_hash: 3ba4679c4af13aa4216a65e2c50dda0b5e80e39fe4fdd20a1f4fb0bb516189ef
+      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+    - path: net/webrtc/broadcaster.go
+      input_hash: 498d259f31413af392fa29d86a086e8ebeb121370c5af6af195a89e316c376b8
 open_questions:
   latency-measurement:
     text: End-to-end glass-to-glass latency was not measured (the pane could not be filmed); jitter buffer

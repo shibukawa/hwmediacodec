@@ -1,4 +1,4 @@
-package main
+package webrtc_test
 
 import (
 	"bytes"
@@ -14,34 +14,35 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp/codecs"
-	"github.com/pion/webrtc/v4"
+	pion "github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media/samplebuilder"
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/net/webrtc"
 )
 
 // viewer is a pion peer standing in for the browser: it posts an offer to
 // the server, receives the track and rebuilds access units from RTP.
 type viewer struct {
-	pc      *webrtc.PeerConnection
+	pc      *pion.PeerConnection
 	samples chan []byte
 	ssrc    atomic.Uint32
 }
 
 func connect(t *testing.T, url string) *viewer {
 	t.Helper()
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := pion.NewPeerConnection(pion.Configuration{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	v := &viewer{pc: pc, samples: make(chan []byte, 1024)}
-	if _, err := pc.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly}); err != nil {
+	if _, err := pc.AddTransceiverFromKind(pion.RTPCodecTypeVideo, pion.RTPTransceiverInit{Direction: pion.RTPTransceiverDirectionRecvonly}); err != nil {
 		t.Fatal(err)
 	}
-	pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+	pc.OnTrack(func(track *pion.TrackRemote, _ *pion.RTPReceiver) {
 		v.ssrc.Store(uint32(track.SSRC()))
 		sb := samplebuilder.New(50, &codecs.H264Packet{}, 90000)
 		for {
@@ -59,7 +60,7 @@ func connect(t *testing.T, url string) *viewer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gathered := webrtc.GatheringCompletePromise(pc)
+	gathered := pion.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(offer); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func connect(t *testing.T, url string) *viewer {
 	if resp.StatusCode != 200 {
 		t.Fatalf("offer answered %d", resp.StatusCode)
 	}
-	var answer webrtc.SessionDescription
+	var answer pion.SessionDescription
 	if err := json.NewDecoder(resp.Body).Decode(&answer); err != nil {
 		t.Fatal(err)
 	}
@@ -97,9 +98,9 @@ func nalUnits(au []byte) [][]byte {
 }
 
 func TestBroadcasterDeliversAccessUnits(t *testing.T) {
-	testutil.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	dir := t.TempDir()
-	src := testutil.GenerateMP4(t, dir, testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 60, BFrames: 0, GOP: 15})
+	src := mediatest.GenerateMP4(t, dir, mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 60, BFrames: 0, GOP: 15})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -108,13 +109,15 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 	track := d.Video()
 
 	var keyRequests atomic.Int32
-	bc := NewBroadcaster(30, nil, func() { keyRequests.Add(1) })
+	bc := webrtc.NewBroadcaster(30, nil, func() { keyRequests.Add(1) })
 	srv := httptest.NewServer(bc)
 	defer srv.Close()
 	defer bc.Close()
 
-	if r, err := http.Get(srv.URL + "/"); err != nil || r.StatusCode != 200 {
-		t.Fatalf("player page: %v %v", err, r)
+	// The handler is the signalling endpoint only: anything but a POST is
+	// refused.
+	if r, err := http.Get(srv.URL + "/"); err != nil || r.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("GET answered %v %v, want 405", r, err)
 	} else {
 		r.Body.Close()
 	}
@@ -131,10 +134,10 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 		t.Error("a joining viewer did not trigger a keyframe request")
 	}
 	// Wait for the connection, otherwise the first samples go nowhere.
-	for v.pc.ConnectionState() != webrtc.PeerConnectionStateConnected && time.Now().Before(deadline) {
+	for v.pc.ConnectionState() != pion.PeerConnectionStateConnected && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if v.pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
+	if v.pc.ConnectionState() != pion.PeerConnectionStateConnected {
 		t.Fatalf("connection state %s", v.pc.ConnectionState())
 	}
 
@@ -184,8 +187,8 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 	if err := os.WriteFile(raw, all, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	want := testutil.FrameMD5(t, src, "")
-	have := testutil.FrameMD5(t, raw, "h264")
+	want := mediatest.FrameMD5(t, src, "")
+	have := mediatest.FrameMD5(t, raw, "h264")
 	if !slices.Equal(have, want[:len(have)]) || len(have) < len(want)-1 {
 		t.Errorf("received stream decodes differently (%d vs %d frames)", len(have), len(want))
 	}
@@ -206,8 +209,8 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 }
 
 func TestBroadcasterStartsViewersAtKeyframes(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	src := testutil.GenerateMP4(t, t.TempDir(), testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 0, GOP: 10})
+	mediatest.RequireFFmpeg(t)
+	src := mediatest.GenerateMP4(t, t.TempDir(), mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 40, BFrames: 0, GOP: 10})
 	d, err := mp4.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -215,14 +218,14 @@ func TestBroadcasterStartsViewersAtKeyframes(t *testing.T) {
 	defer d.Close()
 	track := d.Video()
 
-	bc := NewBroadcaster(30, nil, func() {})
+	bc := webrtc.NewBroadcaster(30, nil, func() {})
 	srv := httptest.NewServer(bc)
 	defer srv.Close()
 	defer bc.Close()
 	v := connect(t, srv.URL)
 	defer v.pc.Close()
 	deadline := time.Now().Add(10 * time.Second)
-	for v.pc.ConnectionState() != webrtc.PeerConnectionStateConnected && time.Now().Before(deadline) {
+	for v.pc.ConnectionState() != pion.PeerConnectionStateConnected && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	// Start in the middle of a GOP: samples 5..39. The viewer must first

@@ -97,8 +97,8 @@ verification:
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
-    - path: examples/internal/testutil/ffmpeg.go
-      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 55608734ce9e1eb0d7b5c74e66d9b6426a7af6240702b6c58ee6b47a4e892c21
   container-mux-test:
     state: passed
     method: integration
@@ -117,8 +117,8 @@ verification:
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
-    - path: examples/internal/testutil/ffmpeg.go
-      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 55608734ce9e1eb0d7b5c74e66d9b6426a7af6240702b6c58ee6b47a4e892c21
   convert-test:
     state: passed
     method: integration
@@ -141,7 +141,7 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: examples/convert/main_test.go
-      input_hash: 34dae9b24042d17cba767160d35509b49598d7bd0471c9a6a59e808efa110ed5
+      input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   convert-1080p-run:
     state: passed
     method: manual
@@ -181,7 +181,7 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
     - path: examples/thumbnails/main_test.go
-      input_hash: fbd8f7d81db4f64c032c49929e7732d5eda3e55f97fe9503991af92b2849a6d0
+      input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
 open_questions:
   encoder-dts-semantics:
     text: Should the VideoToolbox encoder (and the Encoder contract in general) guarantee DTS <= PTS

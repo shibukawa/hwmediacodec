@@ -1,0 +1,114 @@
+id: milestone:net-webrtc
+type: milestone
+title: net/webrtc - the WebRTC broadcaster as a module of its own
+summary: 'The Broadcaster of the WebRTC sample (examples/webrtc/server.go, package main) became github.com/shibukawa/hwmediacodec/net/webrtc:
+  a capture.Sink that hands each H.264 access unit to a pion track per viewer and an http.Handler for the
+  one-POST signalling. It has its own go.mod, like ebitenvideo, so that pion (about twenty modules) is
+  not a requirement of the core module. The player page stayed in the sample.'
+lifecycle: active
+authority: authored
+aliases:
+- webrtc package
+- Broadcaster
+- WebRTC 配信パッケージ
+scope:
+  milestone: net-webrtc
+constraints:
+- 'Asked on 2026-10-10 where the pion dependency should live (core module, nested module, or not moving),
+  the author chose the nested module. The import path is the same either way; go.work lists ./net/webrtc.'
+- 'net/webrtc/go.mod requires hwmediacodec v0.1.0, which is enough for the package itself (it only uses
+  hwmediacodec.Packet); its tests import mediacontainer/mp4, encoding/annexb and internal/mediatest and
+  need the workspace until a core release contains them. examples/go.mod has no require line for net/webrtc
+  yet because no version is tagged: release order is core tag, then net/webrtc and ebitenvideo tags, then
+  examples.'
+- 'ServeHTTP is the signalling endpoint only: any POST with a JSON session description is answered, other
+  methods get 405, the path is not inspected. The sample mounts it at POST /offer and serves its page
+  at /. The package no longer logs: a rejected offer is the HTTP error, a failing track drops the viewer.'
+- 'Packet times are taken as 90 kHz units (capture.TimeScale) for the sample durations.'
+non_goals:
+- Trickle ICE, WebSocket signalling, audio, codecs other than H.264, simulcast.
+acceptance:
+  broadcaster:
+    text: A pion viewer that posts an offer receives the access units of an ffmpeg-made stream, identical
+      NAL unit by NAL unit and decodable by ffmpeg to the source's frame checksums; a late viewer starts
+      at a keyframe; a PLI reaches the keyframe callback; a GET is answered 405.
+    scope:
+      milestone: net-webrtc
+    verified_by:
+    - broadcaster-test
+  sample-follows:
+    text: The webrtc sample serves its page at /, passes POST /offer to the broadcaster and answers 404
+      elsewhere; it starts and answers over HTTP.
+    scope:
+      milestone: net-webrtc
+    verified_by:
+    - page-test
+    - webrtc-boot-run
+verification:
+  broadcaster-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: net-webrtc
+    test: TestBroadcasterDeliversAccessUnits, TestBroadcasterStartsViewersAtKeyframes
+    evidence:
+      path: net/webrtc/broadcaster_test.go
+      locator: TestBroadcasterDeliversAccessUnits
+      note: no hardware - loopback pion viewer, ffmpeg-made stream; run 2026-10-10 in the workspace
+    basis:
+    - path: net/webrtc/broadcaster.go
+      input_hash: 498d259f31413af392fa29d86a086e8ebeb121370c5af6af195a89e316c376b8
+    - path: net/webrtc/broadcaster_test.go
+      input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
+    - path: net/webrtc/go.mod
+      input_hash: c9e80332fa30e4753f551e7e5f67f0ff381fae79a6120ce40f9ffffa93378cfd
+  page-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: net-webrtc
+    test: TestPlayerPage
+    evidence:
+      path: examples/webrtc/page_test.go
+      locator: TestPlayerPage
+      note: run 2026-10-10
+    basis:
+    - path: examples/webrtc/page.go
+      input_hash: 43a19449b4d57753bfcd98f2bed10375bfb2c7938ded8fddc6a4809ea11fd1fc
+    - path: examples/webrtc/page_test.go
+      input_hash: 29c25d8e9633cc7ca2239a544cb937887d238e214aa5b7c3219ef6ed03027f2f
+  webrtc-boot-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: net-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    test: webrtc -addr 127.0.0.1:18082 -open=false -auto, then curl / and POST /offer with garbage
+    evidence:
+      path: examples/webrtc/main.go
+      locator: main
+      note: 2026-10-10 - Apple M3; the page answered 200 text/html and the malformed offer 400. No browser
+        was connected in this run; playback in a browser was last checked before the move (milestone:examples-webrtc).
+    basis:
+    - path: examples/webrtc/main.go
+      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+facts:
+  api:
+    webrtc: 'import github.com/shibukawa/hwmediacodec/net/webrtc; NewBroadcaster(fps, iceServers, requestKeyframe)
+      -> Broadcaster{WritePacket, Close, ServeHTTP (POST offer), Accept(offer), Viewers}'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author asked for net/hls and net/webrtc and chose a separate module for the pion dependency.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:examples-webrtc
+- relation: follows
+  to: milestone:package-layout

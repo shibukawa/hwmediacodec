@@ -6,7 +6,8 @@ so that the core library does not depend on Ebitengine and pion, which the
 game and streaming samples pull in. The reusable parts are packages of the
 core module: [`mediacontainer/mp4`](../mediacontainer/mp4) and
 [`net/hls`](../net/hls), [`capture`](../capture),
-[`image/heif`](../image/heif) and [`image/avif`](../image/avif). Inside the
+[`image/heif`](../image/heif) and [`image/avif`](../image/avif), and the
+WebRTC broadcaster is the [`net/webrtc`](../net/webrtc) module. Inside the
 repository the module points at the core with a `replace ../` directive.
 
 Everything here was written and verified on an Apple Silicon Mac; the same
@@ -109,7 +110,8 @@ rec.Close()                  // flushes the encoder, finishes the file
   (`record`, and `-record` of `texture`).
 - `mp4.Segmenter` cuts the packets into fMP4 segments for
   `hls.Playlist` (`hls`).
-- The broadcaster in `webrtc` hands each access unit to a pion track.
+- `webrtc.Broadcaster` (the `net/webrtc` module) hands each access unit to
+  a pion track (`webrtc`).
 
 ## The fireworks scene
 
@@ -245,23 +247,21 @@ server would render frames some other way and feed the same recorder,
 segmenter and broadcaster, none of which touch the display.
 
 The low-latency counterpart of `hls`. The recorder encodes with
-`WithLowLatency`, Baseline profile and no B-frames; every access unit is
-handed to a [pion](https://github.com/pion/webrtc) `TrackLocalStaticSample`
-per viewer, whose H.264 payloader splits the Annex-B NAL units into RTP
-(STAP-A for the parameter sets, FU-A for large slices). Signalling is a
-single HTTP POST of the browser's SDP offer; the answer is returned once
-ICE gathering is done, so no trickle ICE and no WebSocket. A viewer joining
-or sending a picture-loss indication calls `Recorder.RequestKeyframe`, and
-a viewer only starts receiving at a keyframe.
+`WithLowLatency`, Baseline profile and no B-frames into a
+`webrtc.Broadcaster` from the [`net/webrtc`](../net/webrtc) module (see the
+main README), which hands every access unit to a
+[pion](https://github.com/pion/webrtc) track per viewer. The sample adds
+the player page at `/`; the page POSTs its SDP offer to `/offer`, where
+the broadcaster answers.
 
 Measured in a Chromium browser on the same machine at 1280x720: jitter
 buffer delay about 8 ms, decode about 1.3 ms per frame, no packet loss;
 the end-to-end delay is dominated by the encoder's low-latency pipeline and
-the display, a few frames in total. The tests use pion as the viewer:
-access units received over the loopback RTP path are rebuilt with pion's
-sample builder, compared NAL unit by NAL unit with what was sent, and
-decoded by ffmpeg to the source's frame checksums; a PLI from the viewer
-must reach the keyframe callback.
+the display, a few frames in total. The module's tests use pion as the
+viewer: access units received over the loopback RTP path are rebuilt with
+pion's sample builder, compared NAL unit by NAL unit with what was sent,
+and decoded by ffmpeg to the source's frame checksums; a PLI from the
+viewer must reach the keyframe callback.
 
 ## imgconv
 
@@ -309,8 +309,7 @@ cd examples
 go test ./...
 ```
 
-The WebRTC broadcaster test needs only ffmpeg and ffprobe: it feeds an
-ffmpeg-made stream through the WebRTC track. 
+The hls and webrtc tests only check the player pages. 
 The convert and thumbnails tests also need a hardware codec and skip
 otherwise; they check codec, frame count, PSNR against the source, copied
 audio and identical presentation times. (The MP4, HLS and HEIF tests moved

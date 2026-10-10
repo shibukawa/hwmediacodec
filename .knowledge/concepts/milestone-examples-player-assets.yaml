@@ -94,7 +94,7 @@ verification:
     - path: examples/player/main.go
       input_hash: c50ac7f824fbf8ed7133e29ed6c8c50abd36de47451ea80ae48e01d6a6857b8e
     - path: examples/player/main_test.go
-      input_hash: 5486ee96c095ca50667c9b380fc1fe8d5e300012a61a992d3a3a7f3ac3c9aae7
+      input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
   mesh-test:
     state: passed
     method: unit

@@ -21,12 +21,14 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
 | `.../net/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
 | `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
+| `.../net/webrtc` | Separate module: one H.264 stream broadcast to browsers over WebRTC (pion) |
 | `.../ebitenvideo` | Separate module: video playback as an `*ebiten.Image` |
 | `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
 
 The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
 image packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
-Ebitengine and pion are only pulled in by the two separate modules.
+Ebitengine and pion are only pulled in by the separate modules
+(`ebitenvideo`, `net/webrtc`, `examples`).
 
 ## Status
 
@@ -410,7 +412,35 @@ playlist.End()                                             // EXT-X-ENDLIST
 - Safari plays the stream natively; other browsers need hls.js or another
   MSE player (`examples/hls` has such a page). HEVC plays in Safari only.
   Latency is a few seconds, which is what plain HLS gives;
-  `examples/webrtc` is the low-latency path.
+  `net/webrtc` is the low-latency path.
+
+## WebRTC
+
+`github.com/shibukawa/hwmediacodec/net/webrtc` is the low-latency
+counterpart of `net/hls`: a `Broadcaster` hands every access unit of an
+H.264 stream to a [pion](https://github.com/pion/webrtc) track per viewer.
+It is a module of its own, so that the WebRTC stack stays out of the core
+module's dependencies (`go get github.com/shibukawa/hwmediacodec/net/webrtc`).
+
+```go
+var rec *capture.Recorder
+bc := webrtc.NewBroadcaster(60, nil, func() { rec.RequestKeyframe() }) // nil: no STUN/TURN, LAN only
+rec, _ = capture.New(w, h, bc, capture.Options{
+	FPS: 60, LowLatency: true, Profile: hwmediacodec.ProfileBaseline})
+http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
+```
+
+- `Broadcaster` is a `capture.Sink` (`WritePacket`, `Close`); packet times
+  are in 90 kHz units. pion's H.264 payloader splits the Annex-B NAL units
+  into RTP (STAP-A for the parameter sets, FU-A for large slices).
+- Signalling is a single HTTP POST of the browser's SDP offer as JSON; the
+  answer is returned once ICE gathering is done, so no trickle ICE and no
+  WebSocket. `Accept` does the same for programs with their own signalling.
+- A viewer joining or reporting a picture loss calls the keyframe callback,
+  and a viewer only starts receiving at a keyframe. Encode with
+  `WithLowLatency`, Baseline profile and no B-frames.
+- `examples/webrtc` has a player page; measured there in a Chromium browser
+  on the same machine at 1280x720, the jitter buffer delay was about 8 ms.
 
 ## Screen recording
 
@@ -449,7 +479,7 @@ rec.Close()                  // flushes the encoder, closes the sink
   units with in-band parameter sets, so writing `Packet.Data` to a file
   gives a playable elementary stream. `mediacontainer/mp4` has an MP4
   file sink (`CreateVideoFile`) and an fMP4 segmenter for HLS, and
-  `examples/webrtc` a sink that feeds a pion track.
+  `net/webrtc` a sink that feeds a pion track.
 - `Options` selects the codec, bitrate or quality, keyframe interval, low
   latency and profile; `Extra` appends any other `EncoderOption`.
   `RequestKeyframe` forces a keyframe on the next captured frame (a new
@@ -746,6 +776,7 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
+(cd net/webrtc && go test ./...)    # separate module: a pion viewer receives an ffmpeg-made stream (ffmpeg only)
 (cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
 ```
 

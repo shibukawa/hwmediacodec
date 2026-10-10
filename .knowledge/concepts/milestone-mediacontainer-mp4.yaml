@@ -29,9 +29,11 @@ constraints:
 - 'Path mediacontainer/mp4, package name mp4: mediacontainer is a namespace directory without Go files,
   leaving room for other formats. Inside the package github.com/Eyevinn/mp4ff/mp4 is imported as mp4ff;
   a program that uses both needs the same alias.'
-- 'The tests need ffmpeg helpers that lived in examples/internal/testutil, which the core module cannot
-  import (and the examples module cannot import a core internal package), so internal/mediatest (first named internal/mp4test) holds a
-  copy of that file. The bundled-clip test needs examples/assets and stayed in the examples module (examples/assets/assets_test.go).'
+- 'The tests need the ffmpeg helpers that lived in examples/internal/testutil; they are now internal/mediatest
+  (first named internal/mp4test) in the core module. The first move kept a copy in examples on the wrong
+  assumption that another module cannot import a core internal package; the internal rule goes by import
+  path, so examples and net/webrtc import internal/mediatest and the copy is gone (ebitenvideo had been
+  importing internal/testutil all along). The bundled-clip test needs examples/assets and stayed in the examples module (examples/assets/assets_test.go).'
 - 'As with capture, examples/go.mod still requires hwmediacodec v0.1.0: the workspace covers a clone,
   running the examples by module path needs a core release first.'
 non_goals:
@@ -98,7 +100,7 @@ verification:
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: internal/mediatest/ffmpeg.go
-      input_hash: 803987096791d8e44ead05bb9c31544c3ce70b2629207e552ff5cd93b5904710
+      input_hash: 55608734ce9e1eb0d7b5c74e66d9b6426a7af6240702b6c58ee6b47a4e892c21
   build-check:
     state: passed
     method: manual
