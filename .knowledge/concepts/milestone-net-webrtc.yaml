@@ -62,7 +62,7 @@ verification:
     - path: net/webrtc/broadcaster_test.go
       input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: net/webrtc/go.mod
-      input_hash: c9e80332fa30e4753f551e7e5f67f0ff381fae79a6120ce40f9ffffa93378cfd
+      input_hash: 1ea7d12df4b8e49c89e09700bd930d7dbd2763d15dcd450ad8ac4084e4917d01
   page-test:
     state: passed
     method: unit

@@ -313,7 +313,7 @@ verification:
       note: ebiten v2.10.4; the core go.mod still requires only purego
     basis:
     - path: ebitenvideo/go.mod
-      input_hash: 30cc55a2bb64bd6d2cf24769c1e0888b1c8a00a078929ec02a221dd5a7a0b968
+      input_hash: 5ab8abcd6de385198d5e476b7979aef44bbffd7412591f0aa6160f2ccfe67cf7
     - path: go.mod
       input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
 open_questions:
