@@ -113,9 +113,9 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: convert_test.go
-      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
   videotoolbox-roundtrip-test:
     state: passed
     method: integration
@@ -133,11 +133,11 @@ verification:
         own RGB input; color_space bt709. Apple M3, ffmpeg; run 2026-10-09'
     basis:
     - path: convert_test.go
-      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1851dff3127679b69c6580225b37211a32c341fe70c4bb6acb0e08bca2a58a8e
+      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -153,11 +153,11 @@ verification:
         GPU involved; run 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
+      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
     - path: internal/vaapi/encoder.go
-      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/hevcenc.go
-      input_hash: ed6177cdde5e0977d0928cf6672aded322130788ec632a437159169edd9c77dd
+      input_hash: b09f066a07ee0e7bbcdbb1ec87495b40ba45d39d391eec13284e93805a5aff44
   windows-hardware-run:
     state: not_run
     method: manual
@@ -173,11 +173,11 @@ verification:
         the webrtc sample asks.'
     basis:
     - path: internal/mediafoundation/encoder.go
-      input_hash: 8a39fbbe97bbf68e2f7e899f3ad9cb0d89781326ec62613579f365ab9ee300f2
+      input_hash: 94584d63f7f0b1ea292af050e907c3d8c41badad0289e2ed16c3180bbeed8a7e
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/vpl_test.go
-      input_hash: 3e7a0e50d37bf0f9d0d013fb0ecb3dd5a3df0d8b55eb723c00bf05ded1544921
+      input_hash: 30d05e3857414ef5eabf7126b020d8a9a4d1951c2f8aadff0bdddd42af1fe5f6
 open_questions:
 - Do the Intel, AMD and NVIDIA encoder MFTs copy MF_MT_YUV_MATRIX and friends into the VUI? If not, streams
   from Windows stay untagged and players guess (BT.709 for HD in browsers, BT.601 in ffmpeg).

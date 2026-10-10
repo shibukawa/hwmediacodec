@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"

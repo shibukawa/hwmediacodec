@@ -1,7 +1,7 @@
 id: milestone:examples-screencast-hls
 type: milestone
 title: Examples - Ebitengine screen recording to MP4 and live HLS streaming
-summary: 'Second usage-sample slice: screencast.Recorder captures an Ebitengine screen with ReadPixels
+summary: 'Second usage-sample slice: screencast.Recorder (capture.Recorder since milestone:capture-package) captures an Ebitengine screen with ReadPixels
   on every Draw and feeds the hardware encoder (RGBA input) on a background goroutine; sinks write the
   packets to an MP4 file (examples/record) or through container.Segmenter into CMAF/fMP4 segments
   served by an in-memory sliding-window HLS playlist (examples/hls). Verified on the M3 with ffmpeg/ffprobe
@@ -88,20 +88,25 @@ verification:
       milestone: examples-screencast-hls
       platform: darwin
       gpu: apple-silicon
-    test: TestRecorderWritesMP4, TestRecorderDropsWhenBehind
+    test: TestVideoFileRecordsCapture (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
     evidence:
-      path: examples/screencast/recorder_test.go
-      locator: TestRecorderWritesMP4
-      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09
+      path: mediacontainer/mp4/videofile_test.go
+      locator: TestVideoFileRecordsCapture
+      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09, re-run the same day after the recorder
+        moved to the core module (milestone:capture-package)
     basis:
-    - path: examples/screencast/recorder.go
-      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
-    - path: examples/screencast/sinks.go
-      input_hash: e704e00e480014d45d1bd0e43ed69fa5440eb78e3e93f4a96f214604551b17ef
-    - path: examples/screencast/recorder_test.go
-      input_hash: 5294d300c6b38e7f5d914383548f4d8eefc2058dba43e06e4d6eb90081c9fff9
-    - path: examples/container/mux.go
-      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
+    - path: capture/recorder.go
+      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+    - path: packetio.go
+      input_hash: b15f7eb296f857f4b6584896df42eb30dddea3a16eb9c2e2765d85c510c8b9ab
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
   segmenter-test:
     state: passed
     method: integration
@@ -110,16 +115,16 @@ verification:
       milestone: examples-screencast-hls
     test: TestSegmenter (h264, hevc), TestSegmenterShortTarget
     evidence:
-      path: examples/container/segmenter_test.go
+      path: mediacontainer/mp4/segmenter_test.go
       locator: TestSegmenter
       note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
     basis:
-    - path: examples/container/segmenter.go
-      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
-    - path: examples/container/sample.go
-      input_hash: f8a95f9be1e6ca330931967a31d66a5cbed8b67f45061bd12434ac3c5d25818a
-    - path: examples/container/segmenter_test.go
-      input_hash: 8f125617b90eaa72ed9b7628070bdbb2141ebe7ed87e9ac64106d7ce2d1f9905
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+    - path: mediacontainer/mp4/sample.go
+      input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
+    - path: mediacontainer/mp4/segmenter_test.go
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
   hls-server-test:
     state: passed
     method: integration
@@ -128,17 +133,17 @@ verification:
       milestone: examples-screencast-hls
     test: TestPlaylistServesLiveHLS, TestPlaylistSlidingWindow
     evidence:
-      path: examples/hls/server_test.go
+      path: net/hls/playlist_test.go
       locator: TestPlaylistServesLiveHLS
       note: httptest server fed through the segmenter; ffprobe over HTTP sees h264 160x120 150 frames;
         run 2026-10-09
     basis:
-    - path: examples/hls/server.go
-      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
-    - path: examples/hls/server_test.go
-      input_hash: afff2b8f59b5d641a6fec60570340eeb13410c9161de654454a1801c10a8efd7
-    - path: examples/container/segmenter.go
-      input_hash: a08e10562ec62c34e201d4d6f14525f046d4f445ba9285911400d54702a9dbb5
+    - path: net/hls/playlist.go
+      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+    - path: net/hls/playlist_test.go
+      input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
   hls-live-run:
     state: passed
     method: manual
@@ -157,9 +162,9 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: 692a5db347b184d1ea672e981be3827c53310726e54d57f610566ac228037443
-    - path: examples/hls/server.go
-      input_hash: 0bd593b05a43a0302397c6c25527a54d7de4ecd59110e68420776baac54676c6
+      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+    - path: net/hls/playlist.go
+      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
   record-run:
     state: passed
     method: manual
@@ -176,7 +181,7 @@ verification:
         h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
     basis:
     - path: examples/record/main.go
-      input_hash: 7476b06195102e780f16aeec52645e8662f39b2dd0392d07103ffcc9c29afafa
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
     - path: examples/internal/fireworks/scene.go
       input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
 open_questions:
@@ -191,7 +196,9 @@ facts:
     screencast: 'New(width, height, sink, Options{Codec, FPS, Bitrate, Quality, CBR, KeyframeInterval,
       LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
       Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink =
-      WritePacket+Close; NewMP4File(path, codec); Funcs{Write, Done}; TimeScale 90000'
+      WritePacket+Close; Funcs{Write, Done}; TimeScale 90000. Since milestone:capture-package the package
+      is github.com/shibukawa/hwmediacodec/capture in the core module and the MP4 sink is mp4.CreateVideoFile(path,
+      codec, timeScale)'
     segmenter: 'NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
       Data, Start, Duration}'
     hls: 'Playlist{SetInit, Add, End, M3U8, ServeHTTP} serving /, /index.m3u8, /init.mp4, /seg_N.m4s;
@@ -205,6 +212,12 @@ history:
   delivered-2026-10-09:
     summary: Second sample slice (screen recording and HLS) delivered after the converter/thumbnails slice;
       all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
+  moved-2026-10-09:
+    summary: screencast.Recorder left the examples module for the core module as capture.Recorder (milestone:capture-package);
+      NewMP4File became CreateVideoFile of the MP4 package and the MP4 acceptance test moved there; the
+      package itself (container, with the Segmenter) became mediacontainer/mp4 in the core module on 2026-10-10
+      (milestone:mediacontainer-mp4), and the Playlist of examples/hls/server.go became net/hls
+      (milestone:mediacontainer-hls); the sample keeps the player page (examples/hls/page.go).
 relations:
 - relation: implements_part_of
   to: requirement:hwmediacodec

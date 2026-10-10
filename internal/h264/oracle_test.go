@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )

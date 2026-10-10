@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/annexb"
-	"github.com/shibukawa/hwmediacodec/ivf"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
 
 func main() {
@@ -101,14 +101,15 @@ func parseCodec(name string) (hwmediacodec.Codec, error) {
 // for H.264 and HEVC, stamped as 30 fps, or IVF frames (temporal units) for
 // AV1 with the file's own timestamps rescaled to DefaultTimeScale.
 type packetReader struct {
-	next func() (data []byte, pts int64, err error)
+	codec hwmediacodec.Codec
+	next  func() (data []byte, pts int64, err error)
 }
 
 func newPacketReader(in io.Reader, c hwmediacodec.Codec) (*packetReader, error) {
 	if c != hwmediacodec.AV1 {
 		r := annexb.NewReader(in, c)
 		var pts int64
-		return &packetReader{next: func() ([]byte, int64, error) {
+		return &packetReader{codec: c, next: func() ([]byte, int64, error) {
 			au, err := r.Next()
 			if err != nil {
 				return nil, 0, err
@@ -124,7 +125,7 @@ func newPacketReader(in io.Reader, c hwmediacodec.Codec) (*packetReader, error) 
 	}
 	h := r.Header()
 	var index int64
-	return &packetReader{next: func() ([]byte, int64, error) {
+	return &packetReader{codec: c, next: func() ([]byte, int64, error) {
 		tu, ts, err := r.Next()
 		if err != nil {
 			return nil, 0, err
@@ -138,8 +139,17 @@ func newPacketReader(in io.Reader, c hwmediacodec.Codec) (*packetReader, error) 
 	}}, nil
 }
 
-// Next returns the next packet, or io.EOF.
-func (r *packetReader) Next() ([]byte, int64, error) { return r.next() }
+// packetReader is a hwmediacodec.PacketReader, which is what a
+// DecodeReader pulls from.
+func (r *packetReader) Codec() hwmediacodec.Codec { return r.codec }
+func (r *packetReader) TimeScale() int32          { return hwmediacodec.DefaultTimeScale }
+func (r *packetReader) ReadPacket() (hwmediacodec.Packet, error) {
+	data, pts, err := r.next()
+	if err != nil {
+		return hwmediacodec.Packet{}, err
+	}
+	return hwmediacodec.Packet{Data: data, PTS: pts}, nil
+}
 
 func parseFormat(name string) (hwmediacodec.PixelFormat, error) {
 	switch strings.ToLower(name) {
@@ -295,24 +305,18 @@ type packetSink struct {
 	bytes     int
 }
 
-func (s *packetSink) drain(ctx context.Context, enc hwmediacodec.Encoder) error {
-	for {
-		p, err := enc.Receive(ctx)
-		if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := s.w.Write(p.Data); err != nil {
-			return err
-		}
-		s.packets++
-		s.bytes += len(p.Data)
-		if p.Keyframe {
-			s.keyframes++
-		}
+// WritePacket makes the sink a hwmediacodec.PacketWriter, which is what an
+// EncodeWriter drains the encoder into.
+func (s *packetSink) WritePacket(p hwmediacodec.Packet) error {
+	if _, err := s.w.Write(p.Data); err != nil {
+		return err
 	}
+	s.packets++
+	s.bytes += len(p.Data)
+	if p.Keyframe {
+		s.keyframes++
+	}
+	return nil
 }
 
 func (s *packetSink) report(what string, width, height int, elapsed time.Duration, rate float64) {
@@ -370,6 +374,7 @@ func encode(args []string) error {
 	defer enc.Close()
 
 	sink := &packetSink{w: w}
+	ew := hwmediacodec.NewEncodeWriter(enc, sink)
 	frameSize := format.FrameSize(width, height)
 	buf := make([]byte, frameSize)
 	r := bufio.NewReaderSize(in, 1<<20)
@@ -386,17 +391,11 @@ func encode(args []string) error {
 			return err
 		}
 		f := rawFrame(buf, format, width, height, int64(i)*step)
-		if err := enc.Send(ctx, f); err != nil {
-			return fmt.Errorf("send frame %d: %w", i, err)
-		}
-		if err := sink.drain(ctx, enc); err != nil {
-			return err
+		if err := ew.WriteFrame(ctx, f); err != nil {
+			return fmt.Errorf("encode frame %d: %w", i, err)
 		}
 	}
-	if err := enc.Flush(ctx); err != nil {
-		return err
-	}
-	if err := sink.drain(ctx, enc); err != nil {
+	if err := ew.Flush(ctx); err != nil {
 		return err
 	}
 	if err := w.Flush(); err != nil {
@@ -461,75 +460,49 @@ func transcode(args []string) error {
 		}
 	}()
 	sink := &packetSink{w: w}
+	var ew *hwmediacodec.EncodeWriter
 	step := ptsStep(ef.rate)
 	var width, height, frames int
 	start := time.Now()
-	encodeFrame := func(f *hwmediacodec.Frame) error {
-		defer f.Release()
-		if enc == nil {
-			width, height = f.Width, f.Height
-			e, err := hwmediacodec.NewEncoder(ctx, oc, width, height, opts...)
-			if err != nil {
-				return err
-			}
-			enc = e
-		}
-		if f.Width != width || f.Height != height {
-			return fmt.Errorf("picture size changed from %dx%d to %dx%d; transcode needs a constant size", width, height, f.Width, f.Height)
-		}
-		f.PTS = int64(frames) * step
-		frames++
-		if err := enc.Send(ctx, f); err != nil {
-			return err
-		}
-		return sink.drain(ctx, enc)
-	}
-	drainDecoder := func() error {
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := encodeFrame(f); err != nil {
-				return err
-			}
-		}
-	}
+
 	r, err := newPacketReader(bufio.NewReaderSize(in, 1<<20), ic)
 	if err != nil {
 		return err
 	}
+	decoded := hwmediacodec.NewDecodeReader(dec, r)
 	for {
-		au, pts, err := r.Next()
+		f, err := decoded.ReadFrame(ctx)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err
-		}
-		if err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts}); err != nil {
 			return fmt.Errorf("decode: %w", err)
 		}
-		if err := drainDecoder(); err != nil {
+		if enc == nil {
+			// The encoder is opened for the size of the first picture.
+			width, height = f.Width, f.Height
+			if enc, err = hwmediacodec.NewEncoder(ctx, oc, width, height, opts...); err != nil {
+				f.Release()
+				return err
+			}
+			ew = hwmediacodec.NewEncodeWriter(enc, sink)
+		}
+		if f.Width != width || f.Height != height {
+			f.Release()
+			return fmt.Errorf("picture size changed from %dx%d to %dx%d; transcode needs a constant size", width, height, f.Width, f.Height)
+		}
+		f.PTS = int64(frames) * step
+		frames++
+		err = ew.WriteFrame(ctx, f)
+		f.Release()
+		if err != nil {
 			return err
 		}
-	}
-	if err := dec.Flush(ctx); err != nil {
-		return err
-	}
-	if err := drainDecoder(); err != nil {
-		return err
 	}
 	if enc == nil {
 		return errors.New("the input produced no frames")
 	}
-	if err := enc.Flush(ctx); err != nil {
-		return err
-	}
-	if err := sink.drain(ctx, enc); err != nil {
+	if err := ew.Flush(ctx); err != nil {
 		return err
 	}
 	if err := w.Flush(); err != nil {
@@ -612,57 +585,22 @@ func decode(args []string) error {
 		frames++
 		return nil
 	}
-	drain := func() error {
-		for {
-			f, err := dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := emit(f); err != nil {
-				return err
-			}
-		}
-	}
-
 	r, err := newPacketReader(bufio.NewReaderSize(in, 1<<20), c)
 	if err != nil {
 		return err
 	}
+	decoded := hwmediacodec.NewDecodeReader(dec, r)
 	for {
-		au, pts, err := r.Next()
+		f, err := decoded.ReadFrame(ctx)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
+			return fmt.Errorf("decode: %w", err)
+		}
+		if err := emit(f); err != nil {
 			return err
 		}
-		for {
-			err := dec.Send(ctx, hwmediacodec.Packet{Data: au, PTS: pts})
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				// The decoder needs its output drained before it can take
-				// more input.
-				if err := drain(); err != nil {
-					return err
-				}
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("send: %w", err)
-			}
-			break
-		}
-		if err := drain(); err != nil {
-			return err
-		}
-	}
-	if err := dec.Flush(ctx); err != nil {
-		return err
-	}
-	if err := drain(); err != nil {
-		return err
 	}
 	if err := w.Flush(); err != nil {
 		return err

@@ -9,6 +9,28 @@ through [purego](https://github.com/ebitengine/purego) and, for Media
 Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
 
+## Packages
+
+| Import path | What it is |
+| --- | --- |
+| `github.com/shibukawa/hwmediacodec` | The codec API: `Probe`, `NewDecoder`, `NewEncoder`, packets and frames |
+| `.../encoding/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
+| `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets, fMP4 segmenter |
+| `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
+| `.../image/heif` | HEIC still images (HEVC), registered with the standard `image` package |
+| `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
+| `.../net/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
+| `.../playback` | Plays a stream against a clock: background decoding, pacing, seeking, looping; frames to show |
+| `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
+| `.../net/webrtc` | Separate module: one H.264 stream broadcast to browsers over WebRTC (pion) |
+| `.../ebitenvideo` | Separate module: `playback` with the frames in an `*ebiten.Image` |
+| `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
+
+The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
+image packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
+Ebitengine and pion are only pulled in by the separate modules
+(`ebitenvideo`, `net/webrtc`, `examples`).
+
 ## Status
 
 | Platform | Backend | Decode | Encode |
@@ -83,9 +105,10 @@ Known limitations:
   use `annexb.Reader` to split a raw elementary stream. AV1 input is one
   temporal unit per `Packet` in the low-overhead OBU format (what an IVF
   frame or an ISOBMFF `av01` sample holds, with or without temporal
-  delimiters); use `ivf.Reader` to split an IVF file. Containers (MP4, MKV,
-  TS) are not parsed by the library; the `examples/container` package shows
-  how to bridge MP4 files with mp4ff. AVCC/HVCC output is not offered yet.
+  delimiters); use `ivf.Reader` to split an IVF file. The codec API does
+  not parse containers; the `mediacontainer/mp4` package reads and writes
+  MP4 files around it (see [MP4 files](#mp4-files)). MKV and TS are not
+  covered, and AVCC/HVCC output is not offered by the encoders themselves.
 - On an M3, 1080p H.264 with B-frames decodes at roughly 780 frames per
   second to NV12 in display order, 350 to BGRA and 250 to RGBA, including
   the copy; 1080p H.264 encodes at roughly 200 frames per second from NV12
@@ -94,7 +117,7 @@ Known limitations:
   fails with "decoder malfunction"; 96x64 works).
 - The VideoToolbox encoder rounds odd picture sizes down to even: a
   321x203 request yields a 320x202 stream. Pad to even and crop at the
-  consumer (as `examples/heif` does with a `clap` property).
+  consumer (as `image/heif` does with a `clap` property).
 - `Encoder.Flush` blocks until VideoToolbox has emitted every pending frame;
   it does not observe context cancellation once the call has started.
 - Intel Macs are out of scope; the VideoToolbox backend requires hardware
@@ -388,18 +411,294 @@ layout of each format. `WithDecodeOrder()` returns frames as the hardware
 produces them, which is what a transcoder that keeps the original
 timestamps wants.
 
+## Readers, writers and pipelines
+
+The Send/Receive loops above are written once in the root package, around
+four small interfaces that the other packages implement:
+
+| Interface | Role | Implemented by |
+| --- | --- | --- |
+| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader`; consumed by `DecodeReader` and `playback` |
+| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
+| `FrameReader` | raw frames out | `DecodeReader` (a `Decoder` fed from a `PacketReader`) |
+| `FrameWriter` | raw frames in | `EncodeWriter` (an `Encoder` drained into a `PacketWriter`) |
+
+A transcoder is the four of them in a row:
+
+```go
+src := video.PacketSource()                                   // *mp4.VideoTrack
+dec, _ := hwmediacodec.NewDecoder(ctx, src.Codec(), hwmediacodec.WithTimeScale(src.TimeScale()))
+enc, _ := hwmediacodec.NewEncoder(ctx, hwmediacodec.HEVC, w, h,
+	hwmediacodec.WithTimeScale(src.TimeScale()), hwmediacodec.WithBitrate(6_000_000))
+out := hwmediacodec.NewEncodeWriter(enc, track)               // track: *mp4.VideoWriter
+
+n, err := hwmediacodec.CopyFrames(ctx, out, hwmediacodec.NewDecodeReader(dec, src))
+err = out.Flush(ctx)                                          // the frames the encoder still holds
+```
+
+- `DecodeReader.ReadFrame` returns one frame at a time (release it when
+  done) and `io.EOF` at the end; after `PacketSeeker.SeekKeyframe`, call
+  `Reset` to drop what the decoder still holds.
+- `EncodeWriter.WriteFrame` encodes a frame and writes the packets that
+  became ready; `Flush` ends the stream.
+- `CopyFrames` moves frames between any `FrameReader` and `FrameWriter`,
+  so a filter (a scaler, an overlay) is a type that implements one of them
+  around the other; `examples/convert` opens its encoder that way, for the
+  size of the first decoded picture.
+- `HasHardware(ctx, codec, direction)` tells in advance whether `NewDecoder`
+  or `NewEncoder` can succeed without the software fallback.
+- `Frame.RGBAImage()` copies an RGBA or BGRA frame into an `*image.RGBA`,
+  and `RGBAFrame(img, pts)` wraps an image as encoder input without
+  copying.
+- `annexb.FromLengthPrefixed`, `AppendLengthPrefixed` and `AppendUnit`
+  convert between Annex-B and the length-prefixed samples of MP4 and HEIF
+  (AVCC, HVCC).
+
+## MP4 files
+
+The codec API stops at the elementary stream: packets in, frames out,
+Annex-B on both ends. Files need a container, and
+`github.com/shibukawa/hwmediacodec/mediacontainer/mp4` is the bridge for
+MP4 and MOV, built on the box parser of
+[mp4ff](https://github.com/Eyevinn/mp4ff) (the one dependency this package
+adds; programs that do not import it do not link it):
+
+```go
+d, _ := mp4.Open("movie.mp4")
+v := d.Video()                      // codec, size, time scale, sample table
+pkt, _ := v.Packet(i)               // Annex-B access unit with SPS/PPS in front of keyframes
+dec, _ := hwmediacodec.NewDecoder(ctx, v.Codec, hwmediacodec.WithTimeScale(int32(v.TimeScale)))
+dec.Send(ctx, pkt)                  // pkt.PTS is the MP4 sample time
+
+m, _ := mp4.Create("out.mp4")
+vw, _ := m.AddVideoTrack(hwmediacodec.HEVC, v.TimeScale)
+vw.WritePacket(p)                   // p from Encoder.Receive: Annex-B, PTS, DTS, Keyframe
+aw := m.AddPassthroughTrack(d.Others()[0])
+aw.WriteSample(s)                   // audio copied as is
+m.Close()                           // writes moov
+```
+
+What the package takes care of:
+
+- `Track.MediaTimeOffset` carries the edit list. A B-frame stream's first
+  picture has a PTS above its DTS and the muxer hides that delay with an
+  `elst`; sample PTS minus the offset is the time a player shows the frame.
+- The muxer learns SPS/PPS/VPS from the packets (hwmediacodec encoders put
+  them in front of every keyframe) and strips them from the samples, so the
+  output is `avc1`/`hvc1` as QuickTime and browsers expect.
+- VideoToolbox numbers decode times from the first PTS when B-frames are on,
+  so a reordered picture can carry DTS > PTS. MP4 needs DTS ≤ PTS, so the
+  muxer shifts every DTS back by the largest lag; durations are unchanged and
+  the edit list absorbs the start delay. The tests check that ffprobe sees
+  the same presentation times as in the source.
+- Progressive output only (`ftyp`, `mdat`, `moov` at the end), `stco` or
+  `co64` as the size requires, one chunk per run of samples of the same
+  track. Fragmented input is rejected.
+- `VideoTrack.PacketSource()` hands out access units with presentation
+  times and seeks by the sync-sample table, which is what
+  `playback.New` and `ebitenvideo.NewPlayerFromSource` take; `VideoTrack.ElementaryStream()`
+  is the same track as a raw Annex-B stream.
+- `CreateVideoFile` is the one-track file for encoder output (a
+  `hwmediacodec.PacketWriteCloser`), and `Segmenter` cuts encoder packets into CMAF/fMP4
+  segments for live HLS: an init segment, then one `moof`+`mdat` per
+  segment, each starting at a keyframe. It needs PTS == DTS, so encode
+  without B-frames.
+
+## Live HLS
+
+`github.com/shibukawa/hwmediacodec/net/hls` serves those
+segments as a live HLS stream. A `Playlist` keeps a sliding window of them
+in memory (nothing is written to disk) and is an `http.Handler` for the
+media playlist, the init segment and the media segments:
+
+```go
+playlist := hls.NewPlaylist(6, 2*time.Second)             // six segments of two seconds
+seg, _ := mp4.NewSegmenter(hwmediacodec.H264, timeScale, 2*time.Second, playlist.SetInit, playlist.Add)
+// seg.WritePacket(p) for every encoder packet (a hwmediacodec.PacketWriteCloser)
+http.Handle("/live/", playlist)                            // players open /live/index.m3u8
+// at the end
+seg.Close()
+playlist.End()                                             // EXT-X-ENDLIST
+```
+
+- Set the encoder's keyframe interval to the segment length (segments are
+  cut at keyframes) and encode without B-frames (`WithLowLatency`).
+- The handler answers by the last path element (`index.m3u8`, `init.mp4`,
+  `seg_N.m4s`), so it can be mounted under any prefix; it answers 503 until
+  the first segment exists and sends `Access-Control-Allow-Origin: *`.
+- Safari plays the stream natively; other browsers need hls.js or another
+  MSE player (`examples/hls` has such a page). HEVC plays in Safari only.
+  Latency is a few seconds, which is what plain HLS gives;
+  `net/webrtc` is the low-latency path.
+
+## WebRTC
+
+`github.com/shibukawa/hwmediacodec/net/webrtc` is the low-latency
+counterpart of `net/hls`: a `Broadcaster` hands every access unit of an
+H.264 stream to a [pion](https://github.com/pion/webrtc) track per viewer.
+It is a module of its own, so that the WebRTC stack stays out of the core
+module's dependencies (`go get github.com/shibukawa/hwmediacodec/net/webrtc`).
+
+```go
+var rec *capture.Recorder
+bc := webrtc.NewBroadcaster(60, nil, func() { rec.RequestKeyframe() }) // nil: no STUN/TURN, LAN only
+rec, _ = capture.New(w, h, bc, capture.Options{
+	FPS: 60, LowLatency: true, Profile: hwmediacodec.ProfileBaseline})
+http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
+```
+
+- `Broadcaster` is a `hwmediacodec.PacketWriteCloser`; packet times
+  are in 90 kHz units. pion's H.264 payloader splits the Annex-B NAL units
+  into RTP (STAP-A for the parameter sets, FU-A for large slices).
+- Signalling is a single HTTP POST of the browser's SDP offer as JSON; the
+  answer is returned once ICE gathering is done, so no trickle ICE and no
+  WebSocket. `Accept` does the same for programs with their own signalling.
+- A viewer joining or reporting a picture loss calls the keyframe callback,
+  and a viewer only starts receiving at a keyframe. Encode with
+  `WithLowLatency`, Baseline profile and no B-frames.
+- `examples/webrtc` has a player page; measured there in a Chromium browser
+  on the same machine at 1280x720, the jitter buffer delay was about 8 ms.
+
+## Screen recording
+
+`github.com/shibukawa/hwmediacodec/capture` is a package of the core
+module that records what a game or any other renderer draws. A `Recorder`
+reads the pixels of a `Source` on every frame, encodes them on a
+background goroutine and pushes the packets into a
+`hwmediacodec.PacketWriteCloser`:
+
+```go
+rec, err := capture.New(1280, 720, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
+
+func (g *game) Draw(screen *ebiten.Image) {
+	g.scene.Draw(screen)
+	rec.Capture(screen)      // ReadPixels, then the encoder runs on its own goroutine
+}
+// on exit
+rec.Close()                  // flushes the encoder, closes the sink
+```
+
+- A `Source` is `Bounds()` plus `ReadPixels([]byte)` (tightly packed
+  RGBA). `*ebiten.Image` satisfies it as it is, but the package does not
+  import Ebitengine: anything that can hand out RGBA pixels can be
+  recorded.
+- `Capture` never blocks on the encoder. `ReadPixels` runs on the calling
+  goroutine (about 2 ms at 720p for an Ebitengine screen on an M3; the GPU
+  has to finish the frame first, so a heavy scene shows up in this
+  number); the buffer then goes through a bounded queue to the encoder,
+  and when the queue is full the frame is dropped and counted (`Dropped`).
+- PTS come from the wall clock quantised to the frame rate, in units of
+  `capture.TimeScale` (90 kHz), so a dropped frame leaves a gap instead
+  of speeding the recording up, and a 120 Hz display showing a 60 fps game
+  does not record every frame twice. `CaptureAt` takes the time stamp
+  explicitly.
+- The sink is any `hwmediacodec.PacketWriteCloser`
+  (`WritePacket(hwmediacodec.Packet)` plus `Close`);
+  `hwmediacodec.PacketWriterFunc` adapts a closure. The packets are Annex-B access
+  units with in-band parameter sets, so writing `Packet.Data` to a file
+  gives a playable elementary stream. `mediacontainer/mp4` has an MP4
+  file sink (`CreateVideoFile`) and an fMP4 segmenter for HLS, and
+  `net/webrtc` a sink that feeds a pion track.
+- `Options` selects the codec, bitrate or quality, keyframe interval, low
+  latency and profile; `Extra` appends any other `EncoderOption`.
+  `RequestKeyframe` forces a keyframe on the next captured frame (a new
+  viewer joining a live stream).
+
+## HEIC and AVIF images
+
+`github.com/shibukawa/hwmediacodec/image/heif` (HEIC: HEVC pictures) and
+`github.com/shibukawa/hwmediacodec/image/avif` (AVIF: AV1 pictures) read
+and write HEIF still images with the hardware codecs. They follow the
+conventions of `image/jpeg` and `image/png`, and importing one registers
+its format with the standard `image` package:
+
+```go
+import (
+	_ "github.com/shibukawa/hwmediacodec/image/avif"
+	_ "github.com/shibukawa/hwmediacodec/image/heif"
+)
+
+img, format, err := image.Decode(file)         // format: "heic", "avif" or "heif"
+cfg, _, err := image.DecodeConfig(file)        // size after rotation; nothing is decoded
+```
+
+Both packages have the same functions:
+
+```go
+img, err := heif.Decode(r)                     // image.Image (an *image.RGBA)
+err = heif.Encode(w, img, nil)                 // HEIC with the encoder's default quality
+err = heif.Encode(w, img, &heif.Options{Quality: 0.8, TileSize: 512, Rotation: 90})
+
+rgba, info, err := heif.DecodeBytes(data, hwmediacodec.WithSoftwareFallback())
+info, err = heif.DecodeInfo(data)              // size, tiles, rotation; no decoder needed
+```
+
+- Each package reads only its own codec and says so when handed the
+  other's file. A file whose major brand is the generic `mif1` does not
+  name its codec: `image.Decode` reports it as `"heif"` and decodes it when
+  the package for its pictures is imported.
+- Decoding needs a hardware HEVC or AV1 decoder and encoding a hardware
+  encoder; the error wraps `hwmediacodec.ErrUnsupported` on a machine
+  without one (no Apple Silicon chip encodes AV1, so `avif.Encode` fails
+  there). The packages have no software codec of their own;
+  `examples/imgconv` shows how to fall back to cgo-free ones.
+  `DecodeConfig` and `DecodeInfo` read only the file structure and work
+  everywhere.
+- The result is opaque RGBA: alpha planes are neither read nor written,
+  and only 8-bit 4:2:0 pictures are handled (iPhone HDR photos are 10-bit
+  and out of scope).
+- Colours: the decoder converts to RGB with what the bitstream declares.
+  An HEVC stream that declares nothing (some software encoders leave the
+  VUI out and describe the colours only in the item's `colr` property) is
+  converted from NV12 in Go with the `colr` matrix and range; otherwise a
+  full-range picture would come out with stretched contrast.
+
+A HEIF file is an ISOBMFF `meta` box of items (coded pictures, a `grid`
+that tiles them) with properties (`hvcC`/`av1C` decoder configuration,
+`ispe` size, `irot`, `imir`, `clap`, `colr`, `pixi`) and an `mdat` with the
+coded data. The two packages share the code that parses and writes it
+(mp4ff only supplies the `hvcC`/`av1C` record parsers) and leave the
+pictures to the codecs:
+
+- **Decode**: for each coded item, `hvcC`'s parameter sets plus the
+  length-prefixed NAL units become one Annex-B packet (AV1: the temporal
+  unit, with the sequence header from `av1C` if the item lacks one); all
+  items go through one decoder opened with `WithOutputFormat(RGBA)` and
+  `WithDecodeOrder()`, grids are stitched tile by tile and cropped to the
+  grid size, then `clap`, `irot` and `imir` are applied in their stored
+  order.
+- **Encode**: one keyframe per picture or tile (`WithKeyframeInterval(1)`,
+  `ForceKeyframe`, `WithQuality`), VPS/SPS/PPS from the packet into `hvcC`,
+  the slices as the item data. `TileSize` writes a grid like phone cameras
+  do; `Rotation` stores an `irot`. Odd sizes are padded by a replicated
+  row or column and declared through `clap`, because the hardware encoders
+  work on even 4:2:0 pictures (VideoToolbox rounds an odd request down to
+  320x202 for 321x203).
+- **AVIF**: decoding works wherever `Probe` lists an AV1 decoder (M3 and
+  newer Macs); encoding needs an AV1 encoder, which no Apple Silicon chip
+  has, so `avif.Encode` returns `ErrUnsupported` there and
+  works unchanged on a platform that gains one.
+
+Tests use macOS ImageIO (`sips`) as the reference for the files this
+package writes (single, grid, rotated, odd sizes) and for HEIC input, and
+ffmpeg for AVIF input and for the rotation direction (ffmpeg maps `irot` to
+a display matrix and autorotates; ImageIO keeps it as orientation
+metadata). ImageIO resamples `clap`-cropped pictures instead of cropping,
+and ffmpeg rounds odd `clap` sizes to even, so odd pictures are compared
+with the source instead. 8-bit 4:2:0 only; iPhone HDR photos (10-bit) are
+out of scope.
+
 ## Examples
 
 The [`examples/`](examples/) directory is a third Go module with complete
-programs built on the library: an MP4 demuxer/muxer and fMP4 segmenter
-(`examples/container`, on top of mp4ff), a video file converter that keeps
+programs built on the library: a video file converter that keeps
 timestamps and copies audio (`examples/convert`), a keyframe thumbnail
-extractor (`examples/thumbnails`), an Ebitengine screen recorder
-(`examples/screencast`, `examples/record`), live HLS and WebRTC servers for
-a fireworks show (`examples/hls`, `examples/webrtc`), a video player
+extractor (`examples/thumbnails`), an Ebitengine screen recorder on top
+of the `capture` package (`examples/record`), live HLS and WebRTC
+servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
+player
 (`examples/player`), video as a texture on a box and in a Kage shader
-(`examples/texture`) and HEIC/AVIF still images (`examples/heif`,
-`examples/heifconv`). The players default to a bundled clip
+(`examples/texture`) and a HEIC/AVIF converter (`examples/imgconv`). The players default to a bundled clip
 (`examples/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
@@ -411,18 +710,51 @@ go run ./hls -addr :8080      # then open http://localhost:8080/
 go run ./webrtc -addr :8080   # same, about 100 ms of latency
 go run ./player               # the bundled clip; space pause, arrows seek
 go run ./texture              # 1 flat, 2 box, 3 shader
-go run ./heifconv photo.heic photo.png
-go run ./heifconv -quality 0.8 picture.png picture.heic
+go run ./imgconv photo.heic photo.png
+go run ./imgconv -quality 0.8 picture.png picture.heic
 ```
+
+## Playback
+
+`github.com/shibukawa/hwmediacodec/playback` plays a stream against a
+clock the caller drives. It decodes on a background goroutine, a few frames
+ahead, in display order and as RGBA, and returns the frame that is due;
+where the picture goes is up to the caller (a texture, a window, an image):
+
+```go
+p, err := playback.New(track.PacketSource(), playback.WithLoop()) // *mp4.VideoTrack
+p.Play()
+
+// once per tick of the display or game loop:
+f, err := p.Advance(dt)          // dt: the time since the previous call
+if f != nil {
+	show(f.Planes[0], f.Width, f.Height) // RGBA, f.Strides[0] bytes per row
+	f.Release()
+}
+```
+
+- `New` takes any `hwmediacodec.PacketReader`, which carries the
+  presentation times; a `PacketSeeker` (a keyframe index, as the MP4
+  demuxer's `VideoTrack.PacketSource()`) gives the player `Seek`, `Length`
+  and looping.
+- `NewStream(r, codec, fps)` plays a raw Annex-B elementary stream.
+  Elementary streams carry no timestamps, so the frame rate is a
+  parameter; an `io.ReadSeeker` gets seeking too, by scanning the stream
+  once for keyframes on the first seek.
+- Frames are skipped when decoding or the caller falls behind
+  (`Skipped` counts them). `Seek(t)` restarts decoding at the keyframe
+  before `t` and drops the frames up to it, so the next picture is the one
+  at `t`; `Position` reports `t` meanwhile.
+- `WithOutputFormat(NV12)` hands out the decoder's native format instead,
+  for renderers that convert in a shader.
 
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
 this repository (its own `go.mod`) that depends on both `hwmediacodec` and
 Ebitengine; the core module never imports Ebitengine, so users without a
-game engine do not pull it in. The module decodes an elementary stream on a
-background goroutine, in display order and as RGBA, and paces it against
-the game loop:
+game engine do not pull it in. It is `playback` driven from the game loop,
+with the current frame in an `*ebiten.Image`:
 
 ```go
 player, err := ebitenvideo.NewPlayer(file, hwmediacodec.H264, 30, ebitenvideo.WithLoop())
@@ -436,30 +768,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 ```
 
-Elementary streams carry no timestamps, so the frame rate is a parameter.
-Frames are skipped when decoding or the game loop falls behind
-(`Player.Skipped` counts them). `NewPlayerFromSource` takes a `Source`
-instead of a reader: anything that hands out access units with
-presentation times, such as the MP4 demuxer in `examples/container`
-(`VideoTrack.PacketSource()`). A source that also implements `Seeker`
-(a keyframe index) gives the player `Seek`, `Length` and looping; an
-`io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
-once for keyframes on the first seek. `Seek(t)` restarts decoding at the
-keyframe before `t` and drops the frames up to it, so the next picture
-shown is the one at `t`; `Position` reports `t` meanwhile. A minimal
-example plays a raw stream in a window (space pauses, the arrow keys
-seek); the MP4-capable player with a bundled clip is `examples/player`:
+`NewPlayer` is `playback.NewStream` and `NewPlayerFromSource` is
+`playback.New`; the options and the methods (`Seek`, `Position`, `Length`,
+`Skipped`, ...) are those of the playback package. One `Update` stands for
+1/TPS seconds, or for the wall-clock time since the previous one when the
+TPS is `SyncWithFPS`. A minimal example plays a raw stream in a window
+(space pauses, the arrow keys seek); the MP4-capable player with a bundled
+clip is `examples/player`:
 
 ```sh
 cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264
 cd examples && go run ./player
 ```
 
-Inside the repository `ebitenvideo/go.mod` points at the core module with a
-`replace ../` directive, so both modules always build against the working
-tree. Consumers get the version named in its `require` line; tag the core
-module first (for example `v0.3.0`), update that line, then tag
-`ebitenvideo/v0.3.0`.
+Inside the repository the modules build against each other's working tree
+through `go.work`. Consumers get the version named in the `require` line of
+`ebitenvideo/go.mod`; tag the core module first, update that line, then tag
+`ebitenvideo`.
 
 A command-line tool exercises the same API:
 
@@ -549,7 +874,8 @@ parameter sets and slice headers the HEVC encoder writes are read back by
 ffmpeg and ffprobe. The AV1 OBU splitter and sequence header parser are
 checked against `trace_headers` on SVT-AV1 streams (8-bit and 10-bit), and
 the `av1C` record against the one ffmpeg writes into an MP4 of the same
-stream; the `ivf` package is checked against ffmpeg's own IVF files. The AV1
+stream; the `mediacontainer/ivf` package is checked against ffmpeg's own IVF
+files. The AV1
 frame header parser is checked the same way on 32 stream configurations
 written by SVT-AV1, libaom (through ffmpeg and through `aomenc`) and rav1e,
 chosen to reach the branches of the header syntax: tiles and tile groups,
@@ -608,14 +934,23 @@ with ffprobe. All of them are skipped when ffmpeg is not installed, and the
 encoder tests for optional controls skip when the hardware encoder rejects
 them.
 
+The `mediacontainer/mp4` tests need only ffmpeg and ffprobe: they compare
+sample tables, presentation times and decoded frame checksums with
+ffprobe's view of the same files and feed ffmpeg-made streams through the
+segmenter, and the `net/hls` test lets ffprobe play the served
+playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
+hardware encoder and skip otherwise. The `image/heif` and `image/avif` tests use macOS
+ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
+
 ```sh
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
-(cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
-(cd examples && go test ./...)      # separate module: MP4 container tests (ffmpeg only) and sample end-to-end tests (hardware)
+(cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)
+(cd net/webrtc && go test ./...)    # separate module: a pion viewer receives an ffmpeg-made stream (ffmpeg only)
+(cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
 ```
 
 Project knowledge (requirements, decisions, backend notes) lives in

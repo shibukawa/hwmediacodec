@@ -1,0 +1,170 @@
+id: milestone:mediacontainer-mp4
+type: milestone
+title: mediacontainer/mp4 - the MP4 demuxer, muxer and fMP4 segmenter as a package of the core module
+summary: 'The MP4 glue of the samples (examples/container: demuxer handing out Annex-B access units,
+  progressive muxer fed with encoder packets, passthrough tracks, PacketSource for ebitenvideo, VideoFile
+  sink, CMAF/fMP4 Segmenter) moved to the core module as github.com/shibukawa/hwmediacodec/mediacontainer/mp4,
+  package mp4. The core module now requires github.com/Eyevinn/mp4ff; the author decided that this dependency
+  is acceptable. The code is unchanged apart from the package name, the mp4ff import alias and the error
+  prefix.'
+lifecycle: active
+authority: authored
+aliases:
+- mp4 package
+- mediacontainer
+- MP4 demuxer
+- MP4 muxer
+- container パッケージの正式機能化
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: mediacontainer-mp4
+constraints:
+- 'The earlier "two dependencies" wording (purego and golang.org/x/sys only) was a description in the READMEs,
+  not a requirement of the author: asked on 2026-10-10, the author said a dependency on mp4ff is fine. Ebitengine
+  and pion still stay out of the core module (ebitenvideo and examples are separate modules for that).'
+- 'mp4ff is pure Go, so CGO_ENABLED=0 and the cross builds are unaffected. Programs that do not import
+  mediacontainer/mp4 do not link it; it only shows in go.mod and go.sum (mp4ff itself requires go-test/deep
+  for its tests).'
+- 'Path mediacontainer/mp4, package name mp4: mediacontainer is a namespace directory without Go files,
+  leaving room for other formats. Inside the package github.com/Eyevinn/mp4ff/mp4 is imported as mp4ff;
+  a program that uses both needs the same alias.'
+- 'The tests need the ffmpeg helpers that lived in examples/internal/testutil; they are now internal/mediatest
+  (first named internal/mp4test) in the core module. The first move kept a copy in examples on the wrong
+  assumption that another module cannot import a core internal package; the internal rule goes by import
+  path, so examples and net/webrtc import internal/mediatest and the copy is gone (ebitenvideo had been
+  importing internal/testutil all along). The bundled-clip test needs examples/assets and stayed in the examples module (examples/assets/assets_test.go).'
+- 'As with capture, examples/go.mod still requires hwmediacodec v0.1.0: the workspace covers a clone,
+  running the examples by module path needs a core release first.'
+non_goals:
+- Fragmented MP4 input, MKV, MPEG-TS.
+- Moving examples/hls.Playlist, examples/webrtc.Broadcaster or examples/heif in this step.
+acceptance:
+  tests-follow:
+    text: The demuxer, muxer, elementary-stream, packet-source, segmenter and recorder-to-MP4 tests pass
+      in the core module unchanged apart from imports.
+    scope:
+      milestone: mediacontainer-mp4
+    verified_by:
+    - mp4-tests
+  builds:
+    text: The core module builds on its own (GOWORK=off), with CGO_ENABLED=0 and for linux and windows;
+      examples and ebitenvideo build against it.
+    scope:
+      milestone: mediacontainer-mp4
+    verified_by:
+    - build-check
+  samples-follow:
+    text: Every examples test passes with the samples importing mediacontainer/mp4.
+    scope:
+      milestone: mediacontainer-mp4
+    verified_by:
+    - examples-tests
+verification:
+  mp4-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./mediacontainer/... ./capture/
+    evidence:
+      path: mediacontainer/mp4/mp4_test.go
+      locator: TestDemuxMatchesFFprobe
+      note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
+    basis:
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+    - path: mediacontainer/mp4/sample.go
+      input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+    - path: mediacontainer/mp4/packetsource.go
+      input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
+    - path: mediacontainer/mp4/stream.go
+      input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: mediacontainer/mp4/segmenter_test.go
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
+    - path: mediacontainer/mp4/packetsource_test.go
+      input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
+    - path: mediacontainer/mp4/stream_test.go
+      input_hash: 462cf73e816f88864da210d31f46654af9f4ebf2ac63ca69f61fd6b12159b35d
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
+  build-check:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+    test: GOWORK=off go build ./...; CGO_ENABLED=0 go build ./...; GOOS=linux and GOOS=windows go build ./...;
+      go build ./... in examples and ebitenvideo
+    evidence:
+      path: go.mod
+      locator: require
+      note: 2026-10-10 - go.mod requires mp4ff v0.59.0, purego v0.11.1, x/sys v0.48.0
+    basis:
+    - path: go.mod
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+    - path: go.sum
+      input_hash: 5077878216cdac94a8e763a5d1356735917af0ae270d24e3c6364b5073867a2e
+  examples-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in examples
+    evidence:
+      path: examples/assets/assets_test.go
+      locator: TestBundledClip
+      note: 2026-10-10 - assets, convert, heif, hls, fireworks, player, texture, thumbnails and webrtc pass
+    basis:
+    - path: examples/assets/assets_test.go
+      input_hash: 30d532b0276338370eb71ad5e6c98ca69b4bee65674263c8ca1793bcb3163e75
+open_questions:
+  next-candidates:
+    text: Which other sample code should follow - the HLS playlist server (examples/hls/server.go, standard
+      library only, depends on mp4.Segment), the HEIC/AVIF codec (examples/heif, mp4ff) or the WebRTC broadcaster
+      (pion)?
+    state: open
+    resolution: The HLS playlist followed on 2026-10-10 (milestone:mediacontainer-hls); heif is discussed
+      as image/heif, pending a standard-library-style API (delivered, milestone:image-heif).
+  ivf-annexb-placement:
+    text: annexb and ivf sit at the module root while MP4 is under mediacontainer; should ivf move or
+      be aliased there for consistency?
+    state: resolved
+    resolution: Moved without aliases on 2026-10-10 (milestone:package-layout) - ivf to mediacontainer/ivf,
+      annexb to encoding/annexb.
+facts:
+  api:
+    mp4: 'import github.com/shibukawa/hwmediacodec/mediacontainer/mp4; Open(path) / NewDemuxer(io.ReadSeeker)
+      -> Demuxer{Video, Others, Duration, Close}; VideoTrack{Packet, AccessUnit, Keyframes, KeyframeAtOrBefore,
+      FrameRate, PacketSource, ElementaryStream}; Create(path) / NewMuxer(io.WriteSeeker) -> Muxer{AddVideoTrack,
+      AddPassthroughTrack, Close}; CreateVideoFile(path, codec, timeScale); NewSegmenter(codec, timeScale,
+      target, onInit, onSegment)'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: After capture, the author asked what else in the samples was generally useful, accepted the
+      mp4ff dependency and proposed the mediacontainer/mp4 path; the package moved with its tests.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:capture-package
+- relation: follows
+  to: milestone:examples-mp4-tools

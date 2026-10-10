@@ -61,19 +61,19 @@ verification:
     basis:
     - &id004
       path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - &id005
       path: internal/videotoolbox/sys/sys.go
       input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - &id006
-      path: annexb/annexb.go
-      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+      path: encoding/annexb/annexb.go
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - &id007
       path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - &id001
       path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - &id002
       path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
@@ -173,7 +173,7 @@ verification:
       note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
   bframe-set-test:
     state: passed
     method: integration
@@ -186,15 +186,15 @@ verification:
       locator: TestDecodeBFramesMatchesReference
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
-    - path: annexb/annexb.go
-      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+    - path: encoding/annexb/annexb.go
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/testutil/ffmpeg.go

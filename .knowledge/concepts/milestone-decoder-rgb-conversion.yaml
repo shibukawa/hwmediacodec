@@ -114,7 +114,7 @@ verification:
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
+      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
     - path: internal/pixconv/yuv_test.go
       input_hash: d057cb80a9b3421898e353fe1ec16a88f61e5d10222df9ca3374a59f849d1053
   selection-test:
@@ -130,9 +130,9 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: convert_test.go
-      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
   videotoolbox-comparison-test:
     state: passed
     method: integration
@@ -151,11 +151,11 @@ verification:
         and libx265; run 2026-10-10'
     basis:
     - path: convert_test.go
-      input_hash: 7732fa0c025497b6f34156830511fc478e2a20587517133bd72686c8e1ca2c41
+      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
+      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -171,9 +171,9 @@ verification:
         GPU involved; run 2026-10-10
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
+      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
   hardware-run:
     state: not_run
     method: manual
@@ -187,7 +187,7 @@ verification:
         streams, that the backend returns the samples unscaled.'
     basis:
     - path: internal/pixconv/decoder.go
-      input_hash: ca4c81d6300922d756f11e84424bf79fad3555f77c53556faa9e5e403f8c3a34
+      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
 open_questions:
 - Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range NV12?
   The wrapper assumes so; VideoToolbox is the one backend known to rescale.

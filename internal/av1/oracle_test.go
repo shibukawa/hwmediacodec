@@ -12,7 +12,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
-	"github.com/shibukawa/hwmediacodec/ivf"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
 
 // readIVF returns the temporal units of an IVF file.

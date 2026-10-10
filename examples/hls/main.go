@@ -4,8 +4,8 @@
 //	go run ./hls -addr :8080
 //	go run ./hls -open=false        # print the URL only
 //
-// The screen is captured and encoded by screencast.Recorder, cut into
-// fragmented-MP4 segments by container.Segmenter at every keyframe once
+// The screen is captured and encoded by capture.Recorder, cut into
+// fragmented-MP4 segments by mp4.Segmenter at every keyframe once
 // the segment length has passed (the encoder's keyframe interval is set to
 // exactly that length), and served from memory with a sliding-window
 // playlist. Safari plays it natively, other browsers through hls.js.
@@ -26,14 +26,15 @@ import (
 	"github.com/pkg/browser"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/container"
+	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/examples/screencast"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/net/hls"
 )
 
 type game struct {
 	scene *fireworks.Scene
-	rec   *screencast.Recorder
+	rec   *capture.Recorder
 	url   string
 
 	minimize bool
@@ -83,12 +84,12 @@ func main() {
 	if strings.EqualFold(*codecName, "hevc") {
 		codec = hwmediacodec.HEVC
 	}
-	playlist := NewPlaylist(*window, *segment)
-	seg, err := container.NewSegmenter(codec, screencast.TimeScale, *segment, playlist.SetInit, playlist.Add)
+	playlist := hls.NewPlaylist(*window, *segment)
+	seg, err := mp4.NewSegmenter(codec, capture.TimeScale, *segment, playlist.SetInit, playlist.Add)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rec, err := screencast.New(w, h, seg, screencast.Options{
+	rec, err := capture.New(w, h, seg, capture.Options{
 		Codec:            codec,
 		FPS:              *fps,
 		Bitrate:          *bitrate,
@@ -99,7 +100,7 @@ func main() {
 		log.Fatal(err)
 	}
 	go func() {
-		if err := http.ListenAndServe(*addr, playlist); err != nil {
+		if err := http.ListenAndServe(*addr, withPage(playlist)); err != nil {
 			log.Fatal(err)
 		}
 	}()

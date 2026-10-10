@@ -67,16 +67,16 @@ verification:
       milestone: examples-player-assets
     test: TestBundledClip
     evidence:
-      path: examples/container/assets_test.go
+      path: examples/assets/assets_test.go
       locator: TestBundledClip
       note: no ffmpeg or hardware; run 2026-10-09
     basis:
     - path: examples/assets/assets.go
-      input_hash: 72a452262cd7467c601e89fdd938984c8aa8bc27758a1f9c2289cdbd149285dc
-    - path: examples/container/assets_test.go
-      input_hash: 2480c3fc67d7a27b63a1012362999e5b45ba8e0adc0e368d058d20702ab7f574
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+      input_hash: ab5d57076b3b851f4979db913fb7dc66108e6226868cf5b558fb35f951401857
+    - path: examples/assets/assets_test.go
+      input_hash: 30d532b0276338370eb71ad5e6c98ca69b4bee65674263c8ca1793bcb3163e75
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
   player-test:
     state: passed
     method: integration
@@ -92,9 +92,9 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: examples/player/main.go
-      input_hash: 70aa6b8e5a7fd72770827c1559e2e50a9eecf007740485b1913196fe8476bc75
+      input_hash: c50ac7f824fbf8ed7133e29ed6c8c50abd36de47451ea80ae48e01d6a6857b8e
     - path: examples/player/main_test.go
-      input_hash: 5486ee96c095ca50667c9b380fc1fe8d5e300012a61a992d3a3a7f3ac3c9aae7
+      input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
   mesh-test:
     state: passed
     method: unit
@@ -125,7 +125,7 @@ verification:
       note: 2026-10-09 on the M3 - 765 frames recorded, 0 dropped
     basis:
     - path: examples/texture/main.go
-      input_hash: a4241062bda628f551865250d6c9515752ef87ebd9b6eda30175db3b51a6a9ce
+      input_hash: ffc3a2444239f4b2960d589ac9d49c2feaa938291997495c72a9068ea77b061b
     - path: examples/texture/shader.go
       input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
 facts:

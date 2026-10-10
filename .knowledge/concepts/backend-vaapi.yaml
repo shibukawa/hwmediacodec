@@ -273,7 +273,7 @@ verification:
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/oracle_test.go
-      input_hash: ad9a84ac7e548d485023c1487e3b1b55ebae7bb0cff73227508dcadcf511e977
+      input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
       input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
   dpb-oracle:
@@ -297,7 +297,7 @@ verification:
     - path: internal/h264/sps.go
       input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
     - path: internal/h264/dpb_oracle_test.go
-      input_hash: dece36a264453fd347dd35d835c9fb81995fe6cffb5d6c221ea30f459cbc87ac
+      input_hash: 2ccab55495face2c8e5141ce1f497de8a43e0f8875d482cfdf665c2a44deaa93
     - path: internal/h264/dpb_test.go
       input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
   linux-symbol-binding:
@@ -332,7 +332,7 @@ verification:
     - path: internal/h264/write.go
       input_hash: 23a5282c8f497fd47e493e98794e2c7592d981cf5839bb4b7ca266224ccd71b4
     - path: internal/h264/write_test.go
-      input_hash: 31c5442906545fe947897c3b8b1bdf9394d4c91afe610872957d8db572c46ec0
+      input_hash: cca1e86c02901250f7ac96b25ac926211b98362bb4f327279858c6150acc9a37
     - path: internal/vaapi/sys/types_enc.go
       input_hash: ce900535f2463ba7ea70d7e8c39298e9437bfe1baaf366e10a9a4e968684778f
     - path: internal/vaapi/sys/layout_enc_test.go
@@ -350,7 +350,7 @@ verification:
         against VideoToolbox and may need tuning for VCN.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/backend.go
       input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/display.go
@@ -358,7 +358,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
     - path: encode_test.go
-      input_hash: 99368c893298b1076ad981df73035789025db0a0ec19be1507c56ba38ebad609
+      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   h264-reference-linux:
     state: not_run
     method: integration
@@ -401,17 +401,17 @@ verification:
       note: debian trixie container, libva 2.22, linux/arm64 and (emulated) linux/amd64, 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
+      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
     - path: internal/vaapi/decoder.go
-      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
+      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
     - path: internal/vaapi/hevcdec.go
       input_hash: 8844e4633fe10e21b8afe6c235ed2832ab0d4252b9cdf46c601ddb2a6f651697
     - path: internal/vaapi/encoder.go
-      input_hash: 595b90f1736c9a0c6eec9f674c36def0c4976b63229b0e0f4f630c7688a68c93
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/hevcenc.go
-      input_hash: ed6177cdde5e0977d0928cf6672aded322130788ec632a437159169edd9c77dd
+      input_hash: b09f066a07ee0e7bbcdbb1ec87495b40ba45d39d391eec13284e93805a5aff44
   hevc-reference-linux:
     state: not_run
     method: integration

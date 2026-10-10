@@ -5,7 +5,7 @@ package ebitenvideo
 import (
 	"bytes"
 	"context"
-	"os"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -19,155 +19,77 @@ func requireHardware(t *testing.T) {
 	if runtime.GOARCH != "arm64" {
 		t.Skip("hardware decode tests target Apple Silicon")
 	}
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil || len(caps) == 0 {
+	if !hwmediacodec.HasHardware(context.Background(), hwmediacodec.H264, hwmediacodec.Decode) {
 		t.Skip("no hardware decoder on this machine")
 	}
 }
 
-// TestSourceDeliversDisplayOrderRGBA pulls every frame of a B-frame stream
-// through the decode goroutine and compares it with ffmpeg's RGBA output
-// (block-averaged; see the hwmediacodec decode tests for why).
-func TestSourceDeliversDisplayOrderRGBA(t *testing.T) {
+// TestPlayerUploadsFrames drives a Player with Update ticks, the way a
+// game does: the picture appears in an image of the stream's size, the end
+// is reported, and seeking brings the player back. The decoding and the
+// timing are tested in package playback.
+func TestPlayerUploadsFrames(t *testing.T) {
 	requireHardware(t)
-	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 160, 120, 20, 2)
-	want := testutil.ReferenceFrames(t, s.Path, s.Codec, hwmediacodec.RGBA, s.Width, s.Height)
-	f, err := os.Open(s.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	ss, err := newStreamSource(f, hwmediacodec.H264, 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := newSource(&seekableStream{ss}, 2, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer src.close()
-	var got [][]byte
-	deadline := time.Now().Add(10 * time.Second)
-	for len(got) < len(want) {
-		it, ok := src.next()
-		if !ok {
-			if err := src.Err(); err != nil {
-				t.Fatal(err)
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("timed out after %d frames", len(got))
-			}
-			time.Sleep(time.Millisecond)
-			continue
-		}
-		if it.end {
-			t.Fatalf("stream ended after %d frames, want %d", len(got), len(want))
-		}
-		if want := ss.frameTime(len(got)); it.pts != want || it.loop != 0 {
-			t.Fatalf("frame %d came at %v loop %d, want %v", len(got), it.pts, it.loop, want)
-		}
-		if it.frame.Format != hwmediacodec.RGBA || it.frame.Strides[0] != s.Width*4 {
-			t.Fatalf("frame %d: format %s stride %d", len(got), it.frame.Format, it.frame.Strides[0])
-		}
-		got = append(got, append([]byte(nil), it.frame.Planes[0]...))
-		it.release()
-	}
-	for i := range want {
-		if psnr := testutil.BlockPSNR(got[i], want[i], s.Width, s.Height, 8); psnr < 30 {
-			t.Fatalf("frame %d: block PSNR %.2f dB against ffmpeg", i, psnr)
-		}
-	}
-	ended := false
-	for time.Now().Before(deadline) && !ended {
-		it, ok := src.next()
-		if !ok {
-			time.Sleep(time.Millisecond)
-			continue
-		}
-		ended = it.end
-	}
-	if !ended {
-		t.Error("source did not report the end of the stream")
-	}
-	if err := src.Err(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestPlayerPlaysAndLoops drives a Player with ticks and checks that frames
-// appear at the stream's rate, that the end is reported, and that a looping
-// player restarts.
-func TestPlayerPlaysAndLoops(t *testing.T) {
-	requireHardware(t)
-	s := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 12)
+	s := testutil.GenerateStream(t, hwmediacodec.H264, 160, 120, 30)
 	data := testutil.ReadFile(t, s.Path)
-
-	t.Run("once", func(t *testing.T) {
-		p, err := NewPlayer(bytes.NewReader(data), hwmediacodec.H264, 30)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer p.Close()
-		if err := p.Update(); err != nil {
-			t.Fatal(err)
-		}
-		if p.Image() != nil {
-			t.Fatal("a paused player showed a frame")
-		}
-		p.Play()
-		// Default TPS is 60, so the 12 frames at 30 fps need 24 ticks plus
-		// decoding latency.
-		ticks := 0
-		for !p.Ended() && ticks < 600 {
-			if err := p.Update(); err != nil {
-				t.Fatal(err)
-			}
-			ticks++
-			time.Sleep(time.Millisecond)
-		}
-		if !p.Ended() {
-			t.Fatalf("player did not end after %d ticks (err %v)", ticks, p.Err())
-		}
-		if w, h := p.Size(); w != 160 || h != 120 || p.Image() == nil {
-			t.Fatalf("size %dx%d image %v", w, h, p.Image())
-		}
-		if b := p.Image().Bounds(); b.Dx() != 160 || b.Dy() != 120 {
-			t.Fatalf("image bounds %v", b)
-		}
-		if p.IsPlaying() {
-			t.Error("an ended player reports playing")
-		}
-		if pos := p.Position(); pos < 11*time.Second/30 {
-			t.Errorf("position %v at the end", pos)
-		}
-		t.Logf("ended after %d ticks, %d skipped", ticks, p.Skipped())
-	})
-
-	t.Run("loop", func(t *testing.T) {
-		p, err := NewPlayer(bytes.NewReader(data), hwmediacodec.H264, 30, WithLoop(), WithPrefetch(2))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer p.Close()
-		p.Play()
-		// Run through the stream three times.
-		for i := 0; i < 24*3+30; i++ {
+	p, err := NewPlayer(bytes.NewReader(data), hwmediacodec.H264, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if err := p.Update(); err != nil {
+		t.Fatal(err)
+	}
+	if p.Image() != nil {
+		t.Fatal("a paused player showed a frame")
+	}
+	p.Play()
+	run := func(ticks int, until func() bool) {
+		t.Helper()
+		for i := 0; i < ticks && !until(); i++ {
 			if err := p.Update(); err != nil {
 				t.Fatal(err)
 			}
 			time.Sleep(time.Millisecond)
 		}
-		if p.Ended() {
-			t.Fatal("a looping player ended")
-		}
-		if p.tl.loop < 2 {
-			t.Fatalf("only %d loop iterations", p.tl.loop+1)
-		}
-		t.Logf("%d iterations, position %v, %d skipped", p.tl.loop+1, p.Position(), p.Skipped())
-	})
+	}
+	// Default TPS is 60, so the 30 frames at 30 fps need 60 ticks plus
+	// decoding latency.
+	run(600, p.Ended)
+	if !p.Ended() || p.IsPlaying() {
+		t.Fatalf("player did not end (err %v, position %v)", p.Err(), p.Position())
+	}
+	if w, h := p.Size(); w != 160 || h != 120 || p.Image() == nil {
+		t.Fatalf("size %dx%d image %v", w, h, p.Image())
+	}
+	if b := p.Image().Bounds(); b.Dx() != 160 || b.Dy() != 120 {
+		t.Fatalf("image bounds %v", b)
+	}
+	if !p.Seekable() {
+		t.Error("a bytes.Reader source is not seekable")
+	}
+	if err := p.Seek(500 * time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if p.Ended() || !p.IsPlaying() {
+		t.Fatal("seek did not resume an ended player")
+	}
+	run(600, func() bool { return p.Position() > 500*time.Millisecond })
+	if pos := p.Position(); pos <= 500*time.Millisecond || pos > 700*time.Millisecond {
+		t.Errorf("position %v after the seek resumed, want just above 500ms", pos)
+	}
+	// The first seek scanned the raw stream, so its length is known now.
+	if p.Length() != time.Second {
+		t.Errorf("Length %v, want 1s", p.Length())
+	}
 
-	if _, err := NewPlayer(bytes.NewReader(data), hwmediacodec.H264, 0); err == nil {
-		t.Error("frame rate 0 was accepted")
+	np, err := NewPlayer(bytes.NewBuffer(data), hwmediacodec.H264, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer np.Close()
+	if np.Seekable() || !errors.Is(np.Seek(time.Second), ErrNotSeekable) {
+		t.Error("a non-seekable reader accepted Seek")
 	}
 	if _, err := NewPlayer(bytes.NewBuffer(data), hwmediacodec.H264, 30, WithLoop()); err == nil {
 		t.Error("looping over a non-seekable reader was accepted")

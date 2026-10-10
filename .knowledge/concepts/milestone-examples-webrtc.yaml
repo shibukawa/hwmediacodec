@@ -71,17 +71,17 @@ verification:
       milestone: examples-webrtc
     test: TestBroadcasterDeliversAccessUnits, TestBroadcasterStartsViewersAtKeyframes
     evidence:
-      path: examples/webrtc/server_test.go
+      path: net/webrtc/broadcaster_test.go
       locator: TestBroadcasterDeliversAccessUnits
       note: no hardware - packets from demuxing ffmpeg-made files, pion on both ends over loopback; run
         2026-10-09
     basis:
-    - path: examples/webrtc/server.go
-      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
-    - path: examples/webrtc/server_test.go
-      input_hash: 67200c94f010aff568fda9b47d5593b46f93385817e9d157230627b3cab67a0a
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: net/webrtc/broadcaster.go
+      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
+    - path: net/webrtc/broadcaster_test.go
+      input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
   recorder-keyframe-test:
     state: passed
     method: integration
@@ -92,14 +92,14 @@ verification:
       gpu: apple-silicon
     test: TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
     evidence:
-      path: examples/screencast/recorder_test.go
+      path: capture/recorder_test.go
       locator: TestRecorderRequestKeyframe
       note: Apple M3; run 2026-10-09
     basis:
-    - path: examples/screencast/recorder.go
-      input_hash: ca9e8ada593dbceeea9de07467adb83ff64b14f8a946115c3dd423685ab78c4e
-    - path: examples/screencast/recorder_test.go
-      input_hash: 5294d300c6b38e7f5d914383548f4d8eefc2058dba43e06e4d6eb90081c9fff9
+    - path: capture/recorder.go
+      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
   webrtc-live-run:
     state: passed
     method: manual
@@ -119,9 +119,9 @@ verification:
         rendered black and reported dropped frames because it was a hidden tab'
     basis:
     - path: examples/webrtc/main.go
-      input_hash: 0f15a661de5cb67af5fcbedb89a6bbc82163303736a587ee3cf205dcaa24c290
-    - path: examples/webrtc/server.go
-      input_hash: 77e63fa961ecac84131ab0d26724759ad414285877e8760d098ae182c1c5c275
+      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+    - path: net/webrtc/broadcaster.go
+      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
 open_questions:
   latency-measurement:
     text: End-to-end glass-to-glass latency was not measured (the pane could not be filmed); jitter buffer

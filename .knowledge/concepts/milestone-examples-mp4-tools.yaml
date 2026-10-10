@@ -88,17 +88,17 @@ verification:
       milestone: examples-mp4-tools
     test: TestDemuxMatchesFFprobe
     evidence:
-      path: examples/container/container_test.go
+      path: mediacontainer/mp4/mp4_test.go
       locator: TestDemuxMatchesFFprobe
       note: no hardware needed; ffmpeg 9.0.1 generated the inputs (libx264 bf=2 with AAC, libx265
         bf=2 hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
     basis:
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
-    - path: examples/container/container_test.go
-      input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
-    - path: examples/internal/testutil/ffmpeg.go
-      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
   container-mux-test:
     state: passed
     method: integration
@@ -107,18 +107,18 @@ verification:
       milestone: examples-mp4-tools
     test: TestMuxRoundTrip
     evidence:
-      path: examples/container/container_test.go
+      path: mediacontainer/mp4/mp4_test.go
       locator: TestMuxRoundTrip
       note: no hardware needed; H.264 bf=2 with audio, H.264 bf=0, HEVC bf=2 with audio; run 2026-10-09
     basis:
-    - path: examples/container/mux.go
-      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
-    - path: examples/container/container_test.go
-      input_hash: 470e5c5ba42f155a5022258ce474d016f50e34f93221a1afcbdca47870736ed3
-    - path: examples/internal/testutil/ffmpeg.go
-      input_hash: 72d36bf9f728c949ddee74fc35843a94a971129a677843afe537232bee5ffab7
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
   convert-test:
     state: passed
     method: integration
@@ -135,13 +135,13 @@ verification:
         quality 0.7 with B-frames; run 2026-10-09
     basis:
     - path: examples/convert/main.go
-      input_hash: f79da7e01c24086010077ad007aff7e4374a3a21a7ebc1b12070bb2b9713d8eb
-    - path: examples/container/mux.go
-      input_hash: ae5cbe83a912c10687660a61823605d7f40066a1786f4787499163d1a2cb6634
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
     - path: examples/convert/main_test.go
-      input_hash: 34dae9b24042d17cba767160d35509b49598d7bd0471c9a6a59e808efa110ed5
+      input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   convert-1080p-run:
     state: passed
     method: manual
@@ -158,7 +158,7 @@ verification:
         duration 10.000 s, AAC 469 packets copied, ffmpeg decodes without errors, PSNR 47.1 dB
     basis:
     - path: examples/convert/main.go
-      input_hash: f79da7e01c24086010077ad007aff7e4374a3a21a7ebc1b12070bb2b9713d8eb
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
   thumbnails-test:
     state: passed
     method: integration
@@ -175,13 +175,13 @@ verification:
         PSNR vs ffmpeg's frames, -every 1.5s gives two files, -width 80 gives 80x60; run 2026-10-09
     basis:
     - path: examples/thumbnails/main.go
-      input_hash: 742e2eae037726cc681d2312be09fd74236e9d43cb09487c293171b1c2226f38
+      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
-    - path: examples/container/demux.go
-      input_hash: 4860533e26d032c5b4c847529a0ff323b18a4948fdb7248ea56daf0ef13a6f82
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
     - path: examples/thumbnails/main_test.go
-      input_hash: fbd8f7d81db4f64c032c49929e7732d5eda3e55f97fe9503991af92b2849a6d0
+      input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
 open_questions:
   encoder-dts-semantics:
     text: Should the VideoToolbox encoder (and the Encoder contract in general) guarantee DTS <= PTS

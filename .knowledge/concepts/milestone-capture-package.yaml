@@ -1,0 +1,180 @@
+id: milestone:capture-package
+type: milestone
+title: capture - the screen recorder as a package of the core module
+summary: 'The recorder (screencast.Recorder in examples/screencast) moved from the examples module to the core module
+  as github.com/shibukawa/hwmediacodec/capture, next to annexb and ivf, so that it is a supported feature
+  with the core module''s version instead of sample code. The package depends on hwmediacodec only: Source
+  is Bounds()+ReadPixels() (satisfied by *ebiten.Image without importing Ebitengine) and Sink is WritePacket+Close.
+  The one sink that needed mp4ff, NewMP4File, became CreateVideoFile of the MP4 package, which followed into
+  the core module as mediacontainer/mp4 (milestone:mediacontainer-mp4).'
+lifecycle: active
+authority: authored
+aliases:
+- capture package
+- screencast package
+- screen recorder
+- 画面録画パッケージ
+- capture 正式機能化
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: capture-package
+constraints:
+- 'Nothing in capture imports Ebitengine, mp4ff or pion. Container and transport sinks live with their
+  dependencies (mediacontainer/mp4.VideoFile
+  and Segmenter, examples/webrtc.Broadcaster) and satisfy capture.Sink structurally.'
+- 'Named capture, not screencast: to the author screencast suggests mirroring a screen to a television
+  (casting), while the package grabs frames and encodes them. The type stays Recorder (capture.New returns
+  *capture.Recorder, fed with Recorder.Capture).'
+- 'A subpackage, not the root package: the root package is the codec API (Decoder, Encoder, Probe) and
+  the recorder is a consumer of it, like annexb and ivf are helpers around it. Recorder, Options and Sink
+  in package hwmediacodec would have needed prefixed names (NewRecorder, RecorderOptions).'
+- 'Packets go from the encoder goroutine straight into Sink.WritePacket in memory; no file is involved
+  unless the sink is one. The WebRTC sample hands each access unit to pion''s TrackLocalStaticSample and
+  the HLS sample segments in memory.'
+- 'The package tests cannot use an MP4 muxer, so TestRecorderEncodes collects the packets through Funcs,
+  checks PTS steps on the packets themselves and lets ffmpeg decode the concatenated Annex-B stream; the
+  MP4-level check (ffprobe frame count, duration, PTS steps) is TestVideoFileRecordsCapture in mediacontainer/mp4.'
+- 'examples/go.mod still requires hwmediacodec v0.1.0, which has no capture package: the workspace
+  (go.work) hides that in a clone, but go run ...examples/record@latest needs a core release that contains
+  the package, then the require line bumped and an examples tag.'
+non_goals:
+- Capturing the operating system's screen or a window from outside the process (ScreenCaptureKit, DXGI,
+  PipeWire); the recorder encodes pixels the caller hands it.
+- Audio capture and container formats in the core module.
+acceptance:
+  recorder-core:
+    text: Sixty frames of a synthetic screen captured at 30 fps (two captures per slot) reach the sink
+      as 60 packets starting with a keyframe, PTS steps of 3000 at 90 kHz, 2 s duration, no drops, the
+      sink closed; ffmpeg decodes the Annex-B stream to 60 pictures and the first matches the first captured
+      image within 30 dB (8x8-block PSNR).
+    scope:
+      milestone: capture-package
+    verified_by:
+    - recorder-core-test
+  recorder-keyframe-drops:
+    text: RequestKeyframe yields keyframes exactly at the requested captures, and with a queue of two frames
+      every capture is either encoded or counted as dropped.
+    scope:
+      milestone: capture-package
+    verified_by:
+    - recorder-core-test
+  no-new-dependencies:
+    text: The core module builds on its own (GOWORK=off), and go list -deps ./capture
+      shows only the standard library, purego, x/sys and packages of the module; go vet passes for linux
+      and windows.
+    scope:
+      milestone: capture-package
+    verified_by:
+    - deps-check
+  samples-follow:
+    text: record, texture, hls and webrtc build against the moved package; the MP4 sink test passes in
+      mediacontainer/mp4 and the record app still writes a playable 1280x720 file.
+    scope:
+      milestone: capture-package
+    verified_by:
+    - videofile-test
+    - record-run
+verification:
+  recorder-core-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRecorderEncodes, TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
+    evidence:
+      path: capture/recorder_test.go
+      locator: TestRecorderEncodes
+      note: Apple M3, macOS 27, ffmpeg; run 2026-10-09 (go test ./... of the core module passes)
+    basis:
+    - path: capture/recorder.go
+      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+    - path: packetio.go
+      input_hash: b15f7eb296f857f4b6584896df42eb30dddea3a16eb9c2e2765d85c510c8b9ab
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
+  deps-check:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: capture-package
+    test: GOWORK=off go build ./...; go list -deps ./capture; GOOS=linux and GOOS=windows go vet ./capture
+    evidence:
+      path: go.mod
+      locator: require
+      note: 2026-10-09 - non-standard dependencies of ./capture are hwmediacodec, hwmediacodec/annexb,
+        hwmediacodec/internal/... and purego (go.mod gained mp4ff a day later for mediacontainer/mp4, which
+        capture does not import)
+    basis:
+    - path: go.mod
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+  videofile-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: TestVideoFileRecordsCapture
+    evidence:
+      path: mediacontainer/mp4/videofile_test.go
+      locator: TestVideoFileRecordsCapture
+      note: 2026-10-09 - the former TestRecorderWritesMP4, unchanged apart from the sink constructor
+    basis:
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+  record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o rec.mp4 -seconds 3 -size 1280x720
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 - 137 frames, 0 dropped, 3 s; ffprobe h264 1280x720 137 frames 3.000 s
+    basis:
+    - path: examples/record/main.go
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
+open_questions:
+  examples-release:
+    text: When is the core module tagged with the capture package, so that examples/go.mod can require
+      it and the examples run by module path again?
+    state: open
+  more-sinks:
+    text: Should the core module ship sinks that need no dependency (an Annex-B io.Writer sink, an IVF
+      sink for AV1)?
+    state: deferred
+    resolution: Funcs covers them in three lines; add them when a user asks.
+facts:
+  api:
+    capture: 'import github.com/shibukawa/hwmediacodec/capture; New(width, height, sink, Options{Codec,
+      FPS, Bitrate, Quality, CBR, KeyframeInterval, LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source),
+      CaptureAt, RequestKeyframe, Close, Err, Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels();
+      Sink = WritePacket+Close; Funcs{Write, Done}; TimeScale 90000'
+    container: 'CreateVideoFile(path, codec, timeScale) -> *VideoFile{WritePacket, Close} (mediacontainer/mp4) replaces screencast.NewMP4File(path,
+      codec)'
+  result:
+    status: delivered 2026-10-09
+history:
+  delivered-2026-10-09:
+    summary: The author asked for the recorder to be a formal feature rather than a sample; it moved to
+      the core module as a subpackage with its hardware tests, was renamed from screencast to capture on
+      the author's request the same day, and the samples switched their imports.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:examples-screencast-hls
+- relation: uses_backend
+  to: backend:videotoolbox

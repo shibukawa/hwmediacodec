@@ -23,7 +23,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/bitstream"
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 	"github.com/shibukawa/hwmediacodec/internal/vaapi/sys"
-	"github.com/shibukawa/hwmediacodec/ivf"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
 
 // av1Shown is the frame a temporal unit shows: its number in decode order

@@ -1,0 +1,138 @@
+id: milestone:playback
+type: milestone
+title: playback - the player core without Ebitengine
+summary: 'The decoding goroutine, the timeline (pacing, frame skipping), seeking and looping of ebitenvideo
+  moved to the core module as github.com/shibukawa/hwmediacodec/playback. A playback.Player is driven with
+  Advance(dt), which returns the frame that became due; where the picture goes is the caller''s business.
+  ebitenvideo is now about 180 lines: it drives a playback.Player from the game loop and uploads the frames
+  to an *ebiten.Image, with its API unchanged.'
+lifecycle: active
+authority: authored
+aliases:
+- playback package
+- Player core
+- Advance
+- 再生コア
+scope:
+  platform: darwin
+  gpu: apple-silicon
+  milestone: playback
+constraints:
+- 'Only ebitenvideo/player.go imported Ebitengine; source.go (551 lines) and timeline.go did not, so
+  the split is a move plus a new Player type. The seek protocol, the loop rebase and the raw-stream timing
+  (frames of an untimed Annex-B stream are timed by output order) are as before; see milestone:ebitenvideo-seek.'
+- 'The decode loop is hwmediacodec.DecodeReader now: seek and stop requests are looked at once per frame
+  instead of once per packet, a seek calls Reset before repositioning the reader, and a loop iteration
+  calls Reset after rewinding because the reader had reached its end.'
+- 'Advance returns at most one frame per call (the latest one due; earlier ones are skipped and counted)
+  and nil between frames; the caller releases it. Frames are RGBA unless WithOutputFormat says otherwise;
+  ebitenvideo pins RGBA because WritePixels needs it.'
+- 'ebitenvideo.Option is an alias of playback.Option and ErrNotSeekable is the same value, so existing
+  callers compile unchanged.'
+- 'Length of a raw stream is 0 until the first seek scanned it; the new ebitenvideo test first asserted
+  it too early.'
+non_goals:
+- Audio, A/V synchronisation, a wall clock of its own (the caller supplies dt).
+acceptance:
+  core:
+    text: A playback.Player ticked at 60 Hz shows all 12 frames of a 30 fps stream and ends, loops without
+      ending, returns NV12 frames when asked, seeks (position right after Seek, clock resuming just above
+      the target, seeking past the end ends, seeking back resumes) and refuses to seek or loop a non-seekable
+      reader; the decode source delivers a B-frame stream in display order matching ffmpeg.
+    scope:
+      milestone: playback
+    verified_by:
+    - playback-test
+  ebitengine:
+    text: An ebitenvideo.Player driven with Update fills an image of the stream's size, ends, resumes
+      after Seek and reports the length once the stream was scanned.
+    scope:
+      milestone: playback
+    verified_by:
+    - ebitenvideo-test
+  samples:
+    text: The player and texture samples play the bundled clip; a recording of the texture sample's window
+      shows the picture.
+    scope:
+      milestone: playback
+    verified_by:
+    - texture-run
+verification:
+  playback-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerPlaysAndLoops, TestPlayerSeek, TestSourceSeek, TestSourceDeliversDisplayOrderRGBA, TestTimeline*
+    evidence:
+      path: playback/source_darwin_test.go
+      locator: TestPlayerPlaysAndLoops
+      note: Apple M3, macOS 27; run 2026-10-10 - ended after 33 ticks with 12 shown and 0 skipped
+    basis:
+    - path: playback/player.go
+      input_hash: a0917e0e22792cb1cdf616e3bc588fe5ed8e97a40325d977233a97435a269da9
+    - path: playback/source.go
+      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/source_darwin_test.go
+      input_hash: a5c4ff454cb8b0ff7efc604ca30333ea932ae4059bafa5d9807ae2141398d547
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
+  ebitenvideo-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerUploadsFrames
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      locator: TestPlayerUploadsFrames
+      note: run 2026-10-10, three times in a row
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+  texture-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -record tex.mp4 -seconds 3, then a frame extracted at 2 s
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-10 - 167 frames, 0 dropped, h264 1280x720 3.0 s; the extracted frame shows the waterfall
+        clip upright and in its colours (mp4.PacketSource -> playback -> ebitenvideo -> capture -> mp4.VideoFile)
+    basis:
+    - path: examples/texture/main.go
+      input_hash: ffc3a2444239f4b2960d589ac9d49c2feaa938291997495c72a9068ea77b061b
+facts:
+  api:
+    playback: 'import github.com/shibukawa/hwmediacodec/playback; New(src PacketReader, opts...) / NewStream(r,
+      codec, fps, opts...) -> Player{Play, Pause, IsPlaying, Ended, Err, Position, Length, Seekable, Seek,
+      Skipped, Size, Advance(dt) (*Frame, error), Close}; WithLoop, WithSoftwareFallback, WithPrefetch, WithOutputFormat;
+      ErrNotSeekable'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: Third and last of the reusability points the author asked for, after the interfaces and the
+      loops (milestone:packet-pipeline).
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:packet-pipeline
+- relation: follows
+  to: milestone:ebitenvideo-seek

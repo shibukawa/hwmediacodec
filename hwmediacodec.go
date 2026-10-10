@@ -27,7 +27,7 @@
 // Windows through every backend (8-bit Main profile; NVIDIA RTX 30 series,
 // Intel Tiger Lake, AMD RX 6000 series and newer; Media Foundation needs the
 // "AV1 Video Extension" package). A Packet is then one temporal unit (an IVF
-// frame or ISOBMFF sample; see package ivf), each yielding one frame in
+// frame or ISOBMFF sample; see package mediacontainer/ivf), each yielding one frame in
 // presentation order. No backend encodes AV1 yet.
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
@@ -84,6 +84,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"strings"
 
@@ -138,6 +139,12 @@ var (
 	ErrClosed      = codec.ErrClosed
 	ErrInvalidData = codec.ErrInvalidData
 )
+
+// RGBAFrame wraps img as an encoder input frame without copying: the frame
+// shares the image's pixels, which must stay untouched until Encoder.Send
+// has returned. Open the encoder with WithInputFormat(RGBA). The opposite
+// direction is Frame.RGBAImage.
+func RGBAFrame(img *image.RGBA, pts int64) *Frame { return codec.RGBAFrame(img, pts) }
 
 // DefaultTimeScale is the PTS unit used when WithTimeScale is not given.
 const DefaultTimeScale int32 = 90000

@@ -140,7 +140,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
     - path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: internal/videotoolbox/sys/sys.go
@@ -154,11 +154,11 @@ verification:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: decode_av1_test.go
       input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
     - path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: internal/testutil/av1.go
       input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: internal/testutil/ffmpeg.go
@@ -203,7 +203,7 @@ verification:
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   av1-sequence-change-test:
     state: passed
     method: integration
@@ -220,10 +220,10 @@ verification:
     basis:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
-    - path: ivf/ivf.go
+    - path: mediacontainer/ivf/ivf.go
       input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
     - path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   av1-flush-resume-test:
     state: passed
     method: integration
@@ -242,9 +242,9 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
     - path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: decode_test.go
-      input_hash: cc00d0e7069eee52ac416c5566a255ddb6a71b08b8864597200f3544889a0e10
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: decode_av1_test.go
       input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
   av1-decode-order-noop-test:
@@ -262,9 +262,9 @@ verification:
       note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
     basis:
     - path: hwmediacodec.go
-      input_hash: 04f1c5eb634bd5cb5b73269020ce4e2db3d2f5c3fca8dd2b950ee31c11d554d4
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: internal/videotoolbox/decoder.go
-      input_hash: 8b873c3bd363f9202fc4318bc7268962fd6ebae664a95e9585d1a766bc5f7bec
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: decode_av1_test.go
       input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
   av1-ten-bit-test:
@@ -311,7 +311,7 @@ verification:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: internal/av1/oracle_test.go
-      input_hash: 33849e8281f5abd6c53224870b72c4f142f72aaaad686a4790cee1b443429117
+      input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
     - path: internal/testutil/av1.go
       input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: internal/testutil/h264.go
@@ -349,15 +349,15 @@ verification:
       milestone: darwin-av1-decode
     test: TestRoundTripSeekable, TestRoundTripStream, TestEmptyFile, TestErrors, TestFFmpegInterop
     evidence:
-      path: ivf/ivf_test.go
+      path: mediacontainer/ivf/ivf_test.go
       locator: TestFFmpegInterop
       note: 2026-10-09; the copy of ffmpeg's IVF is byte-identical and ffprobe reads it as 96x64, 1/30,
         12 packets
     basis:
-    - path: ivf/ivf.go
+    - path: mediacontainer/ivf/ivf.go
       input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
-    - path: ivf/ivf_test.go
-      input_hash: 369573156dc14c846d4efe1adc30c1847f409031b0220979dff502d8001e6736
+    - path: mediacontainer/ivf/ivf_test.go
+      input_hash: 5fc2ceb7c2eaf1083603174cd23dc73694f5d8c8ad7b73282097942b90620542
   probe-test:
     state: passed
     method: integration
@@ -391,7 +391,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: go.mod
-      input_hash: 2c834d1288fde07a5553d4866ec87a746424b9ee280abe80945ca887866695b3
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
 open_questions:
   software-av1-on-m1-m2:
     text: On an M1 or M2, NewDecoder(AV1, WithSoftwareFallback()) runs av1SessionAvailable, which on

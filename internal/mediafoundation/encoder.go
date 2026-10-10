@@ -9,7 +9,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/mediafoundation/sys"
 )

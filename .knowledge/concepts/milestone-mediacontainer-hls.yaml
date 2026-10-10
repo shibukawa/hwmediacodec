@@ -1,0 +1,122 @@
+id: milestone:mediacontainer-hls
+type: milestone
+title: net/hls - the live HLS playlist server as a package of the core module
+summary: 'The sliding-window playlist of the HLS sample (examples/hls/server.go, package main) moved
+  to the core module as github.com/shibukawa/hwmediacodec/net/hls: Playlist is fed by mp4.Segmenter
+  (SetInit, Add), renders the media playlist and is an http.Handler for index.m3u8, init.mp4 and seg_N.m4s,
+  all from memory. The hls.js player page stayed in the sample (examples/hls/page.go).'
+lifecycle: active
+authority: authored
+aliases:
+- hls package
+- HLS playlist
+- HLS 配信パッケージ
+scope:
+  milestone: mediacontainer-hls
+constraints:
+- 'Standard library only (net/http) plus mediacontainer/mp4 for the Segment type; no new module dependency.'
+- 'The player page is not part of the package: it loads hls.js from a CDN, which a library handler should
+  not serve by default. The sample wraps the Playlist (withPage) and serves the page at / itself; the
+  package answers 404 there.'
+- 'ServeHTTP goes by the last path element instead of the exact paths /index.m3u8, /init.mp4, /seg_N.m4s
+  the sample used, so the handler can be mounted under a prefix (http.Handle("/live/", playlist)); the
+  URIs in the playlist were already relative. This is the only behaviour change of the move.'
+- 'Access-Control-Allow-Origin: * is kept on every response: a player page on another origin has to fetch
+  the playlist and the segments with CORS.'
+non_goals:
+- Low-latency HLS (partial segments, blocking playlist reload), multi-variant playlists, DASH, writing
+  segments to disk.
+acceptance:
+  playlist-server:
+    text: The handler answers 503 before the first segment, serves the m3u8 with the required tags, init.mp4
+      and seg_N.m4s with the right content types, 404 for unknown paths, keeps a sliding window, and after
+      End ffprobe reads the whole stream over HTTP (150 frames).
+    scope:
+      milestone: mediacontainer-hls
+    verified_by:
+    - playlist-test
+  mounted:
+    text: Mounted under /live/cam1/ the playlist, the init segment and a media segment are served.
+    scope:
+      milestone: mediacontainer-hls
+    verified_by:
+    - playlist-test
+  sample-follows:
+    text: The hls sample serves its page at / and the stream through the package; a live run is readable
+      by ffprobe.
+    scope:
+      milestone: mediacontainer-hls
+    verified_by:
+    - page-test
+    - hls-live-run
+verification:
+  playlist-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: mediacontainer-hls
+    test: TestPlaylistServesLiveHLS, TestPlaylistSlidingWindow, TestPlaylistMountedUnderPrefix
+    evidence:
+      path: net/hls/playlist_test.go
+      locator: TestPlaylistServesLiveHLS
+      note: no hardware - packets come from demuxing an ffmpeg-made file; run 2026-10-10
+    basis:
+    - path: net/hls/playlist.go
+      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+    - path: net/hls/playlist_test.go
+      input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+  page-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: mediacontainer-hls
+    test: TestPlayerPage
+    evidence:
+      path: examples/hls/page_test.go
+      locator: TestPlayerPage
+      note: run 2026-10-10
+    basis:
+    - path: examples/hls/page.go
+      input_hash: b551e737b74c01ba43b11b85de02aacecc0da68fd5dc3e8ee2767754be8d4e93
+    - path: examples/hls/page_test.go
+      input_hash: dc19bc530a9a967c0d5068e8543e76bc0f948b138ed7e22dd2cbf6fe5eae4a2b
+  hls-live-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: mediacontainer-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: hls -addr 127.0.0.1:18081 -open=false -auto -segment 1s, then curl and ffprobe
+    evidence:
+      path: examples/hls/main.go
+      locator: main
+      note: 2026-10-10 - Apple M3; the playlist answered 200 four seconds after start, the page at / was
+        served as text/html and ffprobe read h264 1280x720 from index.m3u8; no browser playback this time
+    basis:
+    - path: examples/hls/main.go
+      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+facts:
+  api:
+    hls: 'import github.com/shibukawa/hwmediacodec/net/hls; NewPlaylist(window, target) -> Playlist{SetInit([]byte),
+      Add(mp4.Segment), End(), M3U8() string, ServeHTTP}'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author asked for the HLS code to move as net/hls after the MP4 package.
+  moved-2026-10-10:
+    summary: Moved from mediacontainer/hls to net/hls the same day at the author's request; the milestone
+      id keeps the first path.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:mediacontainer-mp4
+- relation: follows
+  to: milestone:examples-screencast-hls

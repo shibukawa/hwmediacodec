@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/ebitengine/purego"
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/nvidia/sys"

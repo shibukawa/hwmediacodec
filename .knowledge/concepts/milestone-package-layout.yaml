@@ -1,0 +1,81 @@
+id: milestone:package-layout
+type: milestone
+title: Package layout of the core module - encoding/, mediacontainer/, image/, net/, capture
+summary: 'With sample code promoted to supported packages, the core module was regrouped by what each
+  package is: the root package stays the codec API; encoding/annexb (was annexb) is the H.264/HEVC byte
+  stream format; mediacontainer/{mp4,ivf,hls} are the containers (ivf was at the root); image/heif is
+  the still-image format; capture is the recorder. The author said compatibility with v0.1.0 import paths
+  is not needed yet, so there are no forwarding packages.'
+lifecycle: active
+authority: authored
+aliases:
+- package layout
+- import paths
+- パッケージ構成
+scope:
+  milestone: package-layout
+constraints:
+- 'No compatibility shims: the author stated on 2026-10-10 that compatibility is not needed yet and asked
+  for the best layout. Programs written against v0.1.0 must change hwmediacodec/annexb to hwmediacodec/encoding/annexb
+  and hwmediacodec/ivf to hwmediacodec/mediacontainer/ivf.'
+- 'annexb is under encoding/, in the sense of the standard library''s encoding/json and encoding/binary:
+  a data format that is both read and written (decoders consume Annex-B access units, encoders produce them).
+  It is not a container, so it is not under mediacontainer/. It was first moved to bitstream/annexb because
+  the author''s "encoder/annexb" was read as the encoder side only; the author meant encoding/ and it was
+  renamed the same day.'
+- 'encoding/, mediacontainer/ and image/ are namespace directories without Go files, named after their
+  standard-library counterparts where one exists (encoding, image).'
+- 'ebitenvideo, net/webrtc (added 2026-10-10, milestone:net-webrtc) and examples are separate modules
+  because of Ebitengine and pion; both import the new
+  paths and, like the other moves, need a core release before their go.mod can require it.'
+- 'HLS is under net/ (net/hls, first placed at mediacontainer/hls): it is an HTTP delivery protocol on
+  top of the mp4 segments, not a container; the author asked for net/hls and net/webrtc.'
+non_goals:
+- Changing any API of annexb or ivf; the move is import paths only.
+acceptance:
+  builds-and-tests:
+    text: Every package of the core module builds (also GOWORK=off, linux, windows) and its tests pass
+      with the new import paths; examples and ebitenvideo build and pass.
+    scope:
+      milestone: package-layout
+    verified_by:
+    - layout-test-run
+verification:
+  layout-test-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: package-layout
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in the core module, examples and ebitenvideo; go build for linux and windows
+    evidence:
+      path: encoding/annexb/annexb_test.go
+      locator: package
+      note: Apple M3, macOS 27; run 2026-10-10
+    basis:
+    - path: encoding/annexb/annexb.go
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
+    - path: mediacontainer/ivf/ivf.go
+      input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
+facts:
+  layout:
+    root: github.com/shibukawa/hwmediacodec - Probe, NewDecoder, NewEncoder
+    encoding: encoding/annexb
+    mediacontainer: mediacontainer/mp4, mediacontainer/ivf
+    image: image/heif, image/avif
+    net: net/hls (core module), net/webrtc (module of its own)
+    capture: capture
+    separate_modules: ebitenvideo, net/webrtc, examples
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author suggested moving annexb (as encoder/annexb or similar), said compatibility was
+      not needed and asked for the best layout.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:mediacontainer-hls

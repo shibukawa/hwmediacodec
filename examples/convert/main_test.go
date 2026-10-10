@@ -8,42 +8,42 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 )
 
 func TestConvert(t *testing.T) {
-	testutil.RequireFFmpeg(t)
+	mediatest.RequireFFmpeg(t)
 	cases := []struct {
 		name string
-		in   testutil.MP4Options
+		in   mediatest.MP4Options
 		opts options
 		minB int
 	}{
 		{
 			name: "h264_to_hevc_bitrate",
-			in:   testutil.MP4Options{Codec: hwmediacodec.H264, Width: 320, Height: 240, Frames: 60, BFrames: 2, GOP: 20, Audio: true},
+			in:   mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 320, Height: 240, Frames: 60, BFrames: 2, GOP: 20, Audio: true},
 			opts: options{codec: hwmediacodec.HEVC, bitrate: 2_000_000, gop: 30},
 		},
 		{
 			name: "hevc_to_h264_quality_bframes",
-			in:   testutil.MP4Options{Codec: hwmediacodec.HEVC, Width: 320, Height: 240, Frames: 45, BFrames: 0, GOP: 15},
+			in:   mediatest.MP4Options{Codec: hwmediacodec.HEVC, Width: 320, Height: 240, Frames: 45, BFrames: 0, GOP: 15},
 			opts: options{codec: hwmediacodec.H264, quality: 0.7, bframes: true},
 			minB: 1,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			testutil.RequireHardware(t, c.in.Codec, hwmediacodec.Decode)
-			testutil.RequireHardware(t, c.opts.codec, hwmediacodec.Encode)
+			mediatest.RequireHardware(t, c.in.Codec, hwmediacodec.Decode)
+			mediatest.RequireHardware(t, c.opts.codec, hwmediacodec.Encode)
 			dir := t.TempDir()
-			src := testutil.GenerateMP4(t, dir, c.in)
+			src := mediatest.GenerateMP4(t, dir, c.in)
 			out := filepath.Join(dir, "out.mp4")
 			if err := run(context.Background(), c.opts, src, out, io.Discard); err != nil {
 				t.Fatal(err)
 			}
-			testutil.CheckDecodes(t, out)
+			mediatest.CheckDecodes(t, out)
 
-			vs, vo := testutil.VideoStream(t, src), testutil.VideoStream(t, out)
+			vs, vo := mediatest.VideoStream(t, src), mediatest.VideoStream(t, out)
 			if vo.CodecName != c.opts.codec.String() {
 				t.Errorf("output codec %s, want %s", vo.CodecName, c.opts.codec)
 			}
@@ -56,15 +56,15 @@ func TestConvert(t *testing.T) {
 			if vo.HasB < c.minB {
 				t.Errorf("has_b_frames %d, want at least %d", vo.HasB, c.minB)
 			}
-			if psnr := testutil.PSNR(t, src, out); psnr < 30 {
+			if psnr := mediatest.PSNR(t, src, out); psnr < 30 {
 				t.Errorf("PSNR %.2f dB against the source, want at least 30", psnr)
 			}
 			// Timestamps are carried through unchanged.
 			var want, got []int64
-			for _, f := range testutil.Frames(t, src) {
+			for _, f := range mediatest.Frames(t, src) {
 				want = append(want, f.PTS)
 			}
-			for _, f := range testutil.Frames(t, out) {
+			for _, f := range mediatest.Frames(t, out) {
 				got = append(got, f.PTS)
 			}
 			if !slices.Equal(got, want) {
@@ -72,14 +72,14 @@ func TestConvert(t *testing.T) {
 			}
 			// Other tracks are copied.
 			if c.in.Audio {
-				var as, ao *testutil.Stream
-				for _, s := range testutil.Streams(t, src) {
+				var as, ao *mediatest.Stream
+				for _, s := range mediatest.Streams(t, src) {
 					if s.CodecType == "audio" {
 						s := s
 						as = &s
 					}
 				}
-				for _, s := range testutil.Streams(t, out) {
+				for _, s := range mediatest.Streams(t, out) {
 					if s.CodecType == "audio" {
 						s := s
 						ao = &s

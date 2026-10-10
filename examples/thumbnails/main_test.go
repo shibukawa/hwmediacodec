@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/testutil"
+	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 )
 
 func loadPNG(t *testing.T, path string) image.Image {
@@ -62,12 +62,12 @@ func blockPSNR(a, b image.Image) float64 {
 }
 
 func TestThumbnails(t *testing.T) {
-	testutil.RequireFFmpeg(t)
-	testutil.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
+	mediatest.RequireFFmpeg(t)
+	mediatest.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	dir := t.TempDir()
 	// 90 frames at 30 fps with a keyframe every 30 frames: keyframes at 0 s,
 	// 1 s and 2 s.
-	src := testutil.GenerateMP4(t, dir, testutil.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 90, BFrames: 2, GOP: 30})
+	src := mediatest.GenerateMP4(t, dir, mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 90, BFrames: 2, GOP: 30})
 
 	t.Run("all", func(t *testing.T) {
 		out := filepath.Join(dir, "all")
@@ -86,7 +86,7 @@ func TestThumbnails(t *testing.T) {
 			if b := got.Bounds(); b.Dx() != 160 || b.Dy() != 120 {
 				t.Errorf("thumbnail %d is %v", i, b)
 			}
-			want := loadPNG(t, testutil.ExtractFrame(t, src, i*30, dir))
+			want := loadPNG(t, mediatest.ExtractFrame(t, src, i*30, dir))
 			if p := blockPSNR(got, want); p < 30 {
 				t.Errorf("thumbnail %d: %.1f dB against ffmpeg's frame, want at least 30", i, p)
 			}

@@ -139,7 +139,7 @@ verification:
     - path: internal/av1/header_oracle_test.go
       input_hash: 7fcfe54cd02053cae7e2596b0f29d17cd8b4dd02c3e6c397c04ef16ec7874cd6
     - path: internal/av1/oracle_test.go
-      input_hash: 33849e8281f5abd6c53224870b72c4f142f72aaaad686a4790cee1b443429117
+      input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
     - path: internal/testutil/av1.go
       input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: internal/testutil/h264.go
@@ -175,7 +175,7 @@ verification:
     - path: internal/vaapi/av1fill.go
       input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
     - path: internal/vaapi/decoder.go
-      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
+      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
     - path: internal/vaapi/backend.go
       input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/sys/types_av1.go
@@ -185,9 +185,9 @@ verification:
     - path: internal/vaapi/testdata/fakedriver/Dockerfile
       input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
     - path: fakevaapi_av1_linux_test.go
-      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+      input_hash: 7cdf7b2f1ed77dabaaa04d3306abaeaa7184de805fb6b06bac277b7839cb40b7
     - path: fakevaapi_linux_test.go
-      input_hash: 73859cdd0e921650daf9723e1959536f85e60ca76bfe525272b9b5b11b460e03
+      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
     - path: internal/testutil/av1.go
       input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: scripts/vaapi_fake_driver_test.sh
@@ -213,7 +213,7 @@ verification:
     - path: internal/vaapi/av1fill.go
       input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
     - path: fakevaapi_av1_linux_test.go
-      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+      input_hash: 7cdf7b2f1ed77dabaaa04d3306abaeaa7184de805fb6b06bac277b7839cb40b7
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
   fake-vaapi-av1-sequence-test:
@@ -233,9 +233,9 @@ verification:
     - path: internal/vaapi/av1dec.go
       input_hash: 36a90c41028038072c2519c14a965d866806e991f102d01120d546cce32b8a68
     - path: internal/vaapi/decoder.go
-      input_hash: 50a8709b771aa0c0dedd6541975ad8dcd0fe0248103f4726fe43c8741fb86e43
+      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
     - path: fakevaapi_av1_linux_test.go
-      input_hash: 044a6b81bf9f2195ccf574d2e85aca46db662d30c68e4ad79c07202a00c8faf8
+      input_hash: 7cdf7b2f1ed77dabaaa04d3306abaeaa7184de805fb6b06bac277b7839cb40b7
   av1-layout-test:
     state: passed
     method: unit

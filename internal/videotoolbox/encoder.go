@@ -12,7 +12,7 @@ import (
 
 	"github.com/ebitengine/purego"
 
-	"github.com/shibukawa/hwmediacodec/annexb"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/videotoolbox/sys"
 )
