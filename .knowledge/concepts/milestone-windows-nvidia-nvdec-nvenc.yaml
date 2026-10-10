@@ -156,7 +156,7 @@ verification:
     - path: internal/nvidia/sys/lib_windows.go
       input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
     - path: ebitenvideo/go.sum
-      input_hash: 7e7d91e9336a2f39e5bd87263ab1e71a867d35dc0f52082caacfcd0041fc4fa8
+      input_hash: 5bdf15e5a046d115cf532b99766dc827c3ae8e39f66e8db9987b8764f334e2fe
   linux-regression:
     state: passed
     method: integration
