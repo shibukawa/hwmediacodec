@@ -93,16 +93,16 @@ verification:
       gpu: apple-silicon
     test: TestSourceSeek, TestSourceDeliversDisplayOrderRGBA
     evidence:
-      path: ebitenvideo/seek_darwin_test.go
+      path: playback/seek_darwin_test.go
       locator: TestSourceSeek
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
-    - path: ebitenvideo/source.go
-      input_hash: d77a7b838d9facf974d8e6f9a9e4db97547c470f54d48e6b63c122e3c88d04c6
-    - path: ebitenvideo/seek_darwin_test.go
-      input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
+    - path: playback/source.go
+      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
+      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
   player-seek-test:
@@ -115,16 +115,16 @@ verification:
       gpu: apple-silicon
     test: TestPlayerSeek, TestPlayerPlaysAndLoops
     evidence:
-      path: ebitenvideo/seek_darwin_test.go
+      path: playback/seek_darwin_test.go
       locator: TestPlayerSeek
       note: run 2026-10-09
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 9957a3f0274aa144ce1f2aa1de8a7efa9ffdd8518084eaf229ef2311254d35c3
-    - path: ebitenvideo/timeline.go
-      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
-    - path: ebitenvideo/seek_darwin_test.go
-      input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
   timeline-unit-test:
     state: passed
     method: unit
@@ -133,13 +133,13 @@ verification:
       milestone: ebitenvideo-seek
     test: TestTimelineSeekResetsClock and the existing timeline tests (now pts based)
     evidence:
-      path: ebitenvideo/timeline_test.go
+      path: playback/timeline_test.go
       locator: TestTimelineSeekResetsClock
     basis:
-    - path: ebitenvideo/timeline.go
-      input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
-    - path: ebitenvideo/timeline_test.go
-      input_hash: e1025e38e3f856dcb4f2e1da62101594729047cefb45ca28e85ea580de1ff3c8
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/timeline_test.go
+      input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
   packet-source-test:
     state: passed
     method: integration

@@ -1,8 +1,6 @@
 package ebitenvideo
 
 import (
-	"errors"
-	"fmt"
 	"image"
 	"io"
 	"time"
@@ -10,50 +8,43 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/playback"
 )
 
-// Option configures a Player.
-type Option func(*config)
-
-type config struct {
-	loop     bool
-	software bool
-	prefetch int
-}
+// Option configures a Player. The options are those of package playback,
+// which does the decoding and the timing.
+type Option = playback.Option
 
 // WithLoop restarts the stream from the beginning when it ends. The source
-// must be able to seek: an io.ReadSeeker for NewPlayer, a hwmediacodec.PacketSeeker for
-// NewPlayerFromSource.
-func WithLoop() Option { return func(c *config) { c.loop = true } }
+// must be able to seek: an io.ReadSeeker for NewPlayer, a
+// hwmediacodec.PacketSeeker for NewPlayerFromSource.
+func WithLoop() Option { return playback.WithLoop() }
 
 // WithSoftwareFallback allows the operating system's software decoder on
 // machines without a hardware engine (see hwmediacodec.WithSoftwareFallback).
-func WithSoftwareFallback() Option { return func(c *config) { c.software = true } }
+func WithSoftwareFallback() Option { return playback.WithSoftwareFallback() }
 
 // WithPrefetch sets how many decoded frames may wait ahead of playback
 // (default 4). Each one holds a full RGBA picture in memory.
-func WithPrefetch(frames int) Option { return func(c *config) { c.prefetch = frames } }
+func WithPrefetch(frames int) Option { return playback.WithPrefetch(frames) }
+
+// ErrNotSeekable is returned by Player.Seek when the source is not a
+// hwmediacodec.PacketSeeker (a plain io.Reader, for example).
+var ErrNotSeekable = playback.ErrNotSeekable
 
 // Player plays hardware-decoded video and keeps the current frame in an
-// *ebiten.Image.
+// *ebiten.Image. It is a playback.Player whose frames are uploaded to a
+// texture.
 //
 // Decoding runs on a background goroutine; the methods of Player are meant
 // to be called from the game's goroutine (Update and Draw).
 type Player struct {
-	src     *source
-	tl      timeline
+	core    *playback.Player
 	img     *ebiten.Image
 	scratch []byte
 	width   int
 	height  int
-
-	playing bool
-	ended   bool
-	endSeen bool
-	gen     int
-	err     error
 	last    time.Time
-	skipped int
 }
 
 // NewPlayer starts decoding the Annex-B elementary stream r (for example a
@@ -62,149 +53,90 @@ type Player struct {
 // can loop and Seek (the stream is scanned once for keyframes on the first
 // seek).
 func NewPlayer(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (*Player, error) {
-	if fps <= 0 {
-		return nil, fmt.Errorf("ebitenvideo: frame rate must be positive, got %g", fps)
-	}
-	ss, err := newStreamSource(r, c, fps)
+	core, err := playback.NewStream(r, c, fps, rgba(opts)...)
 	if err != nil {
 		return nil, err
 	}
-	var src hwmediacodec.PacketReader = ss
-	if ss.rs != nil {
-		src = &seekableStream{ss}
-	}
-	return NewPlayerFromSource(src, opts...)
+	return &Player{core: core}, nil
 }
 
 // NewPlayerFromSource starts decoding packets from src, which carries its
 // own presentation times (an MP4 demuxer, for example). Looping and Seek
-// need src to implement hwmediacodec.PacketSeeker.
+// need src to be a hwmediacodec.PacketSeeker.
 func NewPlayerFromSource(src hwmediacodec.PacketReader, opts ...Option) (*Player, error) {
-	cfg := config{prefetch: 4}
-	for _, o := range opts {
-		o(&cfg)
-	}
-	s, err := newSource(src, cfg.prefetch, cfg.loop, cfg.software)
+	core, err := playback.New(src, rgba(opts)...)
 	if err != nil {
 		return nil, err
 	}
-	return &Player{src: s}, nil
+	return &Player{core: core}, nil
+}
+
+// rgba pins the frame format to what WritePixels takes, whatever the
+// options say.
+func rgba(opts []Option) []Option {
+	return append(opts[:len(opts):len(opts)], playback.WithOutputFormat(hwmediacodec.RGBA))
 }
 
 // Play starts or resumes playback.
-func (p *Player) Play() { p.playing = true }
+func (p *Player) Play() { p.core.Play() }
 
-// Pause stops advancing; the current frame stays in Image.
-func (p *Player) Pause() { p.playing = false }
+// Pause stops the clock; the current picture stays.
+func (p *Player) Pause() { p.core.Pause() }
 
-// IsPlaying reports whether playback advances on Update.
-func (p *Player) IsPlaying() bool { return p.playing && !p.ended && p.err == nil }
+// IsPlaying reports whether the clock is running: Play was called and the
+// stream has neither ended nor failed.
+func (p *Player) IsPlaying() bool { return p.core.IsPlaying() }
 
-// Ended reports whether the last frame has been shown. A looping player
-// never ends; Seek clears the flag.
-func (p *Player) Ended() bool { return p.ended }
+// Ended reports whether the last frame has been shown (never when looping).
+func (p *Player) Ended() bool { return p.core.Ended() }
 
-// Err returns the decoding error that stopped playback, or nil.
-func (p *Player) Err() error { return p.err }
+// Err returns the first decoding error.
+func (p *Player) Err() error { return p.core.Err() }
 
-// Position returns the playback position within the current loop
-// iteration. Right after Seek it is the seek target.
-func (p *Player) Position() time.Duration { return p.tl.position() }
+// Position is the current playback time within the stream.
+func (p *Player) Position() time.Duration { return p.core.Position() }
 
-// Length returns the stream duration when the source knows it (an MP4
-// track always does; a raw stream after its first seek), otherwise 0.
-func (p *Player) Length() time.Duration {
-	if p.src.seeker == nil {
-		return 0
-	}
-	return p.src.seeker.Length()
-}
+// Length is the stream duration, or 0 when it is not known (a source that
+// cannot seek, or a raw stream that has not been scanned yet).
+func (p *Player) Length() time.Duration { return p.core.Length() }
 
-// Seekable reports whether Seek works for this player's source.
-func (p *Player) Seekable() bool { return p.src.seeker != nil }
+// Seekable reports whether Seek works.
+func (p *Player) Seekable() bool { return p.core.Seekable() }
 
-// Seek moves playback to t: decoding restarts at the last keyframe before
-// t and the frames up to t are skipped, so the next picture shown is the
-// one at t (or the first one after it). Frames already decoded are
-// dropped. Seeking past the end ends playback; seeking a finished player
-// resumes it. It returns ErrNotSeekable when the source cannot seek.
-func (p *Player) Seek(t time.Duration) error {
-	if p.err != nil {
-		return p.err
-	}
-	if p.src.seeker == nil {
-		return ErrNotSeekable
-	}
-	if t < 0 {
-		t = 0
-	}
-	p.gen++
-	p.src.requestSeek(seekRequest{target: t, gen: p.gen})
-	p.tl.reset(t)
-	p.ended, p.endSeen = false, false
-	return nil
-}
+// Seek jumps to t: decoding restarts at the keyframe before t and the next
+// picture shown is the one at t. The clock waits for that picture. Seeking
+// also resumes a player that has ended.
+func (p *Player) Seek(t time.Duration) error { return p.core.Seek(t) }
 
-// Skipped returns how many frames were dropped so far because decoding or
-// the game loop fell behind.
-func (p *Player) Skipped() int { return p.skipped }
+// Skipped is the number of frames dropped so far because decoding or the
+// game loop was behind.
+func (p *Player) Skipped() int { return p.core.Skipped() }
 
-// Image returns the image holding the current frame, or nil before the
-// first frame is available. The same image is updated in place; do not
-// deallocate it.
+// Image returns the current picture, or nil before the first frame. The
+// image is updated in place by Update and replaced when the picture size
+// changes.
 func (p *Player) Image() *ebiten.Image { return p.img }
 
-// Size returns the picture size, or (0, 0) before the first frame.
+// Size is the size of the current picture (0, 0 before the first frame).
 func (p *Player) Size() (width, height int) { return p.width, p.height }
 
-// Update advances playback by one tick. Call it once from the game's
-// Update. It returns the error that stopped playback, if any.
+// Update advances playback by one tick and uploads the frame that became
+// due. Call it once from the game's Update.
 func (p *Player) Update() error {
-	if p.err != nil {
-		return p.err
-	}
-	if p.ended || !p.playing {
+	if !p.core.IsPlaying() {
 		p.last = time.Time{}
-		return nil
+		return p.core.Err()
 	}
-	show, skipped := p.tl.advance(p.tick(), p.next)
-	p.skipped += skipped
-	if show.frame != nil {
-		p.upload(show.frame)
-		show.release()
+	f, err := p.core.Advance(p.tick())
+	if f != nil {
+		p.upload(f)
+		f.Release()
 	}
-	if err := p.src.Err(); err != nil {
-		p.err = err
-		return err
-	}
-	if p.endSeen && !p.tl.hasPending {
-		p.ended = true
-	}
-	return nil
+	return err
 }
 
-// next pulls the next frame of the current generation from the decoder,
-// dropping frames that belong to a position Seek has left and noting the
-// end marker.
-func (p *Player) next() (item, bool) {
-	for {
-		it, ok := p.src.next()
-		if !ok {
-			return item{}, false
-		}
-		if it.gen != p.gen {
-			it.doRelease() // decoded before the last seek was picked up
-			continue
-		}
-		if it.end {
-			p.endSeen = true
-			continue
-		}
-		return it, true
-	}
-}
-
-// tick returns the time one Update represents.
+// tick is the time one Update stands for: 1/TPS, or the wall-clock time
+// since the previous Update when the TPS is SyncWithFPS.
 func (p *Player) tick() time.Duration {
 	if tps := ebiten.TPS(); tps > 0 {
 		return time.Second / time.Duration(tps)
@@ -219,7 +151,6 @@ func (p *Player) tick() time.Duration {
 	return dt
 }
 
-// upload copies a decoded RGBA frame into the image.
 func (p *Player) upload(f *hwmediacodec.Frame) {
 	w, h := f.Width, f.Height
 	if p.img == nil || w != p.width || h != p.height {
@@ -231,6 +162,7 @@ func (p *Player) upload(f *hwmediacodec.Frame) {
 	}
 	pix := f.Planes[0]
 	if stride := f.Strides[0]; stride != w*4 {
+		// WritePixels wants tightly packed rows.
 		if cap(p.scratch) < w*h*4 {
 			p.scratch = make([]byte, w*h*4)
 		}
@@ -243,13 +175,5 @@ func (p *Player) upload(f *hwmediacodec.Frame) {
 	p.img.WritePixels(pix)
 }
 
-// Close stops decoding and releases the decoder. The image stays usable.
-func (p *Player) Close() error {
-	p.playing = false
-	p.tl.release()
-	err := p.src.close()
-	if p.err == nil && err != nil && !errors.Is(err, hwmediacodec.ErrClosed) {
-		p.err = err
-	}
-	return err
-}
+// Close stops decoding and releases the decoder. The image stays valid.
+func (p *Player) Close() error { return p.core.Close() }

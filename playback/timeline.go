@@ -1,4 +1,4 @@
-package ebitenvideo
+package playback
 
 import "time"
 

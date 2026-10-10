@@ -97,8 +97,8 @@ verification:
     basis:
     - path: capture/recorder.go
       input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
-    - path: capture/sinks.go
-      input_hash: 886b58fe675995d986c1b643878763f581154dbed7bf575fbc9d004168440927
+    - path: packetio.go
+      input_hash: b15f7eb296f857f4b6584896df42eb30dddea3a16eb9c2e2765d85c510c8b9ab
     - path: capture/recorder_test.go
       input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
     - path: mediacontainer/mp4/videofile.go

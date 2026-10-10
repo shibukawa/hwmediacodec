@@ -1,6 +1,6 @@
 //go:build darwin
 
-package ebitenvideo
+package playback
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func TestSourceSeek(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src, err := newSource(&seekableStream{ss}, 4, false, false)
+	src, err := newSource(&seekableStream{ss}, 4, false, false, hwmediacodec.RGBA)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,12 +104,12 @@ func TestSourceSeek(t *testing.T) {
 	}
 }
 
-// TestPlayerSeek drives a Player through seeks with Update ticks.
+// TestPlayerSeek drives a Player through seeks with 60 Hz ticks.
 func TestPlayerSeek(t *testing.T) {
 	requireHardware(t)
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 160, 120, 90, 2)
 	data := testutil.ReadFile(t, s.Path)
-	p, err := NewPlayer(bytes.NewReader(data), hwmediacodec.H264, 30)
+	p, err := NewStream(bytes.NewReader(data), hwmediacodec.H264, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,18 +118,30 @@ func TestPlayerSeek(t *testing.T) {
 		t.Fatal("a bytes.Reader source is not seekable")
 	}
 	p.Play()
+	shown := 0
 	run := func(ticks int, until func() bool) {
 		t.Helper()
 		for i := 0; i < ticks && !until(); i++ {
-			if err := p.Update(); err != nil {
+			f, err := p.Advance(time.Second / 60)
+			if err != nil {
 				t.Fatal(err)
+			}
+			if f != nil {
+				if f.Format != hwmediacodec.RGBA || f.Width != 160 || f.Height != 120 {
+					t.Fatalf("frame %s %dx%d", f.Format, f.Width, f.Height)
+				}
+				shown++
+				f.Release()
 			}
 			time.Sleep(time.Millisecond)
 		}
 	}
-	run(60, func() bool { return p.Image() != nil })
-	if p.Image() == nil {
+	run(60, func() bool { return shown > 0 })
+	if shown == 0 {
 		t.Fatal("no frame shown")
+	}
+	if w, h := p.Size(); w != 160 || h != 120 {
+		t.Errorf("Size %dx%d", w, h)
 	}
 	if err := p.Seek(2 * time.Second); err != nil {
 		t.Fatal(err)
@@ -169,7 +181,7 @@ func TestPlayerSeek(t *testing.T) {
 		t.Fatalf("player did not end; position %v", p.Position())
 	}
 
-	np, err := NewPlayer(bytes.NewBuffer(data), hwmediacodec.H264, 30)
+	np, err := NewStream(bytes.NewBuffer(data), hwmediacodec.H264, 30)
 	if err != nil {
 		t.Fatal(err)
 	}

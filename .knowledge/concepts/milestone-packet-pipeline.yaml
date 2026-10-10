@@ -1,0 +1,161 @@
+id: milestone:packet-pipeline
+type: milestone
+title: Packet and frame pipeline in the root package - readers, writers, DecodeReader, EncodeWriter
+summary: 'Asked what else would raise reusability, the review found the same shapes declared in several
+  packages and the Send/Receive loop written out sixteen times. The root package now has PacketReader/PacketSeeker
+  (replacing ebitenvideo.Source/Seeker), PacketWriter/PacketWriteCloser/PacketWriterFunc (replacing capture.Sink/Funcs),
+  FrameReader/FrameWriter with DecodeReader, EncodeWriter and CopyFrames, plus HasHardware, Frame.RGBAImage,
+  RGBAFrame and the annexb length-prefixed conversions. capture, mediacontainer/mp4, the image packages,
+  playback, the samples and the command-line tool are built on them.'
+lifecycle: active
+authority: authored
+aliases:
+- PacketReader
+- PacketWriter
+- DecodeReader
+- EncodeWriter
+- CopyFrames
+- パイプライン
+- 再利用性
+scope:
+  milestone: packet-pipeline
+constraints:
+- 'PacketReader hands out hwmediacodec.Packet values and declares TimeScale(); the decoder is opened with
+  WithTimeScale(src.TimeScale()) so Frame.PTS is in the reader''s units. Packet.PTS counts from the start
+  of the presentation: mp4.PacketSource subtracts the edit-list offset (DTS can then be negative; decoders
+  ignore it), while VideoTrack.Packet keeps the stored sample times. The converter moved to PacketSource
+  and its timestamp tests pass unchanged.'
+- 'DecodeReader calls Receive first and feeds one packet when the decoder asks (ErrAgain or, right after
+  a Reset, io.EOF); a packet the decoder refuses with ErrAgain is kept and offered again. It treats
+  the end as reached only after it flushed the decoder itself. Reset flushes and discards, for use after
+  PacketSeeker.SeekKeyframe. It checks the context on every turn but, like the loops it replaces, does not
+  sleep when a decoder answers ErrAgain on both calls.'
+- 'EncodeWriter and DecodeReader own neither the codec nor the reader/writer; closing stays with the caller.
+  CopyFrames releases each frame after writing it and does not flush.'
+- 'Lazy construction is done by composition: the converter''s frame writer opens the encoder for the size
+  of the first decoded picture and wraps an EncodeWriter; its packet writer interleaves the copied tracks.'
+- 'capture.Recorder now returns the pixel buffer to its pool after the packets of that frame were written
+  rather than right after Send; one buffer is held slightly longer.'
+- 'internal/testutil and internal/mediatest stay two packages: the root package''s internal tests use
+  testutil, which therefore cannot import the root package, while mediatest builds on the public API. mediatest
+  now delegates the ffmpeg checks to testutil.'
+- 'Publishing the parameter-set parsers (internal/h264, hevc, av1) as encoding/* was considered and left
+  for when a user needs it: it would freeze a large internal API.'
+non_goals:
+- A filter graph, frame pools or a scheduler; the interfaces are the whole abstraction.
+- Changing Decoder or Encoder.
+acceptance:
+  helpers:
+    text: With fake codecs, DecodeReader returns every frame once and in order for one-in-one-out, reordering
+      and full-queue decoders, flushes once, keeps EOF sticky, restarts after Reset and a seek, and passes
+      reader errors and cancellation on; EncodeWriter writes every packet with and without look-ahead and
+      stops on the writer's error; CopyFrames transcodes 40 frames.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - pipeline-test
+  small-helpers:
+    text: HasHardware agrees with Probe for every codec and direction; RGBAImage copies RGBA and BGRA frames
+      with padded strides and refuses NV12; RGBAFrame shares an image's pixels, sub-images included; the
+      length-prefixed conversions round-trip and reject bad lengths.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - pipeline-test
+  users-follow:
+    text: Every test of the four modules passes with capture, mp4, the image packages, the samples and
+      ebitenvideo on the new types; the command-line tool decodes bit-exactly like ffmpeg, transcodes and
+      encodes.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - all-tests
+    - cli-run
+verification:
+  pipeline-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+    test: TestDecodeReader, TestDecodeReaderReset, TestDecodeReaderErrors, TestEncodeWriter, TestCopyFrames,
+      TestHasHardwareAgreesWithProbe, TestPacketWriterFunc, TestRGBAImage, TestRGBAFrame, TestLengthPrefixedRoundTrip,
+      TestFromLengthPrefixedErrors
+    evidence:
+      path: pipeline_test.go
+      locator: TestDecodeReader
+      note: run 2026-10-10; the first DecodeReader took the decoder's io.EOF right after Reset for the end
+        of the stream, which TestDecodeReaderReset caught
+    basis:
+    - path: pipeline.go
+      input_hash: 2001ad3a3086381e661c69205dfeaf6db3aaedd4f68b46d39f3f1d1b6373934d
+    - path: packetio.go
+      input_hash: b15f7eb296f857f4b6584896df42eb30dddea3a16eb9c2e2765d85c510c8b9ab
+    - path: pipeline_test.go
+      input_hash: 8a3fa62b3c6c49ffef2f4986ff0d05354a5893f89156a451aaee5ba8db9cff7b
+    - path: packetio_test.go
+      input_hash: 0c33dad52282038e274dd56af9d4fcd7f43e4eb5a6aea38afbee513436c43e57
+    - path: internal/codec/image.go
+      input_hash: 6f476659cb9a90afafec4106dce75cc3d543165559da21774f8763bbe5312e4f
+    - path: internal/codec/image_test.go
+      input_hash: 6afe0a42bf1c643c5e9d03dd5c1d74f9bf443bfaf70894e0dc51929016285472
+    - path: encoding/annexb/lengthprefixed_test.go
+      input_hash: 2a86c031d9f989b799b7955d090ae80500ffd07e11788a395d372841ea369974
+  all-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in the core module, examples, ebitenvideo and net/webrtc; scripts/crossbuild.sh
+    evidence:
+      path: examples/convert/main.go
+      locator: run
+      note: Apple M3, macOS 27; run 2026-10-10
+    basis:
+    - path: examples/convert/main.go
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
+    - path: examples/thumbnails/main.go
+      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+    - path: capture/recorder.go
+      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+  cli-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+      platform: darwin
+      gpu: apple-silicon
+    test: hwmediacodec decode, transcode -codec hevc and encode on a 45-frame 320x240 H.264 stream with
+      B-frames
+    evidence:
+      path: cmd/hwmediacodec/main.go
+      locator: transcode
+      note: 2026-10-10 - the decoded NV12 has the MD5 of ffmpeg's decode; transcode gave 45 HEVC frames,
+        encode 45 H.264 frames
+    basis:
+    - path: cmd/hwmediacodec/main.go
+      input_hash: 51e06cd0a0c1d0c4efbd26c029ca3ca6104b77866fbcf575c04da762fa7ebd7d
+facts:
+  api:
+    root: 'PacketReader{Codec, TimeScale, ReadPacket}; PacketSeeker{+SeekKeyframe, Length}; PacketWriter{WritePacket};
+      PacketWriteCloser; PacketWriterFunc; FrameReader{ReadFrame}; FrameWriter{WriteFrame}; NewDecodeReader(dec,
+      src) -> ReadFrame, Reset; NewEncodeWriter(enc, dst) -> WriteFrame, Flush, Packets; CopyFrames(ctx, dst,
+      src); HasHardware(ctx, codec, dir); RGBAFrame(img, pts); Frame.RGBAImage()'
+    annexb: 'AppendUnit(dst, nal); AppendLengthPrefixed(dst, nal); FromLengthPrefixed(dst, sample, lengthSize)'
+    removed: 'capture.Sink, capture.Funcs, ebitenvideo.Source, ebitenvideo.Seeker'
+  result:
+    status: delivered 2026-10-10
+history:
+  delivered-2026-10-10:
+    summary: The author asked whether other package changes would raise reusability and then for the
+      recommended points in the recommended order - interfaces and small helpers, the loops, the playback
+      core (milestone:playback).
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec
+- relation: follows
+  to: milestone:package-layout

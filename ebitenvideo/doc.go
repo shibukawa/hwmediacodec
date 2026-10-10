@@ -2,9 +2,9 @@
 //
 // It is a separate Go module (github.com/shibukawa/hwmediacodec/ebitenvideo)
 // so that the core hwmediacodec module stays free of the Ebitengine
-// dependency. A Player decodes on a background goroutine through
-// hwmediacodec, in display order and as RGBA, and keeps the frame that is
-// due at the current playback position in an *ebiten.Image:
+// dependency. The decoding and the timing are the core module's playback
+// package; a Player here drives one from the game loop and keeps the frame
+// that is due at the current playback position in an *ebiten.Image:
 //
 //	player, err := ebitenvideo.NewPlayer(file, hwmediacodec.H264, 30)
 //	...

@@ -20,9 +20,10 @@ Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 | `.../image/heif` | HEIC still images (HEVC), registered with the standard `image` package |
 | `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
 | `.../net/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
+| `.../playback` | Plays a stream against a clock: background decoding, pacing, seeking, looping; frames to show |
 | `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
 | `.../net/webrtc` | Separate module: one H.264 stream broadcast to browsers over WebRTC (pion) |
-| `.../ebitenvideo` | Separate module: video playback as an `*ebiten.Image` |
+| `.../ebitenvideo` | Separate module: `playback` with the frames in an `*ebiten.Image` |
 | `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
 
 The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
@@ -344,7 +345,7 @@ four small interfaces that the other packages implement:
 
 | Interface | Role | Implemented by |
 | --- | --- | --- |
-| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader` |
+| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader`; consumed by `DecodeReader` and `playback` |
 | `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
 | `FrameReader` | raw frames out | `DecodeReader` (a `Decoder` fed from a `PacketReader`) |
 | `FrameWriter` | raw frames in | `EncodeWriter` (an `Encoder` drained into a `PacketWriter`) |
@@ -422,7 +423,7 @@ What the package takes care of:
   track. Fragmented input is rejected.
 - `VideoTrack.PacketSource()` hands out access units with presentation
   times and seeks by the sync-sample table, which is what
-  `ebitenvideo.NewPlayerFromSource` takes; `VideoTrack.ElementaryStream()`
+  `playback.New` and `ebitenvideo.NewPlayerFromSource` take; `VideoTrack.ElementaryStream()`
   is the same track as a raw Annex-B stream.
 - `CreateVideoFile` is the one-track file for encoder output (a
   `hwmediacodec.PacketWriteCloser`), and `Segmenter` cuts encoder packets into CMAF/fMP4
@@ -640,14 +641,47 @@ go run ./imgconv photo.heic photo.png
 go run ./imgconv -quality 0.8 picture.png picture.heic
 ```
 
+## Playback
+
+`github.com/shibukawa/hwmediacodec/playback` plays a stream against a
+clock the caller drives. It decodes on a background goroutine, a few frames
+ahead, in display order and as RGBA, and returns the frame that is due;
+where the picture goes is up to the caller (a texture, a window, an image):
+
+```go
+p, err := playback.New(track.PacketSource(), playback.WithLoop()) // *mp4.VideoTrack
+p.Play()
+
+// once per tick of the display or game loop:
+f, err := p.Advance(dt)          // dt: the time since the previous call
+if f != nil {
+	show(f.Planes[0], f.Width, f.Height) // RGBA, f.Strides[0] bytes per row
+	f.Release()
+}
+```
+
+- `New` takes any `hwmediacodec.PacketReader`, which carries the
+  presentation times; a `PacketSeeker` (a keyframe index, as the MP4
+  demuxer's `VideoTrack.PacketSource()`) gives the player `Seek`, `Length`
+  and looping.
+- `NewStream(r, codec, fps)` plays a raw Annex-B elementary stream.
+  Elementary streams carry no timestamps, so the frame rate is a
+  parameter; an `io.ReadSeeker` gets seeking too, by scanning the stream
+  once for keyframes on the first seek.
+- Frames are skipped when decoding or the caller falls behind
+  (`Skipped` counts them). `Seek(t)` restarts decoding at the keyframe
+  before `t` and drops the frames up to it, so the next picture is the one
+  at `t`; `Position` reports `t` meanwhile.
+- `WithOutputFormat(NV12)` hands out the decoder's native format instead,
+  for renderers that convert in a shader.
+
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
 this repository (its own `go.mod`) that depends on both `hwmediacodec` and
 Ebitengine; the core module never imports Ebitengine, so users without a
-game engine do not pull it in. The module decodes an elementary stream on a
-background goroutine, in display order and as RGBA, and paces it against
-the game loop:
+game engine do not pull it in. It is `playback` driven from the game loop,
+with the current frame in an `*ebiten.Image`:
 
 ```go
 player, err := ebitenvideo.NewPlayer(file, hwmediacodec.H264, 30, ebitenvideo.WithLoop())
@@ -661,31 +695,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 ```
 
-Elementary streams carry no timestamps, so the frame rate is a parameter.
-Frames are skipped when decoding or the game loop falls behind
-(`Player.Skipped` counts them). `NewPlayerFromSource` takes a
-`hwmediacodec.PacketReader`
-instead of a reader: anything that hands out access units with
-presentation times, such as the MP4 demuxer in `mediacontainer/mp4`
-(`VideoTrack.PacketSource()`). A reader that is a `hwmediacodec.PacketSeeker`
-(a keyframe index) gives the player `Seek`, `Length` and looping; an
-`io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
-once for keyframes on the first seek. `Seek(t)` restarts decoding at the
-keyframe before `t` and drops the frames up to it, so the next picture
-shown is the one at `t`; `Position` reports `t` meanwhile. A minimal
-example plays a raw stream in a window (space pauses, the arrow keys
-seek); the MP4-capable player with a bundled clip is `examples/player`:
+`NewPlayer` is `playback.NewStream` and `NewPlayerFromSource` is
+`playback.New`; the options and the methods (`Seek`, `Position`, `Length`,
+`Skipped`, ...) are those of the playback package. One `Update` stands for
+1/TPS seconds, or for the wall-clock time since the previous one when the
+TPS is `SyncWithFPS`. A minimal example plays a raw stream in a window
+(space pauses, the arrow keys seek); the MP4-capable player with a bundled
+clip is `examples/player`:
 
 ```sh
 cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264
 cd examples && go run ./player
 ```
 
-Inside the repository `ebitenvideo/go.mod` points at the core module with a
-`replace ../` directive, so both modules always build against the working
-tree. Consumers get the version named in its `require` line; tag the core
-module first (for example `v0.3.0`), update that line, then tag
-`ebitenvideo/v0.3.0`.
+Inside the repository the modules build against each other's working tree
+through `go.work`. Consumers get the version named in the `require` line of
+`ebitenvideo/go.mod`; tag the core module first, update that line, then tag
+`ebitenvideo`.
 
 A command-line tool exercises the same API:
 
@@ -821,7 +847,7 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
-(cd ebitenvideo && go test ./...)   # separate module: timeline logic plus a hardware playback test
+(cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)
 (cd net/webrtc && go test ./...)    # separate module: a pion viewer receives an ffmpeg-made stream (ffmpeg only)
 (cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
 ```

@@ -1,4 +1,4 @@
-package ebitenvideo
+package playback
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 
 // ErrNotSeekable is returned by Player.Seek when the source is not a
 // hwmediacodec.PacketSeeker (a plain io.Reader, for example).
-var ErrNotSeekable = errors.New("ebitenvideo: the source cannot seek")
+var ErrNotSeekable = errors.New("playback: the source cannot seek")
 
-var errStopped = errors.New("ebitenvideo: stopped")
+var errStopped = errors.New("playback: stopped")
 
 // sourceTimeScale is the decoder time scale: microseconds, so that
 // presentation times survive the trip through Packet.PTS and Frame.PTS.
@@ -45,6 +45,7 @@ type seekRequest struct {
 // between packets.
 type source struct {
 	dec    hwmediacodec.Decoder
+	frames *hwmediacodec.DecodeReader
 	src    hwmediacodec.PacketReader
 	seeker hwmediacodec.PacketSeeker // nil when the source cannot seek
 	scale  time.Duration             // PTS units per second
@@ -62,13 +63,13 @@ type source struct {
 	closed  bool
 }
 
-func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool) (*source, error) {
+func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool, format hwmediacodec.PixelFormat) (*source, error) {
 	seeker, _ := src.(hwmediacodec.PacketSeeker)
 	if loop && seeker == nil {
-		return nil, errors.New("ebitenvideo: looping needs a seekable source (an io.ReadSeeker or a hwmediacodec.PacketSeeker)")
+		return nil, errors.New("playback: looping needs a seekable source (an io.ReadSeeker or a hwmediacodec.PacketSeeker)")
 	}
 	opts := []hwmediacodec.DecoderOption{
-		hwmediacodec.WithOutputFormat(hwmediacodec.RGBA),
+		hwmediacodec.WithOutputFormat(format),
 		hwmediacodec.WithTimeScale(src.TimeScale()),
 	}
 	if software {
@@ -83,6 +84,7 @@ func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool)
 	}
 	s := &source{
 		dec:    dec,
+		frames: hwmediacodec.NewDecodeReader(dec, src),
 		src:    src,
 		seeker: seeker,
 		scale:  time.Duration(src.TimeScale()),
@@ -150,7 +152,7 @@ func (s *source) run() {
 		}
 		kt, err := s.seeker.SeekKeyframe(req.target)
 		if err != nil {
-			return fmt.Errorf("ebitenvideo: seek: %w", err)
+			return fmt.Errorf("playback: seek: %w", err)
 		}
 		gen, loop, rebase = req.gen, 0, 0
 		dropBefore = -1
@@ -176,7 +178,11 @@ func (s *source) run() {
 			}
 		case s.loop:
 			if _, err := s.seeker.SeekKeyframe(0); err != nil {
-				s.setErr(fmt.Errorf("ebitenvideo: rewind: %w", err))
+				s.setErr(fmt.Errorf("playback: rewind: %w", err))
+				return
+			}
+			if err := s.frames.Reset(ctx); err != nil {
+				s.setErr(err)
 				return
 			}
 			loop++
@@ -238,20 +244,6 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 		}
 		return req, err
 	}
-	drain := func() (*seekRequest, error) {
-		for {
-			f, err := s.dec.Receive(ctx)
-			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return nil, nil
-			}
-			if err != nil {
-				return nil, err
-			}
-			if req, err := emitFrame(f); req != nil || err != nil {
-				return req, err
-			}
-		}
-	}
 	for {
 		select {
 		case <-s.stop:
@@ -262,41 +254,18 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 			res.seek = req
 			return res, nil
 		}
-		pkt, err := s.src.ReadPacket()
+		f, err := s.frames.ReadFrame(ctx)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return res, err
 		}
-		for {
-			err := s.dec.Send(ctx, pkt)
-			if errors.Is(err, hwmediacodec.ErrAgain) {
-				if req, err := drain(); req != nil || err != nil {
-					res.seek = req
-					return res, err
-				}
-				continue
-			}
-			if err != nil {
-				return res, err
-			}
-			break
-		}
-		if req, err := drain(); req != nil || err != nil {
+		if req, err := emitFrame(f); req != nil || err != nil {
 			res.seek = req
 			return res, err
 		}
 	}
-	if err := s.dec.Flush(ctx); err != nil {
-		return res, err
-	}
-	if req, err := drain(); req != nil || err != nil {
-		res.seek = req
-		return res, err
-	}
-	// Length of this iteration: the last frame keeps the previous frame's
-	// duration, unless the source knows better.
 	switch {
 	case s.seeker != nil && s.seeker.Length() > last:
 		res.end = s.seeker.Length()
@@ -310,19 +279,7 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 
 // discard flushes the decoder and releases everything it returns.
 func (s *source) discard(ctx context.Context) error {
-	if err := s.dec.Flush(ctx); err != nil {
-		return err
-	}
-	for {
-		f, err := s.dec.Receive(ctx)
-		if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		f.Release()
-	}
+	return s.frames.Reset(ctx)
 }
 
 // emit hands an item to the player. It returns a seek request when one
@@ -433,7 +390,7 @@ type streamKeyframe struct {
 
 func newStreamSource(rd io.Reader, c hwmediacodec.Codec, fps float64) (*streamSource, error) {
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
-		return nil, fmt.Errorf("ebitenvideo: NewPlayer reads Annex-B streams only (%s needs a hwmediacodec.PacketReader, for example an MP4 demuxer)", c)
+		return nil, fmt.Errorf("playback: NewStream reads Annex-B streams only (%s needs a hwmediacodec.PacketReader, for example an MP4 demuxer)", c)
 	}
 	s := &streamSource{rd: rd, codec: c, fps: fps, r: annexb.NewReader(rd, c)}
 	s.rs, _ = rd.(io.ReadSeeker)
