@@ -148,11 +148,8 @@ func encodeTiles(tiles []*image.RGBA, o Options) ([]codedItem, error) {
 		}
 	}
 	for i, t := range tiles {
-		f := &hwmediacodec.Frame{
-			Width: w, Height: h, Format: hwmediacodec.RGBA,
-			Planes: [][]byte{t.Pix}, Strides: []int{t.Stride},
-			PTS: int64(i) * int64(hwmediacodec.DefaultTimeScale), ForceKeyframe: true,
-		}
+		f := hwmediacodec.RGBAFrame(t, int64(i)*int64(hwmediacodec.DefaultTimeScale))
+		f.ForceKeyframe = true
 		if err := enc.Send(ctx, f); err != nil {
 			return nil, err
 		}
@@ -205,9 +202,7 @@ func hevcItem(au []byte) (codedItem, error) {
 			pps = append(pps, nal)
 		case annexb.HEVCNALAUD, annexb.HEVCNALFiller:
 		default:
-			n := len(nal)
-			data = append(data, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
-			data = append(data, nal...)
+			data = annexb.AppendLengthPrefixed(data, nal)
 		}
 	}
 	if len(vps) == 0 || len(sps) == 0 || len(pps) == 0 {

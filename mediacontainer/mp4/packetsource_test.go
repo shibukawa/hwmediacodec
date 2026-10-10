@@ -30,19 +30,28 @@ func TestPacketSource(t *testing.T) {
 
 	// The whole stream in decode order, presentation times starting at 0
 	// (the edit list hides the B-frame delay) and covering every frame.
+	if ps.TimeScale() != int32(v.TimeScale) {
+		t.Fatalf("time scale %d, track has %d", ps.TimeScale(), v.TimeScale)
+	}
+	at := func(p hwmediacodec.Packet) time.Duration {
+		return time.Duration(p.PTS) * time.Second / time.Duration(ps.TimeScale())
+	}
 	var times []time.Duration
 	for {
-		data, pts, err := ps.ReadPacket()
+		p, err := ps.ReadPacket()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(data) == 0 {
+		if len(p.Data) == 0 {
 			t.Fatal("empty packet")
 		}
-		times = append(times, pts)
+		if len(times) == 0 && !p.Keyframe {
+			t.Error("the first packet is not marked as a keyframe")
+		}
+		times = append(times, at(p))
 	}
 	if len(times) != 60 {
 		t.Fatalf("%d packets, want 60", len(times))
@@ -75,13 +84,13 @@ func TestPacketSource(t *testing.T) {
 		if got/time.Microsecond != tc.want/time.Microsecond {
 			t.Errorf("SeekKeyframe(%v) = %v, want %v", tc.target, got, tc.want)
 		}
-		data, pts, err := ps.ReadPacket()
+		p, err := ps.ReadPacket()
 		if err != nil {
 			t.Fatal(err)
 		}
 		want, _ := v.AccessUnit(tc.sample)
-		if !bytes.Equal(data, want.Data) || pts != got || !want.Keyframe {
-			t.Errorf("after SeekKeyframe(%v) the next packet is not keyframe sample %d (pts %v)", tc.target, tc.sample, pts)
+		if !bytes.Equal(p.Data, want.Data) || at(p)/time.Microsecond != got/time.Microsecond || !p.Keyframe {
+			t.Errorf("after SeekKeyframe(%v) the next packet is not keyframe sample %d (pts %v)", tc.target, tc.sample, at(p))
 		}
 	}
 }

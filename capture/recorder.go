@@ -2,8 +2,8 @@
 // Recorder reads the pixels of a Source (an Ebitengine screen or any other
 // *ebiten.Image, for example) on every frame, hands them to the hardware
 // encoder on a background goroutine as RGBA frames, and pushes the
-// resulting packets into a Sink: an MP4 file, an HLS segmenter or a WebRTC
-// track.
+// resulting packets into a hwmediacodec.PacketWriteCloser: an MP4 file, an
+// HLS segmenter or a WebRTC track.
 //
 // ReadPixels is a GPU read-back, so it costs a synchronisation per frame
 // (around a millisecond at 1080p on Apple Silicon); the encode itself runs
@@ -33,12 +33,6 @@ const TimeScale = 90000
 type Source interface {
 	Bounds() image.Rectangle
 	ReadPixels(pixels []byte)
-}
-
-// Sink receives the encoded packets.
-type Sink interface {
-	WritePacket(p hwmediacodec.Packet) error
-	Close() error
 }
 
 // Options configure the encoder behind a Recorder. The zero value records
@@ -108,10 +102,10 @@ type frame struct {
 	key bool
 }
 
-// Recorder encodes captured frames into a Sink.
+// Recorder encodes captured frames into a packet writer.
 type Recorder struct {
 	opts   Options
-	sink   Sink
+	sink   hwmediacodec.PacketWriteCloser
 	width  int
 	height int
 	step   int64 // PTS units per frame
@@ -135,7 +129,7 @@ type Recorder struct {
 
 // New opens the encoder for pictures of the given size. Capture must then
 // be called with images of exactly that size.
-func New(width, height int, sink Sink, opts Options) (*Recorder, error) {
+func New(width, height int, sink hwmediacodec.PacketWriteCloser, opts Options) (*Recorder, error) {
 	opts.defaults()
 	ctx := context.Background()
 	enc, err := hwmediacodec.NewEncoder(ctx, opts.Codec, width, height, opts.encoderOptions()...)

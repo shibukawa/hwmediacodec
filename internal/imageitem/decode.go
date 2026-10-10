@@ -612,23 +612,11 @@ func (f *file) packet(it *item) ([]byte, hwmediacodec.Codec, error) {
 		out := make([]byte, 0, len(data)+256)
 		for _, arr := range rec.NaluArrays {
 			for _, nal := range arr.Nalus {
-				out = append(out, 0, 0, 0, 1)
-				out = append(out, nal...)
+				out = annexb.AppendUnit(out, nal)
 			}
 		}
-		n := int(rec.LengthSizeMinusOne) + 1
-		for len(data) >= n {
-			size := 0
-			for i := 0; i < n; i++ {
-				size = size<<8 | int(data[i])
-			}
-			data = data[n:]
-			if size <= 0 || size > len(data) {
-				return nil, 0, fmt.Errorf("item %d: NAL unit length %d out of range", it.id, size)
-			}
-			out = append(out, 0, 0, 0, 1)
-			out = append(out, data[:size]...)
-			data = data[size:]
+		if out, err = annexb.FromLengthPrefixed(out, data, int(rec.LengthSizeMinusOne)+1); err != nil {
+			return nil, 0, fmt.Errorf("item %d: %w", it.id, err)
 		}
 		return out, hwmediacodec.HEVC, nil
 	case "av01":
@@ -691,8 +679,9 @@ func (f *file) decodeCoded(items []*item, place func(i int, img *image.RGBA) err
 			var img *image.RGBA
 			if convert {
 				img = nv12Image(fr, colours)
-			} else {
-				img = frameImage(fr)
+			} else if img, err = fr.RGBAImage(); err != nil {
+				fr.Release()
+				return err
 			}
 			fr.Release()
 			if place == nil {
@@ -853,16 +842,6 @@ func clapRect(width, height int, data []byte) (image.Rectangle, error) {
 		return image.Rectangle{}, fmt.Errorf("clap %dx%d at (%d, %d) does not fit %dx%d", w, h, left, top, pw, ph)
 	}
 	return image.Rect(int(left), int(top), int(left+w), int(top+h)), nil
-}
-
-// frameImage copies a decoded RGBA frame into an image.
-func frameImage(fr *hwmediacodec.Frame) *image.RGBA {
-	img := image.NewRGBA(image.Rect(0, 0, fr.Width, fr.Height))
-	src, stride := fr.Planes[0], fr.Strides[0]
-	for y := 0; y < fr.Height; y++ {
-		copy(img.Pix[y*img.Stride:(y+1)*img.Stride], src[y*stride:y*stride+fr.Width*4])
-	}
-	return img
 }
 
 // nclx is the colour description of a colr property of type nclx

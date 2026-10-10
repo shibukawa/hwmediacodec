@@ -5,7 +5,7 @@
 //
 //	playlist := hls.NewPlaylist(6, 2*time.Second)
 //	seg, _ := mp4.NewSegmenter(codec, timeScale, 2*time.Second, playlist.SetInit, playlist.Add)
-//	// feed seg with encoder packets (it is a capture.Sink), then:
+//	// feed seg with encoder packets (it is a hwmediacodec.PacketWriteCloser), then:
 //	http.Handle("/live/", playlist) // players open /live/index.m3u8
 //
 // Everything stays in memory; nothing is written to disk. Safari plays

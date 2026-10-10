@@ -13,39 +13,15 @@ import (
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 )
 
-// Source feeds a Player with coded pictures in decode order. The container
-// package of the examples module implements it for MP4 files; NewPlayer
-// wraps a raw elementary stream in one.
-type Source interface {
-	// Codec of the pictures.
-	Codec() hwmediacodec.Codec
-	// ReadPacket returns the next access unit (Annex-B for H.264 and HEVC,
-	// one temporal unit for AV1) with its presentation time. It returns
-	// io.EOF at the end of the stream.
-	ReadPacket() (data []byte, pts time.Duration, err error)
-}
-
-// Seeker is implemented by sources that can jump to a keyframe. A Player
-// seeks, loops and reports its Length only through this interface.
-type Seeker interface {
-	// SeekKeyframe repositions the source at the last keyframe whose
-	// presentation time is not after t (at the first keyframe when t lies
-	// before it) and returns that keyframe's presentation time. The next
-	// ReadPacket returns the keyframe.
-	SeekKeyframe(t time.Duration) (time.Duration, error)
-	// Length returns the stream duration, or 0 when it is not known.
-	Length() time.Duration
-}
-
 // ErrNotSeekable is returned by Player.Seek when the source is not a
-// Seeker (a plain io.Reader, for example).
+// hwmediacodec.PacketSeeker (a plain io.Reader, for example).
 var ErrNotSeekable = errors.New("ebitenvideo: the source cannot seek")
 
 var errStopped = errors.New("ebitenvideo: stopped")
 
 // sourceTimeScale is the decoder time scale: microseconds, so that
 // presentation times survive the trip through Packet.PTS and Frame.PTS.
-const sourceTimeScale = 1_000_000
+const streamTimeScale = 1_000_000
 
 // item is one decoded frame, or the end marker of a generation.
 type item struct {
@@ -69,9 +45,10 @@ type seekRequest struct {
 // between packets.
 type source struct {
 	dec    hwmediacodec.Decoder
-	src    Source
-	seeker Seeker        // nil when the source cannot seek
-	stream *streamSource // set for NewPlayer: frames are timed by output order
+	src    hwmediacodec.PacketReader
+	seeker hwmediacodec.PacketSeeker // nil when the source cannot seek
+	scale  time.Duration             // PTS units per second
+	stream *streamSource             // set for NewPlayer: frames are timed by output order
 	loop   bool
 
 	items chan item
@@ -85,14 +62,14 @@ type source struct {
 	closed  bool
 }
 
-func newSource(src Source, prefetch int, loop, software bool) (*source, error) {
-	seeker, _ := src.(Seeker)
+func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool) (*source, error) {
+	seeker, _ := src.(hwmediacodec.PacketSeeker)
 	if loop && seeker == nil {
-		return nil, errors.New("ebitenvideo: looping needs a seekable source (an io.ReadSeeker or a Seeker)")
+		return nil, errors.New("ebitenvideo: looping needs a seekable source (an io.ReadSeeker or a hwmediacodec.PacketSeeker)")
 	}
 	opts := []hwmediacodec.DecoderOption{
 		hwmediacodec.WithOutputFormat(hwmediacodec.RGBA),
-		hwmediacodec.WithTimeScale(sourceTimeScale),
+		hwmediacodec.WithTimeScale(src.TimeScale()),
 	}
 	if software {
 		opts = append(opts, hwmediacodec.WithSoftwareFallback())
@@ -108,6 +85,7 @@ func newSource(src Source, prefetch int, loop, software bool) (*source, error) {
 		dec:    dec,
 		src:    src,
 		seeker: seeker,
+		scale:  time.Duration(src.TimeScale()),
 		stream: streamOf(src),
 		loop:   loop,
 		items:  make(chan item, prefetch),
@@ -120,7 +98,7 @@ func newSource(src Source, prefetch int, loop, software bool) (*source, error) {
 }
 
 // streamOf returns the raw-stream source behind src, if that is what it is.
-func streamOf(src Source) *streamSource {
+func streamOf(src hwmediacodec.PacketReader) *streamSource {
 	switch v := src.(type) {
 	case *streamSource:
 		return v
@@ -242,7 +220,7 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 		outIndex = s.stream.index
 	}
 	emitFrame := func(f *hwmediacodec.Frame) (*seekRequest, error) {
-		pts := time.Duration(f.PTS) * time.Microsecond
+		pts := time.Duration(f.PTS) * time.Second / s.scale
 		if s.stream != nil {
 			pts = s.stream.frameTime(outIndex)
 			outIndex++
@@ -284,14 +262,13 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 			res.seek = req
 			return res, nil
 		}
-		data, pts, err := s.src.ReadPacket()
+		pkt, err := s.src.ReadPacket()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return res, err
 		}
-		pkt := hwmediacodec.Packet{Data: data, PTS: int64(pts / time.Microsecond)}
 		for {
 			err := s.dec.Send(ctx, pkt)
 			if errors.Is(err, hwmediacodec.ErrAgain) {
@@ -456,7 +433,7 @@ type streamKeyframe struct {
 
 func newStreamSource(rd io.Reader, c hwmediacodec.Codec, fps float64) (*streamSource, error) {
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
-		return nil, fmt.Errorf("ebitenvideo: NewPlayer reads Annex-B streams only (%s needs a Source, for example an MP4 demuxer)", c)
+		return nil, fmt.Errorf("ebitenvideo: NewPlayer reads Annex-B streams only (%s needs a hwmediacodec.PacketReader, for example an MP4 demuxer)", c)
 	}
 	s := &streamSource{rd: rd, codec: c, fps: fps, r: annexb.NewReader(rd, c)}
 	s.rs, _ = rd.(io.ReadSeeker)
@@ -469,14 +446,16 @@ func (s *streamSource) frameTime(i int) time.Duration {
 
 func (s *streamSource) Codec() hwmediacodec.Codec { return s.codec }
 
-func (s *streamSource) ReadPacket() ([]byte, time.Duration, error) {
+func (s *streamSource) TimeScale() int32 { return streamTimeScale }
+
+func (s *streamSource) ReadPacket() (hwmediacodec.Packet, error) {
 	au, err := s.r.Next()
 	if err != nil {
-		return nil, 0, err
+		return hwmediacodec.Packet{}, err
 	}
 	pts := s.frameTime(s.index)
 	s.index++
-	return au, pts, nil
+	return hwmediacodec.Packet{Data: au, PTS: int64(pts / time.Microsecond)}, nil
 }
 
 // seekable is the Seeker view of a streamSource, offered only when the

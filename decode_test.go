@@ -27,16 +27,9 @@ func requireHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direct
 	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
 		t.Skip("hardware tests target Apple Silicon (Intel Macs are out of scope)")
 	}
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil {
-		t.Fatalf("Probe: %v", err)
+	if !hwmediacodec.HasHardware(context.Background(), c, dir) {
+		t.Skipf("no hardware %s %s on this machine (%s/%s)", c, dir, runtime.GOOS, runtime.GOARCH)
 	}
-	for _, cap := range caps {
-		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
-			return
-		}
-	}
-	t.Skipf("no hardware %s %s on this machine (%s/%s)", c, dir, runtime.GOOS, runtime.GOARCH)
 }
 
 // hasHardware reports whether Probe lists a hardware engine for c.
@@ -45,16 +38,7 @@ func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction)
 	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
 		return false
 	}
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil {
-		t.Fatalf("Probe: %v", err)
-	}
-	for _, cap := range caps {
-		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
-			return true
-		}
-	}
-	return false
+	return hwmediacodec.HasHardware(context.Background(), c, dir)
 }
 
 // decodeBackend names the backend that serves hardware decoding of c: the

@@ -4,7 +4,6 @@ package videotoolbox
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"sync"
 
@@ -207,8 +206,7 @@ func lengthPrefixed(nals [][]byte) []byte {
 	}
 	data := make([]byte, 0, size)
 	for _, n := range nals {
-		data = binary.BigEndian.AppendUint32(data, uint32(len(n)))
-		data = append(data, n...)
+		data = annexb.AppendLengthPrefixed(data, n)
 	}
 	return data
 }

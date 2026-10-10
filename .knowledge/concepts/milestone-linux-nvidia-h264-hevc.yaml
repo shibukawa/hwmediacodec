@@ -202,7 +202,7 @@ verification:
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   hardware-encode:
     state: not_run
     method: integration
@@ -258,7 +258,7 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: encode_test.go
       input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
 facts:

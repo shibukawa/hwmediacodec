@@ -331,3 +331,41 @@ func (r *Reader) fill() error {
 	}
 	return nil
 }
+
+// AppendUnit appends nal to dst behind a four-byte start code: the Annex-B
+// form of one NAL unit.
+func AppendUnit(dst, nal []byte) []byte {
+	dst = append(dst, 0, 0, 0, 1)
+	return append(dst, nal...)
+}
+
+// AppendLengthPrefixed appends nal to dst behind its four-byte big-endian
+// length: the form MP4 and HEIF samples store NAL units in (AVCC, HVCC).
+func AppendLengthPrefixed(dst, nal []byte) []byte {
+	n := len(nal)
+	dst = append(dst, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+	return append(dst, nal...)
+}
+
+// FromLengthPrefixed appends to dst the NAL units of a length-prefixed
+// sample in Annex-B form. lengthSize is the size of the length fields in
+// bytes (1 to 4; lengthSizeMinusOne + 1 of the avcC or hvcC record).
+// Trailing bytes too short to hold a length are ignored.
+func FromLengthPrefixed(dst, sample []byte, lengthSize int) ([]byte, error) {
+	if lengthSize < 1 || lengthSize > 4 {
+		return dst, fmt.Errorf("annexb: NAL unit length size %d", lengthSize)
+	}
+	for len(sample) >= lengthSize {
+		n := 0
+		for i := 0; i < lengthSize; i++ {
+			n = n<<8 | int(sample[i])
+		}
+		sample = sample[lengthSize:]
+		if n <= 0 || n > len(sample) {
+			return dst, fmt.Errorf("annexb: NAL unit length %d out of range", n)
+		}
+		dst = AppendUnit(dst, sample[:n])
+		sample = sample[n:]
+	}
+	return dst, nil
+}

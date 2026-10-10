@@ -198,9 +198,9 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
   windows-loader-run:
     state: not_run
     method: integration
@@ -245,7 +245,7 @@ verification:
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   hardware-encode-windows:
     state: not_run
     method: integration

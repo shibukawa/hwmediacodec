@@ -15,7 +15,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"image"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -119,7 +118,10 @@ func run(ctx context.Context, o options, path string) ([]string, error) {
 	var files []string
 	save := func(f *hwmediacodec.Frame) error {
 		defer f.Release()
-		img := &image.RGBA{Pix: f.Planes[0], Stride: f.Strides[0], Rect: image.Rect(0, 0, f.Width, f.Height)}
+		img, err := f.RGBAImage()
+		if err != nil {
+			return err
+		}
 		if o.width > 0 && o.width < f.Width {
 			img = downscale(img, o.width)
 		}

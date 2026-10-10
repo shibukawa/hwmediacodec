@@ -220,7 +220,7 @@ updates in place, so the video goes wherever an image goes:
   looks like itself.
 
 MP4 input is demuxed by the `mediacontainer/mp4` package: `VideoTrack.PacketSource()`
-implements `ebitenvideo.Source` and `Seeker` (access units with
+is a `hwmediacodec.PacketSeeker` (access units with
 presentation times, the sync-sample table for seeking, the track length),
 so `ebitenvideo.NewPlayerFromSource` plays it without an `-fps` flag and
 the arrow keys seek five seconds (`Home` restarts). Raw `.h264`/`.hevc`

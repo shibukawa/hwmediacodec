@@ -56,7 +56,7 @@ verification:
       note: Apple M3, macOS 27; run 2026-10-10
     basis:
     - path: encoding/annexb/annexb.go
-      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: mediacontainer/ivf/ivf.go
       input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
 facts:

@@ -1,6 +1,7 @@
 // Package webrtc sends encoder output to browsers over WebRTC with pion.
 // A Broadcaster fans one H.264 stream out to every connected viewer; it is
-// the sink for the packets (a capture.Sink) and an http.Handler for the
+// the sink for the packets (a hwmediacodec.PacketWriteCloser, which is
+// what capture.Recorder writes into) and an http.Handler for the
 // signalling:
 //
 //	var rec *capture.Recorder
@@ -47,7 +48,8 @@ type peer struct {
 }
 
 // Broadcaster fans one encoded H.264 stream out to every connected
-// browser. It is a capture.Sink for the packets and an http.Handler for
+// browser. It is a hwmediacodec.PacketWriteCloser for the packets and an
+// http.Handler for
 // the signalling (a POST with the browser's SDP offer as JSON, answered
 // with ours). It is safe for concurrent use.
 type Broadcaster struct {
@@ -191,7 +193,7 @@ func (b *Broadcaster) remove(p *peer) {
 	}
 }
 
-// WritePacket implements capture.Sink: one Annex-B access unit goes to
+// WritePacket implements hwmediacodec.PacketWriter: one Annex-B access unit goes to
 // every viewer. pion's H.264 payloader splits the NAL units into RTP
 // packets (STAP-A for the parameter sets, FU-A for large slices). Packet
 // times are in 90 kHz units (capture.TimeScale). A viewer whose track
@@ -222,7 +224,7 @@ func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
 	return nil
 }
 
-// Close implements capture.Sink: it disconnects every viewer and refuses
+// Close implements io.Closer: it disconnects every viewer and refuses
 // new ones.
 func (b *Broadcaster) Close() error {
 	b.mu.Lock()

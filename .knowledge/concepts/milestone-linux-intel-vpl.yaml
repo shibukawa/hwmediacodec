@@ -190,7 +190,7 @@ verification:
     - path: backends_test.go
       input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
   hardware-decode:
     state: not_run
     method: integration
@@ -222,7 +222,7 @@ verification:
     - path: internal/vpl/paramsets.go
       input_hash: 30de04f52b14b8e5d122572a85661a554384a15b88dbb6337feaed4bb6e41261
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   hardware-encode:
     state: not_run
     method: integration
@@ -282,9 +282,9 @@ verification:
     - path: probe_test.go
       input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
 facts:
   steps:
   - internal/vpl/sys - status codes, FourCC identifiers and struct mirrors of the VPL headers

@@ -382,7 +382,7 @@ What the package takes care of:
   `ebitenvideo.NewPlayerFromSource` takes; `VideoTrack.ElementaryStream()`
   is the same track as a raw Annex-B stream.
 - `CreateVideoFile` is the one-track file for encoder output (a
-  `capture.Sink`), and `Segmenter` cuts encoder packets into CMAF/fMP4
+  `hwmediacodec.PacketWriteCloser`), and `Segmenter` cuts encoder packets into CMAF/fMP4
   segments for live HLS: an init segment, then one `moof`+`mdat` per
   segment, each starting at a keyframe. It needs PTS == DTS, so encode
   without B-frames.
@@ -397,7 +397,7 @@ media playlist, the init segment and the media segments:
 ```go
 playlist := hls.NewPlaylist(6, 2*time.Second)             // six segments of two seconds
 seg, _ := mp4.NewSegmenter(hwmediacodec.H264, timeScale, 2*time.Second, playlist.SetInit, playlist.Add)
-// seg.WritePacket(p) for every encoder packet; seg is a capture.Sink too
+// seg.WritePacket(p) for every encoder packet (a hwmediacodec.PacketWriteCloser)
 http.Handle("/live/", playlist)                            // players open /live/index.m3u8
 // at the end
 seg.Close()
@@ -430,7 +430,7 @@ rec, _ = capture.New(w, h, bc, capture.Options{
 http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
 ```
 
-- `Broadcaster` is a `capture.Sink` (`WritePacket`, `Close`); packet times
+- `Broadcaster` is a `hwmediacodec.PacketWriteCloser`; packet times
   are in 90 kHz units. pion's H.264 payloader splits the Annex-B NAL units
   into RTP (STAP-A for the parameter sets, FU-A for large slices).
 - Signalling is a single HTTP POST of the browser's SDP offer as JSON; the
@@ -447,7 +447,8 @@ http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
 `github.com/shibukawa/hwmediacodec/capture` is a package of the core
 module that records what a game or any other renderer draws. A `Recorder`
 reads the pixels of a `Source` on every frame, encodes them on a
-background goroutine and pushes the packets into a `Sink`:
+background goroutine and pushes the packets into a
+`hwmediacodec.PacketWriteCloser`:
 
 ```go
 rec, err := capture.New(1280, 720, sink, capture.Options{FPS: 60, Bitrate: 8_000_000})
@@ -474,8 +475,9 @@ rec.Close()                  // flushes the encoder, closes the sink
   of speeding the recording up, and a 120 Hz display showing a 60 fps game
   does not record every frame twice. `CaptureAt` takes the time stamp
   explicitly.
-- A `Sink` is `WritePacket(hwmediacodec.Packet)` plus `Close`, and
-  `capture.Funcs` adapts closures. The packets are Annex-B access
+- The sink is any `hwmediacodec.PacketWriteCloser`
+  (`WritePacket(hwmediacodec.Packet)` plus `Close`);
+  `hwmediacodec.PacketWriterFunc` adapts a closure. The packets are Annex-B access
   units with in-band parameter sets, so writing `Packet.Data` to a file
   gives a playable elementary stream. `mediacontainer/mp4` has an MP4
   file sink (`CreateVideoFile`) and an fMP4 segmenter for HLS, and
@@ -618,10 +620,11 @@ func (g *game) Draw(screen *ebiten.Image) {
 
 Elementary streams carry no timestamps, so the frame rate is a parameter.
 Frames are skipped when decoding or the game loop falls behind
-(`Player.Skipped` counts them). `NewPlayerFromSource` takes a `Source`
+(`Player.Skipped` counts them). `NewPlayerFromSource` takes a
+`hwmediacodec.PacketReader`
 instead of a reader: anything that hands out access units with
 presentation times, such as the MP4 demuxer in `mediacontainer/mp4`
-(`VideoTrack.PacketSource()`). A source that also implements `Seeker`
+(`VideoTrack.PacketSource()`). A reader that is a `hwmediacodec.PacketSeeker`
 (a keyframe index) gives the player `Seek`, `Length` and looping; an
 `io.ReadSeeker` passed to `NewPlayer` gets the same by scanning the stream
 once for keyframes on the first seek. `Seek(t)` restarts decoding at the

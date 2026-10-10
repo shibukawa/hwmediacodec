@@ -4,6 +4,10 @@
 // other modules of the repository (examples, net/webrtc) use it too: their
 // import paths lie below the module root, which is all the internal rule
 // asks for.
+//
+// It builds on the public API (it imports the root package), which
+// internal/testutil must not: the root package's own tests use that one
+// and would import themselves in a circle.
 package mediatest
 
 import (
@@ -20,47 +24,31 @@ import (
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
 // RequireFFmpeg skips the test when ffmpeg or ffprobe is missing.
 func RequireFFmpeg(t testing.TB) {
 	t.Helper()
-	for _, tool := range []string{"ffmpeg", "ffprobe"} {
-		if _, err := exec.LookPath(tool); err != nil {
-			t.Skipf("%s not found in PATH", tool)
-		}
+	testutil.RequireFFmpeg(t)
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not found in PATH")
 	}
 }
 
 // HasEncoder reports whether ffmpeg offers the named encoder.
 func HasEncoder(t testing.TB, name string) bool {
 	t.Helper()
-	out, err := exec.Command("ffmpeg", "-hide_banner", "-encoders").Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) >= 2 && f[1] == name {
-			return true
-		}
-	}
-	return false
+	return testutil.HasEncoder(t, name)
 }
 
-// RequireHardware skips the test unless Probe reports the given capability.
+// RequireHardware skips the test unless the machine has a hardware engine
+// for the codec in the given direction.
 func RequireHardware(t testing.TB, c hwmediacodec.Codec, dir hwmediacodec.Direction) {
 	t.Helper()
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil {
-		t.Skipf("probe failed: %v", err)
+	if !hwmediacodec.HasHardware(context.Background(), c, dir) {
+		t.Skipf("no hardware %s %s on this machine", c, dir)
 	}
-	for _, cp := range caps {
-		if cp.Codec == c && cp.Direction == dir {
-			return
-		}
-	}
-	t.Skipf("no hardware %s %s on this machine", c, dir)
 }
 
 // MP4Options describes a synthetic test movie.

@@ -119,11 +119,11 @@ verification:
     - path: internal/hevc/hevc.go
       input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/videotoolbox/decoder.go
-      input_hash: beac02a13e76bb896318fc25b77b18ca1e6850e8f038250f14f454f5ccfcd967
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   reorder-oracle-test:
@@ -205,9 +205,9 @@ verification:
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   rgba-decode-test:
     state: passed
     method: integration
@@ -225,7 +225,7 @@ verification:
         channels 4 dB; alpha 255; RGBA == mirror(BGRA)
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: beac02a13e76bb896318fc25b77b18ca1e6850e8f038250f14f454f5ccfcd967
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: internal/videotoolbox/sys/sys.go
@@ -233,7 +233,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 6b7603af41c92097110b1b1b4c2b571c4f480c770af24eff6fadcb32c714c103
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   rgb-encode-test:
@@ -293,9 +293,9 @@ verification:
         a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 463b467fdfae414006e177f829f06ee61993d1a06d36a1a198ab00a340fdeb5f
+      input_hash: 9957a3f0274aa144ce1f2aa1de8a7efa9ffdd8518084eaf229ef2311254d35c3
     - path: ebitenvideo/source.go
-      input_hash: 00869755ad67621571febda45e92ccc7d7ad5ede0f6b3f5b9fe0e1d87230327a
+      input_hash: d77a7b838d9facf974d8e6f9a9e4db97547c470f54d48e6b63c122e3c88d04c6
     - path: ebitenvideo/timeline.go
       input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/player_darwin_test.go

@@ -79,6 +79,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"strings"
 
@@ -132,6 +133,12 @@ var (
 	ErrClosed      = codec.ErrClosed
 	ErrInvalidData = codec.ErrInvalidData
 )
+
+// RGBAFrame wraps img as an encoder input frame without copying: the frame
+// shares the image's pixels, which must stay untouched until Encoder.Send
+// has returned. Open the encoder with WithInputFormat(RGBA). The opposite
+// direction is Frame.RGBAImage.
+func RGBAFrame(img *image.RGBA, pts int64) *Frame { return codec.RGBAFrame(img, pts) }
 
 // DefaultTimeScale is the PTS unit used when WithTimeScale is not given.
 const DefaultTimeScale int32 = 90000

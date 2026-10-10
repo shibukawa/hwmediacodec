@@ -140,7 +140,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
     - path: internal/videotoolbox/decoder.go
-      input_hash: beac02a13e76bb896318fc25b77b18ca1e6850e8f038250f14f454f5ccfcd967
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: internal/videotoolbox/sys/sys.go
@@ -154,11 +154,11 @@ verification:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
     - path: decode_av1_test.go
       input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: internal/testutil/av1.go
       input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
     - path: internal/testutil/ffmpeg.go
@@ -203,7 +203,7 @@ verification:
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   av1-sequence-change-test:
     state: passed
     method: integration
@@ -223,7 +223,7 @@ verification:
     - path: mediacontainer/ivf/ivf.go
       input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   av1-flush-resume-test:
     state: passed
     method: integration
@@ -242,9 +242,9 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
     - path: internal/videotoolbox/decoder.go
-      input_hash: beac02a13e76bb896318fc25b77b18ca1e6850e8f038250f14f454f5ccfcd967
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: decode_test.go
-      input_hash: 2bfa8f1e13f36c641572e2ef9bf7cace2dc950aa18ab7efd70ec62bf06572aef
+      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: decode_av1_test.go
       input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
   av1-decode-order-noop-test:
@@ -262,9 +262,9 @@ verification:
       note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
     basis:
     - path: hwmediacodec.go
-      input_hash: 9e5ae17be4b0f4866a991e459cc5ca4888a71dac954a2e5d1ca566b650a858bf
+      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
     - path: internal/videotoolbox/decoder.go
-      input_hash: beac02a13e76bb896318fc25b77b18ca1e6850e8f038250f14f454f5ccfcd967
+      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: decode_av1_test.go
       input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
   av1-ten-bit-test:

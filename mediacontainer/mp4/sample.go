@@ -69,9 +69,7 @@ func (ps *paramSets) sample(p hwmediacodec.Packet) (data []byte, sync bool, err 
 		case annexb.IsVCL(ps.codec, t) && annexb.IsKeyframe(ps.codec, t):
 			sync = true
 		}
-		n := len(nal)
-		data = append(data, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
-		data = append(data, nal...)
+		data = annexb.AppendLengthPrefixed(data, nal)
 	}
 	if data == nil {
 		return nil, false, nil

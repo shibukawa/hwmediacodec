@@ -76,7 +76,7 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 30d532b0276338370eb71ad5e6c98ca69b4bee65674263c8ca1793bcb3163e75
     - path: mediacontainer/mp4/demux.go
-      input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
   player-test:
     state: passed
     method: integration

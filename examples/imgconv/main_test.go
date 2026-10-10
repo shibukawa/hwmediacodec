@@ -68,16 +68,7 @@ func psnr(a, b image.Image) float64 {
 
 func hasHardware(t *testing.T, c hwmediacodec.Codec, dir hwmediacodec.Direction) bool {
 	t.Helper()
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, cap := range caps {
-		if cap.Codec == c && cap.Direction == dir && cap.Hardware {
-			return true
-		}
-	}
-	return false
+	return hwmediacodec.HasHardware(context.Background(), c, dir)
 }
 
 func codecOf(format string) hwmediacodec.Codec {

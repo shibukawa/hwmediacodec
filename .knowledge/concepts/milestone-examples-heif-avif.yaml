@@ -93,9 +93,9 @@ verification:
       note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: c198d68d366688c22d164edfd352d692189db9d10e0c3821f957db987ae413e5
+      input_hash: b888cedf55094eeb7c3f96f2c793c914f1f119495b2f1f5f2685795716abb2c6
     - path: internal/imageitem/decode.go
-      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+      input_hash: abd28a2967a95e5c99b9577794179f32f860065551708705c1f539aff9c834c5
     - path: internal/imageitem/transform.go
       input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: internal/imageitem/box.go
@@ -119,7 +119,7 @@ verification:
       note: run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+      input_hash: abd28a2967a95e5c99b9577794179f32f860065551708705c1f539aff9c834c5
     - path: image/heif/heif_test.go
       input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
   avif-decode-test:
@@ -137,7 +137,7 @@ verification:
       note: ffmpeg 9.0.1 with libsvtav1 writes the AVIF; the M3 AV1 hardware decoder reads it; run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: d0e8a263ca7d6904a7c1ab7606c6919e295119a49451f5d9ee92a57096bf6bc7
+      input_hash: abd28a2967a95e5c99b9577794179f32f860065551708705c1f539aff9c834c5
     - path: image/heif/heif_test.go
       input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
   avif-encode-test:
@@ -155,7 +155,7 @@ verification:
       note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: c198d68d366688c22d164edfd352d692189db9d10e0c3821f957db987ae413e5
+      input_hash: b888cedf55094eeb7c3f96f2c793c914f1f119495b2f1f5f2685795716abb2c6
     - path: image/heif/heif_test.go
       input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
 open_questions:

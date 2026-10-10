@@ -3,7 +3,8 @@ package mp4
 import "github.com/shibukawa/hwmediacodec"
 
 // VideoFile is an MP4 file with a single video track fed with encoder
-// packets. It satisfies capture.Sink, so a Recorder can write straight
+// packets. It is a hwmediacodec.PacketWriteCloser, so a capture.Recorder
+// or an EncodeWriter can write straight
 // into it.
 type VideoFile struct {
 	m  *Muxer

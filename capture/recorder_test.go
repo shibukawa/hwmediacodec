@@ -17,23 +17,16 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 )
 
-// requireHardwareEncode skips the test unless Probe reports a hardware
-// H.264 encoder on this machine.
+// requireHardwareEncode skips the test unless the machine has a hardware
+// H.264 encoder.
 func requireHardwareEncode(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "darwin" && runtime.GOARCH != "arm64" {
 		t.Skip("hardware tests target Apple Silicon (Intel Macs are out of scope)")
 	}
-	caps, err := hwmediacodec.Probe(context.Background())
-	if err != nil {
-		t.Fatalf("Probe: %v", err)
+	if !hwmediacodec.HasHardware(context.Background(), hwmediacodec.H264, hwmediacodec.Encode) {
+		t.Skipf("no hardware H.264 encoder on this machine (%s/%s)", runtime.GOOS, runtime.GOARCH)
 	}
-	for _, cap := range caps {
-		if cap.Codec == hwmediacodec.H264 && cap.Direction == hwmediacodec.Encode && cap.Hardware {
-			return
-		}
-	}
-	t.Skipf("no hardware H.264 encoder on this machine (%s/%s)", runtime.GOOS, runtime.GOARCH)
 }
 
 // fakeScreen stands in for *ebiten.Image: a gradient that slides every
@@ -67,22 +60,27 @@ func (f *fakeScreen) advance() {
 func (f *fakeScreen) Bounds() image.Rectangle { return f.img.Rect }
 func (f *fakeScreen) ReadPixels(p []byte)     { copy(p, f.img.Pix) }
 
+// sink is a packet writer that notes its Close.
+type sink struct {
+	write  func(p hwmediacodec.Packet) error
+	closed bool
+}
+
+func (s *sink) WritePacket(p hwmediacodec.Packet) error { return s.write(p) }
+func (s *sink) Close() error                            { s.closed = true; return nil }
+
 func TestRecorderEncodes(t *testing.T) {
 	requireHardwareEncode(t)
 	const w, h, fps, frames = 320, 240, 30, 60
 	var stream bytes.Buffer
 	var pts []int64
 	var keys []bool
-	closed := false
-	sink := capture.Funcs{
-		Write: func(p hwmediacodec.Packet) error {
-			stream.Write(p.Data)
-			pts = append(pts, p.PTS)
-			keys = append(keys, p.Keyframe)
-			return nil
-		},
-		Done: func() error { closed = true; return nil },
-	}
+	sink := &sink{write: func(p hwmediacodec.Packet) error {
+		stream.Write(p.Data)
+		pts = append(pts, p.PTS)
+		keys = append(keys, p.Keyframe)
+		return nil
+	}}
 	rec, err := capture.New(w, h, sink, capture.Options{FPS: fps, Bitrate: 2_000_000, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +101,7 @@ func TestRecorderEncodes(t *testing.T) {
 	if err := rec.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if !closed {
+	if !sink.closed {
 		t.Error("Close did not close the sink")
 	}
 	if rec.Captured() != frames || rec.Dropped() != 0 || rec.Encoded() != frames {
@@ -144,13 +142,13 @@ func TestRecorderRequestKeyframe(t *testing.T) {
 	requireHardwareEncode(t)
 	var keys []int
 	n := 0
-	sink := capture.Funcs{Write: func(p hwmediacodec.Packet) error {
+	sink := hwmediacodec.PacketWriterFunc(func(p hwmediacodec.Packet) error {
 		if p.Keyframe {
 			keys = append(keys, n)
 		}
 		n++
 		return nil
-	}}
+	})
 	rec, err := capture.New(320, 240, sink, capture.Options{FPS: 30, KeyframeInterval: 300, Queue: 64})
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +173,7 @@ func TestRecorderRequestKeyframe(t *testing.T) {
 func TestRecorderDropsWhenBehind(t *testing.T) {
 	requireHardwareEncode(t)
 	var packets int
-	sink := capture.Funcs{Write: func(hwmediacodec.Packet) error { packets++; return nil }}
+	sink := hwmediacodec.PacketWriterFunc(func(hwmediacodec.Packet) error { packets++; return nil })
 	rec, err := capture.New(320, 240, sink, capture.Options{FPS: 60, Queue: 2})
 	if err != nil {
 		t.Fatal(err)

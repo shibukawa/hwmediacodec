@@ -19,9 +19,10 @@
 //
 // NewPlayer reads a raw Annex-B elementary stream, which carries no
 // timestamps, so the frame rate is a parameter. NewPlayerFromSource takes
-// a Source instead: anything that hands out access units with presentation
-// times, such as an MP4 demuxer (the examples module has one). A source
-// that also implements Seeker lets the player loop, report its Length and
+// a hwmediacodec.PacketReader instead: anything that hands out access
+// units with presentation times, such as the MP4 demuxer
+// (mediacontainer/mp4, VideoTrack.PacketSource). A reader that is a
+// hwmediacodec.PacketSeeker lets the player loop, report its Length and
 // Seek; an io.ReadSeeker given to NewPlayer gets that too, by scanning the
 // stream once for keyframes.
 //

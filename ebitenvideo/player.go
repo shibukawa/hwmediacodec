@@ -22,7 +22,7 @@ type config struct {
 }
 
 // WithLoop restarts the stream from the beginning when it ends. The source
-// must be able to seek: an io.ReadSeeker for NewPlayer, a Seeker for
+// must be able to seek: an io.ReadSeeker for NewPlayer, a hwmediacodec.PacketSeeker for
 // NewPlayerFromSource.
 func WithLoop() Option { return func(c *config) { c.loop = true } }
 
@@ -69,7 +69,7 @@ func NewPlayer(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (
 	if err != nil {
 		return nil, err
 	}
-	var src Source = ss
+	var src hwmediacodec.PacketReader = ss
 	if ss.rs != nil {
 		src = &seekableStream{ss}
 	}
@@ -78,8 +78,8 @@ func NewPlayer(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (
 
 // NewPlayerFromSource starts decoding packets from src, which carries its
 // own presentation times (an MP4 demuxer, for example). Looping and Seek
-// need src to implement Seeker.
-func NewPlayerFromSource(src Source, opts ...Option) (*Player, error) {
+// need src to implement hwmediacodec.PacketSeeker.
+func NewPlayerFromSource(src hwmediacodec.PacketReader, opts ...Option) (*Player, error) {
 	cfg := config{prefetch: 4}
 	for _, o := range opts {
 		o(&cfg)

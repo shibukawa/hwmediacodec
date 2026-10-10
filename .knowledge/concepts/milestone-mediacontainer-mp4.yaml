@@ -76,31 +76,31 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
     - path: mediacontainer/mp4/mux.go
       input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
     - path: mediacontainer/mp4/sample.go
-      input_hash: 40b542631e95d2687f944532c0156206bb1d600801c5d0ee385f078515503ac4
+      input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
     - path: mediacontainer/mp4/segmenter.go
       input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
     - path: mediacontainer/mp4/packetsource.go
-      input_hash: 2a177b29fd86f490f7842286333183c88fb5795d65700dc8731e19596d8cc50c
+      input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/stream.go
       input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
     - path: mediacontainer/mp4/videofile.go
-      input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: mediacontainer/mp4/segmenter_test.go
       input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
     - path: mediacontainer/mp4/packetsource_test.go
-      input_hash: 3419c8e0a26b4cbcc01dd68cd7bedf5b4bcabb6997da936088df61f79c4bb70c
+      input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
     - path: mediacontainer/mp4/stream_test.go
       input_hash: 462cf73e816f88864da210d31f46654af9f4ebf2ac63ca69f61fd6b12159b35d
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: internal/mediatest/ffmpeg.go
-      input_hash: 55608734ce9e1eb0d7b5c74e66d9b6426a7af6240702b6c58ee6b47a4e892c21
+      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
   build-check:
     state: passed
     method: manual

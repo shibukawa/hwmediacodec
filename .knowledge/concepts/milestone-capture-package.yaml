@@ -91,11 +91,11 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-09 (go test ./... of the core module passes)
     basis:
     - path: capture/recorder.go
-      input_hash: 17c71cd862907bdeaccfd7dbb0d492b0d7b2afb2c4bb457f4236eb4858309250
+      input_hash: f11ec3e5cf44a3d0548988f3f1b6994b9c30a3578ba04054eb6a650d73b452dc
     - path: capture/sinks.go
       input_hash: 886b58fe675995d986c1b643878763f581154dbed7bf575fbc9d004168440927
     - path: capture/recorder_test.go
-      input_hash: 2731f5638900b66e796d95fa40a89d749a1effb2ebbed8bbed9bf9039842aea7
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
   deps-check:
     state: passed
     method: manual
@@ -127,7 +127,7 @@ verification:
       note: 2026-10-09 - the former TestRecorderWritesMP4, unchanged apart from the sink constructor
     basis:
     - path: mediacontainer/mp4/videofile.go
-      input_hash: 7e6de17cdeab8af93add394e0c6edb985b6bc5d40c6148a23d1e6dc698bd135c
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
   record-run:

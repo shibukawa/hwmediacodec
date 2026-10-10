@@ -98,13 +98,13 @@ verification:
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
     - path: ebitenvideo/source.go
-      input_hash: 00869755ad67621571febda45e92ccc7d7ad5ede0f6b3f5b9fe0e1d87230327a
+      input_hash: d77a7b838d9facf974d8e6f9a9e4db97547c470f54d48e6b63c122e3c88d04c6
     - path: ebitenvideo/seek_darwin_test.go
       input_hash: e8e3c941363bdf83918e2970c699f4890b20ebe89963866b237a4084be4da513
     - path: ebitenvideo/player_darwin_test.go
       input_hash: acef89d5c1f33096127bfadef22d72a4fae577e93b58c5c3e19515672f3e0dc0
     - path: encoding/annexb/annexb.go
-      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
   player-seek-test:
     state: passed
     method: integration
@@ -120,7 +120,7 @@ verification:
       note: run 2026-10-09
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 463b467fdfae414006e177f829f06ee61993d1a06d36a1a198ab00a340fdeb5f
+      input_hash: 9957a3f0274aa144ce1f2aa1de8a7efa9ffdd8518084eaf229ef2311254d35c3
     - path: ebitenvideo/timeline.go
       input_hash: 5b556a6fe98c8b8c3ce24e9a2718d7bd409c34a1a815782c9e64c78031ab2c27
     - path: ebitenvideo/seek_darwin_test.go
@@ -153,11 +153,11 @@ verification:
       note: no hardware; ffmpeg-made MP4; run 2026-10-09
     basis:
     - path: mediacontainer/mp4/packetsource.go
-      input_hash: 2a177b29fd86f490f7842286333183c88fb5795d65700dc8731e19596d8cc50c
+      input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/demux.go
-      input_hash: a9a399a5f0bec6146394f5ac03c1f099d3432bb614d415f69983476bb4c93862
+      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
     - path: mediacontainer/mp4/packetsource_test.go
-      input_hash: 3419c8e0a26b4cbcc01dd68cd7bedf5b4bcabb6997da936088df61f79c4bb70c
+      input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
   annexb-offset-test:
     state: passed
     method: unit
@@ -170,7 +170,7 @@ verification:
       locator: TestReaderOffset
     basis:
     - path: encoding/annexb/annexb.go
-      input_hash: 001be536566b4d1afedc58c844b7620aebd16978fe72c3919fb89d44daa90924
+      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: encoding/annexb/annexb_test.go
       input_hash: d759de2aa0f82d53ce154f230e8c3e1d8a8279407e127012f9029307c7044951
 facts:

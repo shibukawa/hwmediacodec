@@ -58,7 +58,7 @@ verification:
       note: no hardware - loopback pion viewer, ffmpeg-made stream; run 2026-10-10 in the workspace
     basis:
     - path: net/webrtc/broadcaster.go
-      input_hash: 498d259f31413af392fa29d86a086e8ebeb121370c5af6af195a89e316c376b8
+      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
     - path: net/webrtc/broadcaster_test.go
       input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: net/webrtc/go.mod

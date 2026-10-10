@@ -19,6 +19,7 @@ import (
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 )
 
 // Sample is one sample of a track: a video access unit (already converted
@@ -399,23 +400,11 @@ func (v *VideoTrack) AccessUnit(i int) (Sample, error) {
 	out := make([]byte, 0, len(s.Data)+64)
 	if s.Keyframe {
 		for _, ps := range v.paramSets {
-			out = append(out, 0, 0, 0, 1)
-			out = append(out, ps...)
+			out = annexb.AppendUnit(out, ps)
 		}
 	}
-	data := s.Data
-	for len(data) >= v.nalLength {
-		n := 0
-		for k := 0; k < v.nalLength; k++ {
-			n = n<<8 | int(data[k])
-		}
-		data = data[v.nalLength:]
-		if n <= 0 || n > len(data) {
-			return Sample{}, fmt.Errorf("mp4: sample %d: NAL unit length %d out of range", i, n)
-		}
-		out = append(out, 0, 0, 0, 1)
-		out = append(out, data[:n]...)
-		data = data[n:]
+	if out, err = annexb.FromLengthPrefixed(out, s.Data, v.nalLength); err != nil {
+		return Sample{}, fmt.Errorf("mp4: sample %d: %w", i, err)
 	}
 	s.Data = out
 	return s, nil
