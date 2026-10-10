@@ -57,8 +57,21 @@ capabilities:
     - fake-driver
     - hevc-reference-linux
   decode/av1:
-    state: unknown
+    state: partial
     about: capability:hwmediacodec/decode-av1
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/av1dec.go
+      note: Code complete 2026-10-09 in milestone:av1-decode-linux-windows (8-bit Main profile to NV12;
+        frame header parsed in Go, film grain on a second surface). Every buffer equals ffmpeg's VA-API
+        AV1 decoder's through the fake driver; not yet run on hardware. 10-bit is refused.
   encode/h264:
     state: implemented
     about: capability:hwmediacodec/encode-h264
@@ -262,7 +275,7 @@ verification:
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
   dpb-oracle:
     state: passed
     method: integration
@@ -337,9 +350,9 @@ verification:
         against VideoToolbox and may need tuning for VCN.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 40802c4657d4f527e78650b46f57ab7b77029d0c588e718a1598496d1538761a
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/backend.go
-      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/display.go
       input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/sys/sys_linux.go
@@ -388,17 +401,17 @@ verification:
       note: debian trixie container, libva 2.22, linux/arm64 and (emulated) linux/amd64, 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 4def7dc1532bb9df3d853c72a95ff11d8b812c26685365fe61dff085228d606e
+      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
-      input_hash: 1a7944caf1b0fb5a07b684811049bb2dd612bff6403453ae41875031398b6486
+      input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
     - path: internal/vaapi/decoder.go
-      input_hash: 2926bd49ed6c690a4c05312048c8170a3732728e5f7e51d75d178aefb7a46def
+      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
     - path: internal/vaapi/hevcdec.go
       input_hash: 8844e4633fe10e21b8afe6c235ed2832ab0d4252b9cdf46c601ddb2a6f651697
     - path: internal/vaapi/encoder.go
-      input_hash: 40802c4657d4f527e78650b46f57ab7b77029d0c588e718a1598496d1538761a
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/hevcenc.go
-      input_hash: 45e1f76ec214d165b4262fface16349dd7fa0acafb0c7d391e36236e940e2208
+      input_hash: b09f066a07ee0e7bbcdbb1ec87495b40ba45d39d391eec13284e93805a5aff44
   hevc-reference-linux:
     state: not_run
     method: integration

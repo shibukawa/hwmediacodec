@@ -60,8 +60,20 @@ capabilities:
     - symbol-binding
     - hardware-decode
   decode/av1:
-    state: unknown
+    state: partial
     about: capability:hwmediacodec/decode-av1
+    authority: inferred
+    scope:
+      platform:
+      - linux
+      - windows
+      gpu: nvidia
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/nvidia/decoder.go
+      note: Code complete 2026-10-09 in milestone:av1-decode-linux-windows (cuvid parser, frames from
+        the display callback, 8-bit to NV12, RTX 30 and newer); builds and binds, never run on hardware.
   encode/h264:
     state: implemented
     about: capability:hwmediacodec/encode-h264
@@ -196,7 +208,7 @@ facts:
       with Keyframe from the NAL types, SPS/PPS (and VPS) prepended from nvEncGetSequenceParams when
       missing, DTS = input PTS of the k-th frame minus bframes * frame duration.
     limitations:
-    - 8-bit 4:2:0 progressive only; NV12 output only (no RGBA/BGRA decode); no AV1.
+    - 8-bit 4:2:0 progressive only; NV12 output only (no RGBA/BGRA decode); AV1 is decoded only (8-bit Main profile).
     - Synchronous per-picture decode and host copy inside Send.
     - Parameter sets are not cached across Flush; the next IDR must carry SPS/PPS in band (the usual
       case for streams the library's own encoders and ffmpeg produce).
@@ -279,9 +291,9 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: c49a37cc127ca8eec5c1b7f807e0570a601d5e7c2bf4d906da7739d3e0753e8b
+      input_hash: dea0efbd5a3df5faef510e100927cfe4beaeba05decb9efedde1dbdcb3af6244
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
   hardware-encode:
@@ -299,7 +311,7 @@ verification:
     - path: internal/nvidia/encoder.go
       input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
     - path: internal/nvidia/backend.go
-      input_hash: 7643290ac91c477cb25b4487c9c7f845f05c782bf715ee78aa926becfb25895f
+      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
 history:
   researched-2026-10-08:
     summary: Backend landscape entry written from NVIDIA documentation (libraries, API model, session

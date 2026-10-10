@@ -146,21 +146,21 @@ verification:
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
     - path: internal/av1/obu.go
-      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
     - path: internal/av1/seqhdr.go
-      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
     - path: internal/av1/frame.go
       input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: decode_av1_test.go
-      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+      input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: internal/testutil/av1.go
-      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
   av1-no-td-test:
@@ -182,7 +182,7 @@ verification:
     - path: internal/av1/frame.go
       input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
     - path: decode_av1_test.go
-      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+      input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
   av1-rgba-test:
     state: passed
     method: integration
@@ -246,7 +246,7 @@ verification:
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: decode_av1_test.go
-      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+      input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
   av1-decode-order-noop-test:
     state: passed
     method: integration
@@ -262,11 +262,11 @@ verification:
       note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
     basis:
     - path: hwmediacodec.go
-      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
     - path: internal/videotoolbox/decoder.go
       input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
     - path: decode_av1_test.go
-      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+      input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
   av1-ten-bit-test:
     state: passed
     method: integration
@@ -285,9 +285,9 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: 713b8102238c50ae094aa87787ef8b2d07ed7412a83235c8930154b76b7e68ce
     - path: decode_av1_test.go
-      input_hash: 0c4077eba86b19a0d731e70bb8721b1dcc8791ca2a5bb6e11c60585c5822e38c
+      input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
     - path: internal/testutil/av1.go
-      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
   av1-parser-oracle-test:
     state: passed
     method: integration
@@ -303,9 +303,9 @@ verification:
         byte. Runs on any platform with ffmpeg + libsvtav1.
     basis:
     - path: internal/av1/obu.go
-      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
     - path: internal/av1/seqhdr.go
-      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
     - path: internal/av1/frame.go
       input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
     - path: internal/av1/av1c.go
@@ -313,9 +313,9 @@ verification:
     - path: internal/av1/oracle_test.go
       input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
     - path: internal/testutil/av1.go
-      input_hash: 9f743290732cbf25a442d1807e793ad8663af8d9cde2e74f3da67ac4280c0023
+      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
   av1-parser-unit-test:
     state: passed
     method: unit
@@ -332,15 +332,15 @@ verification:
         description, High profile sRGB 4:4:4 as a reduced still picture, and monochrome
     basis:
     - path: internal/av1/obu.go
-      input_hash: 4fcf71357119177f3a765a4b03090dc913bd506122952891a1364b38fb184dea
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
     - path: internal/av1/seqhdr.go
-      input_hash: 7eeed11d19bdac4fda8da5cbc75348d20e0f8b3ecbde44048b0d1fb402060700
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
     - path: internal/av1/frame.go
       input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: internal/av1/av1_test.go
-      input_hash: adce98e92d2f390f2b72bdb57339d1b6f703f00bdecff2357b49cc234bccbc60
+      input_hash: 0a533ca225e43b89af7e6be7bb177a89776b397f4b72e2bb9aff65affc5a1e62
   ivf-unit-test:
     state: passed
     method: unit
@@ -375,7 +375,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
   build-check:
     state: passed
     method: static

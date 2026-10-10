@@ -54,6 +54,14 @@ func (e *encoder) buildHEVCParameterSets() {
 	h.tools = hevcToolsFor(blocks, hasBlocks, features, hasFeatures, e.rcMode != sys.RCCQP)
 	num, den := frameRateFraction(cfg.FrameRate)
 	h.vps, h.sps, h.pps = hevcParameterSets(cfg.Width, cfg.Height, num, den, int(e.peakBits/1000), e.qp, h.tools)
+	if cfg.BT709 {
+		h.sps.VUI.VideoSignalTypePresent = true
+		h.sps.VUI.VideoFormat = videoFormatUnspecified
+		h.sps.VUI.ColourDescriptionPresent = true
+		h.sps.VUI.ColourPrimaries = colourBT709
+		h.sps.VUI.TransferCharacteristics = colourBT709
+		h.sps.VUI.MatrixCoeffs = colourBT709
+	}
 	e.alignedW, e.alignedH = h.sps.Width, h.sps.Height
 
 	e.paramSets = e.paramSets[:0]

@@ -24,6 +24,7 @@ func TestStructLayouts(t *testing.T) {
 	var co ExtCodingOption
 	var co2 ExtCodingOption2
 	var co3 ExtCodingOption3
+	var vsi ExtVideoSignalInfo
 	var sp ExtCodingOptionSPSPPS
 	var vps ExtCodingOptionVPS
 
@@ -192,6 +193,8 @@ func TestStructLayouts(t *testing.T) {
 
 		{"sizeof mfxExtCodingOption3", unsafe.Sizeof(co3), 512},
 		{"mfxExtCodingOption3.GPB", unsafe.Offsetof(co3.GPB), 66},
+		{"sizeof mfxExtVideoSignalInfo", unsafe.Sizeof(vsi), 20},
+		{"mfxExtVideoSignalInfo.MatrixCoefficients", unsafe.Offsetof(vsi.MatrixCoefficients), 18},
 
 		{"sizeof mfxExtCodingOptionSPSPPS", unsafe.Sizeof(sp), 32},
 		{"mfxExtCodingOptionSPSPPS.SPSBuffer", unsafe.Offsetof(sp.SPSBuffer), 8},
@@ -223,6 +226,8 @@ func TestConstants(t *testing.T) {
 	}{
 		{"MFX_CODEC_AVC", uint64(CodecAVC), 541283905},
 		{"MFX_CODEC_HEVC", uint64(CodecHEVC), 1129727304},
+		{"MFX_CODEC_AV1", uint64(CodecAV1), 540104257},
+		{"MFX_PROFILE_AV1_MAIN", uint64(ProfileAV1Main), 1},
 		{"MFX_FOURCC_NV12", uint64(FourCCNV12), 842094158},
 		{"MFX_EXTBUFF_CODING_OPTION", uint64(ExtBuffCodingOption), 1347372099},
 		{"MFX_EXTBUFF_CODING_OPTION2", uint64(ExtBuffCodingOption2), 844055619},

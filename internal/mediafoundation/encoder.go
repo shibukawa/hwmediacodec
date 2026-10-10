@@ -41,6 +41,9 @@ type encoder struct {
 
 	rateNum, rateDen uint32
 	frameDuration    int64 // 100 ns
+	// noColorInfo is set when the encoder refused a media type with the
+	// colour description cfg.BT709 asks for.
+	noColorInfo bool
 
 	// Asynchronous MFT bookkeeping.
 	needInput  int // outstanding METransformNeedInput events
@@ -263,6 +266,7 @@ func (e *encoder) setOutputType() error {
 		bitrate = defaultBitrate(e.cfg.Width, e.cfg.Height, e.cfg.FrameRate)
 	}
 	a.SetUINT32(&sys.MF_MT_AVG_BITRATE, uint32(bitrate))
+	e.setColorInfo(a)
 	if profile, ok, err := e.mfProfile(); err != nil {
 		return err
 	} else if ok {
@@ -270,12 +274,39 @@ func (e *encoder) setOutputType() error {
 	}
 	hr := e.transform.SetOutputType(e.outputID, mt, 0)
 	switch {
+	case hr.Failed() && e.dropColorInfo():
+		return e.setOutputType()
 	case hr == sys.MF_E_INVALIDMEDIATYPE, hr == sys.MF_E_INVALIDTYPE, hr == sys.MF_E_UNSUPPORTED_D3D_TYPE:
 		return e.unsupported(e.name + " rejected the output format (" + hr.String() + ")")
 	case hr.Failed():
 		return backendErr("IMFTransform::SetOutputType", hr)
 	}
 	return nil
+}
+
+// setColorInfo describes the pictures as BT.709 in video range when the
+// configuration asks for it. Encoders copy the description into the VUI of
+// the stream; one that ignores the attributes leaves the stream without a
+// colour description.
+func (e *encoder) setColorInfo(a *sys.IMFAttributes) {
+	if !e.cfg.BT709 || e.noColorInfo {
+		return
+	}
+	a.SetUINT32(&sys.MF_MT_VIDEO_PRIMARIES, sys.MFVideoPrimaries_BT709)
+	a.SetUINT32(&sys.MF_MT_TRANSFER_FUNCTION, sys.MFVideoTransFunc_709)
+	a.SetUINT32(&sys.MF_MT_YUV_MATRIX, sys.MFVideoTransferMatrix_BT709)
+	a.SetUINT32(&sys.MF_MT_VIDEO_NOMINAL_RANGE, sys.MFNominalRange_16_235)
+}
+
+// dropColorInfo turns the colour description off after an encoder refused
+// a media type that carried it. It reports whether that changes the type,
+// that is, whether setting it again is worth a try.
+func (e *encoder) dropColorInfo() bool {
+	if !e.cfg.BT709 || e.noColorInfo {
+		return false
+	}
+	e.noColorInfo = true
+	return true
 }
 
 // mfProfile maps the requested profile to MF_MT_MPEG2_PROFILE.
@@ -318,8 +349,11 @@ func (e *encoder) setInputType() error {
 	a.SetUINT32(&sys.MF_MT_INTERLACE_MODE, sys.MFVideoInterlace_Progressive)
 	a.SetUINT32(&sys.MF_MT_DEFAULT_STRIDE, uint32(e.cfg.Width))
 	a.SetUINT32(&sys.MF_MT_ALL_SAMPLES_INDEPENDENT, 1)
+	e.setColorInfo(a)
 	hr := e.transform.SetInputType(e.inputID, mt, 0)
 	switch {
+	case hr.Failed() && e.dropColorInfo():
+		return e.setInputType()
 	case hr == sys.MF_E_INVALIDMEDIATYPE, hr == sys.MF_E_INVALIDTYPE:
 		return e.unsupported(e.name + " does not accept NV12 input of this size or rate (" + hr.String() + ")")
 	case hr.Failed():

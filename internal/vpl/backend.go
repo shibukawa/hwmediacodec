@@ -15,7 +15,21 @@ type Backend struct{}
 // Name implements codec.Backend.
 func (Backend) Name() string { return Name }
 
-var probeCodecs = []codec.Codec{codec.H264, codec.HEVC}
+// probeCodecs are the codecs with both a decode and an encode path here;
+// decodeCodecs adds AV1, which is decoded only.
+var (
+	probeCodecs  = []codec.Codec{codec.H264, codec.HEVC}
+	decodeCodecs = []codec.Codec{codec.H264, codec.HEVC, codec.AV1}
+)
+
+// decodeCodecID returns the MFX codec identifier of a codec the backend
+// decodes.
+func decodeCodecID(c codec.Codec) (uint32, bool) {
+	if c == codec.AV1 {
+		return sys.CodecAV1, true
+	}
+	return codecID(c)
+}
 
 // probeWidth and probeHeight are the picture size the capability queries
 // are made with (1080p, coded height aligned to 16).
@@ -26,8 +40,11 @@ const (
 )
 
 func probeProfile(c codec.Codec) uint16 {
-	if c == codec.HEVC {
+	switch c {
+	case codec.HEVC:
 		return sys.ProfileHEVCMain
+	case codec.AV1:
+		return sys.ProfileAV1Main
 	}
 	return sys.ProfileAVCHigh
 }
@@ -41,7 +58,7 @@ func supported(st int32) bool {
 // canDecode asks the runtime whether it decodes 8-bit 4:2:0 streams of c in
 // hardware.
 func (s *session) canDecode(c codec.Codec) bool {
-	id, _ := codecID(c)
+	id, _ := decodeCodecID(c)
 	var in, out sys.VideoParam
 	in.IOPattern = sys.IOPatternOutSystemMem
 	in.MFX.CodecID = id
@@ -69,7 +86,8 @@ func (s *session) canEncode(c codec.Codec) bool {
 	return supported(sys.EncodeQuery(s.ses, &p.par, &out))
 }
 
-// Probe implements codec.Backend. It reports hardware decode and encode
+// Probe implements codec.Backend. It reports hardware decode support for
+// H.264, HEVC and AV1 (Tiger Lake and newer GPUs decode AV1) and encode
 // support for H.264 and HEVC. Without libvpl, libva, an Intel GPU or a GPU
 // runtime for it, it yields (nil, nil).
 func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
@@ -85,7 +103,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		return nil, err
 	}
 	var caps []codec.Capability
-	for _, c := range probeCodecs {
+	for _, c := range decodeCodecs {
 		if s.canDecode(c) {
 			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Decode, Hardware: true})
 		}
@@ -100,9 +118,9 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 
 // NewDecoder implements codec.Backend.
 func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.Decoder, error) {
-	id, ok := codecID(cfg.Codec)
+	id, ok := decodeCodecID(cfg.Codec)
 	if !ok {
-		return nil, unsupported(cfg.Codec, "only h264 and hevc decoding are implemented on the vpl backend")
+		return nil, unsupported(cfg.Codec, "only h264, hevc and av1 decoding are implemented on the vpl backend")
 	}
 	if cfg.OutputFormat != codec.NV12 {
 		return nil, unsupported(cfg.Codec, "output format "+cfg.OutputFormat.String()+" is not available on the vpl backend yet; use NV12")

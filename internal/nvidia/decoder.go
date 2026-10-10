@@ -10,6 +10,7 @@ import (
 
 	"github.com/ebitengine/purego"
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/nvidia/sys"
 )
@@ -24,6 +25,11 @@ const extraSurfaces = 2
 // back into Go for every sequence header and every complete picture; the
 // picture callback submits the picture and copies the result to a pooled
 // NV12 buffer at once, so nothing device-side outlives a Send call.
+//
+// AV1 differs in when a picture is copied: the stream has frames that are
+// decoded but not shown, and shows frames again that were decoded earlier
+// (show_existing_frame), so pictures are copied in the display callback
+// instead, which the parser raises once per shown frame.
 type decoder struct {
 	mu        sync.Mutex
 	cfg       codec.DecoderConfig
@@ -46,10 +52,20 @@ type decoder struct {
 	pool    sync.Pool
 	cbErr   error // first error raised inside a callback
 
+	// AV1: the current sequence header, parsed and as an OBU. A key frame
+	// that restarts decoding without carrying one is prefixed with it.
+	av1Seq    *av1.SequenceHeader
+	av1SeqOBU []byte
+
 	waitKeyframe bool
 	flushed      bool
 	closed       bool
 }
+
+// OutputsDisplayOrder implements codec.DisplayOrderer: AV1 frames come from
+// the parser's display callback in presentation order. H.264 and HEVC
+// frames come in decode order and are reordered by the public API.
+func (d *decoder) OutputsDisplayOrder() bool { return d.cfg.Codec == codec.AV1 }
 
 // Parser callbacks are C function pointers created once per process with
 // purego and dispatched on the user-data key, since the number of
@@ -109,9 +125,15 @@ func onDecode(user uintptr, p *sys.DecodePicParams) uintptr {
 	return d.decode(p)
 }
 
-// onDisplay is PFNVIDDISPLAYCALLBACK. Frames are taken from the decode
-// callback in decode order, so display notifications are ignored.
-func onDisplay(user uintptr, info *sys.ParserDispInfo) uintptr { return 1 }
+// onDisplay is PFNVIDDISPLAYCALLBACK; it returns 1 on success. The parser
+// passes a nil info at the end of the stream.
+func onDisplay(user uintptr, info *sys.ParserDispInfo) uintptr {
+	d := lookupDecoder(user)
+	if d == nil || info == nil {
+		return 1
+	}
+	return d.display(info)
+}
 
 func newDecoder(cfg codec.DecoderConfig, dev *device, codecType uint32, caps sys.DecodeCaps) *decoder {
 	d := &decoder{cfg: cfg, dev: dev, codecType: codecType, caps: caps, waitKeyframe: true}
@@ -176,6 +198,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	d.flushed = false
 
+	if d.cfg.Codec == codec.AV1 {
+		return d.sendAV1(p)
+	}
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return codec.ErrInvalidData
@@ -203,6 +228,43 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if hasKeyframe {
 		d.waitKeyframe = false
 	}
+	return d.parse(p, data, hasVCL)
+}
+
+// sendAV1 is Send for AV1. p.Data is one temporal unit in the low-overhead
+// OBU format, which is what the parser takes when its Annex-B flag is
+// clear. Decoding (re)starts at a shown key frame.
+func (d *decoder) sendAV1(p codec.Packet) error {
+	tu, err := av1.ParseTemporalUnit(p.Data, d.av1Seq)
+	if err != nil {
+		return fmt.Errorf("%w: %v", codec.ErrInvalidData, err)
+	}
+	if tu.Sequence != nil {
+		d.av1Seq = tu.Sequence
+		d.av1SeqOBU = append(d.av1SeqOBU[:0], tu.SequenceHeader.Raw...)
+	}
+	if !tu.HasFrame {
+		return nil // a sequence header alone was stored above
+	}
+	data := p.Data
+	if d.waitKeyframe {
+		if !tu.Keyframe || d.av1Seq == nil {
+			return nil
+		}
+		if tu.SequenceHeader == nil {
+			// The parser was created after the last sequence header
+			// went by.
+			data = append(append([]byte{}, d.av1SeqOBU...), p.Data...)
+		}
+		d.waitKeyframe = false
+	}
+	return d.parse(p, data, true)
+}
+
+// parse hands one packet to the parser, which calls back for the pictures
+// in it. complete says that the packet ends a picture, so that the parser
+// emits it now instead of waiting for the next packet.
+func (d *decoder) parse(p codec.Packet, data []byte, complete bool) error {
 	return d.dev.run(func() error {
 		if d.parser == 0 {
 			if err := d.createParser(); err != nil {
@@ -211,9 +273,13 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		}
 		d.curPTS, d.curOrder = p.PTS, codec.PacketOrder(p)
 		pkt := sys.SourceDataPacket{PayloadSize: sys.ULong(len(data)), Payload: &data[0]}
-		if hasVCL {
-			// The packet holds exactly one picture, so the parser can
-			// emit it now instead of waiting for the next access unit.
+		if d.cfg.Codec == codec.AV1 {
+			// The timestamp travels through the parser to the display
+			// callback, where AV1 frames are picked up.
+			pkt.Flags |= sys.PktTimestamp
+			pkt.Timestamp = p.PTS
+		}
+		if complete {
 			pkt.Flags |= sys.PktEndOfPicture
 		}
 		st := sys.CuvidParseVideoData(d.parser, &pkt)
@@ -307,7 +373,10 @@ func (d *decoder) decode(p *sys.DecodePicParams) uintptr {
 		d.cbErr = cuError("cuvidDecodePicture", st)
 		return 0
 	}
-	f, err := d.copyPicture(p.CurrPicIdx)
+	if d.cfg.Codec == codec.AV1 {
+		return 1 // shown frames are copied by the display callback
+	}
+	f, err := d.copyPicture(p.CurrPicIdx, d.curPTS)
 	if err != nil {
 		d.cbErr = err
 		return 0
@@ -316,9 +385,30 @@ func (d *decoder) decode(p *sys.DecodePicParams) uintptr {
 	return 1
 }
 
-// copyPicture waits for the picture, maps it and copies the display area
-// into an NV12 frame in CPU memory.
-func (d *decoder) copyPicture(idx int32) (*codec.Frame, error) {
+// display handles the parser's notification that a picture is to be shown.
+// Only AV1 uses it: the picture is copied here, at once, because the parser
+// reuses the index afterwards. H.264 and HEVC pictures were already taken
+// in the decode callback.
+func (d *decoder) display(info *sys.ParserDispInfo) uintptr {
+	if d.cfg.Codec != codec.AV1 || d.cbErr != nil {
+		return 1
+	}
+	if !d.haveDecoder {
+		d.cbErr = &codec.BackendError{Backend: Name, Op: "cuvidParseVideoData", Message: "picture shown before the sequence header"}
+		return 0
+	}
+	f, err := d.copyPicture(info.PictureIndex, info.Timestamp)
+	if err != nil {
+		d.cbErr = err
+		return 0
+	}
+	d.pending = append(d.pending, f)
+	return 1
+}
+
+// copyPicture waits for the picture, maps it (which applies AV1 film grain)
+// and copies the display area into an NV12 frame in CPU memory.
+func (d *decoder) copyPicture(idx int32, pts int64) (*codec.Frame, error) {
 	var devPtr uint64
 	var pitch uint32
 	proc := sys.ProcParams{ProgressiveFrame: 1}
@@ -353,7 +443,7 @@ func (d *decoder) copyPicture(idx int32) (*codec.Frame, error) {
 		return nil, err
 	}
 	f := &codec.Frame{Width: width, Height: height, Format: codec.NV12,
-		Planes: [][]byte{luma, chroma}, Strides: []int{rowBytes0, rowBytes1}, PTS: d.curPTS}
+		Planes: [][]byte{luma, chroma}, Strides: []int{rowBytes0, rowBytes1}, PTS: pts}
 	codec.SetFrameOrder(f, d.curOrder)
 	codec.SetRelease(f, func() { d.putBuffer(buf) })
 	return f, nil

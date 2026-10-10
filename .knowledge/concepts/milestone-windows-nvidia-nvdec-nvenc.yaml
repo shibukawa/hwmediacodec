@@ -156,7 +156,7 @@ verification:
     - path: internal/nvidia/sys/lib_windows.go
       input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
     - path: ebitenvideo/go.sum
-      input_hash: 765f20a5f56b7c5201a52a73377d2c0f0e5e544d002ee551d509d0a66f8fac36
+      input_hash: 7e7d91e9336a2f39e5bd87263ab1e71a867d35dc0f52082caacfcd0041fc4fa8
   linux-regression:
     state: passed
     method: integration
@@ -196,11 +196,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: hwmediacodec.go
-      input_hash: 4e712bc713beed9375af896719b5f391fda966df4e3e019c76eb20a9f3e000bf
+      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
   windows-loader-run:
     state: not_run
     method: integration
@@ -239,7 +239,7 @@ verification:
         runs on the Go thread''s system stack (2 MB reserve in a non-cgo Windows binary).'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: c49a37cc127ca8eec5c1b7f807e0570a601d5e7c2bf4d906da7739d3e0753e8b
+      input_hash: dea0efbd5a3df5faef510e100927cfe4beaeba05decb9efedde1dbdcb3af6244
     - path: internal/nvidia/device.go
       input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
     - path: internal/nvidia/sys/types_cuvid.go

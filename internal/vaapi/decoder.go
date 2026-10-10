@@ -82,13 +82,24 @@ type decoder struct {
 
 	// hevc holds the HEVC bitstream state; it is nil for H.264 decoders.
 	hevc *hevcDecoder
+	// av1 holds the AV1 bitstream state; it is nil for other decoders.
+	av1 *av1Decoder
 }
+
+// OutputsDisplayOrder implements codec.DisplayOrderer. An AV1 temporal unit
+// holds exactly one shown frame and the units arrive in presentation order,
+// so there is nothing to reorder; H.264 and HEVC pictures come out in
+// decode order and are reordered by the public API.
+func (d *decoder) OutputsDisplayOrder() bool { return d.av1 != nil }
 
 func newDecoder(cfg codec.DecoderConfig, dpy *display) *decoder {
 	d := &decoder{cfg: cfg, dpy: dpy, ps: h264.NewParameterSets(), waitKeyframe: true}
 	d.dpb = h264.NewDPB(d)
-	if cfg.Codec == codec.HEVC {
+	switch cfg.Codec {
+	case codec.HEVC:
 		d.hevc = newHEVCDecoder(d)
+	case codec.AV1:
+		d.av1 = &av1Decoder{}
 	}
 	return d
 }
@@ -133,6 +144,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	d.flushed = false
 
+	if d.av1 != nil {
+		return d.sendAV1(p)
+	}
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return codec.ErrInvalidData
@@ -465,6 +479,13 @@ func (d *decoder) Receive(ctx context.Context) (*codec.Frame, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if d.av1 != nil && len(d.av1.frames) > 0 {
+		f := d.av1.frames[0]
+		copy(d.av1.frames, d.av1.frames[1:])
+		d.av1.frames[len(d.av1.frames)-1] = nil
+		d.av1.frames = d.av1.frames[:len(d.av1.frames)-1]
+		return f, nil
+	}
 	if len(d.pending) == 0 {
 		if d.flushed {
 			return nil, io.EOF
@@ -612,6 +633,9 @@ func (d *decoder) Close() error {
 	d.dpb.Reset()
 	if d.hevc != nil {
 		d.hevc.dpb.Reset()
+	}
+	if d.av1 != nil {
+		d.av1.frames = nil
 	}
 	d.pending = nil
 	d.teardownSequence()

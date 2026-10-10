@@ -5,11 +5,13 @@ package mediafoundation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"unsafe"
 
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/mediafoundation/sys"
 )
@@ -42,7 +44,12 @@ type decoder struct {
 	staging     *sys.ID3D11Texture2D
 	stagingDesc sys.D3D11_TEXTURE2D_DESC
 
-	params   *paramSets
+	params *paramSets
+	// AV1: the current sequence header, parsed and as an OBU. A key frame
+	// that restarts decoding without carrying one is prefixed with it.
+	av1Seq    *av1.SequenceHeader
+	av1SeqOBU []byte
+
 	prefix   []byte          // non-picture NAL units waiting for the next picture
 	inflight map[int64]int64 // sample time (100 ns) -> caller PTS
 	pending  []*codec.Frame  // frames drained by Flush
@@ -77,9 +84,11 @@ func newDecoder(cfg codec.DecoderConfig, info codecInfo, dev *d3dDevice, t *sys.
 	}
 }
 
-// configure sets the input type (Annex-B elementary stream), negotiates an
-// NV12 output type and starts streaming.
-func (d *decoder) configure() error {
+// configure sets the input type (an Annex-B elementary stream, or AV1
+// temporal units), negotiates an NV12 output type and starts streaming.
+// width and height are the frame size for the input type, or 0 to leave it
+// out; the H.264 and HEVC decoders read it from the stream.
+func (d *decoder) configure(width, height int) error {
 	var in, out uint32
 	switch hr := d.transform.GetStreamIDs(1, &in, 1, &out); {
 	case hr == sys.E_NOTIMPL:
@@ -101,6 +110,9 @@ func (d *decoder) configure() error {
 		// Recommended by the H.264 decoder documentation: interlacing can
 		// change per picture and the stream takes precedence anyway.
 		a.SetUINT32(&sys.MF_MT_INTERLACE_MODE, sys.MFVideoInterlace_MixedInterlaceOrProgressive)
+	}
+	if width > 0 && height > 0 {
+		a.SetUINT64(&sys.MF_MT_FRAME_SIZE, uint64(width)<<32|uint64(height))
 	}
 	hr := d.transform.SetInputType(d.inputID, mt, 0)
 	mt.Release()
@@ -201,6 +213,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if d.cfg.Codec == codec.AV1 {
+		return d.sendAV1(p)
+	}
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return codec.ErrInvalidData
@@ -256,6 +271,50 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		return err
 	}
 	d.prefix = nil
+	d.needParams = false
+	return err
+}
+
+// sendAV1 is Send for AV1. p.Data is one temporal unit in the low-overhead
+// OBU format; it becomes one input sample, without its temporal delimiter
+// OBUs, which is the form of an ISOBMFF sample and what the decoder is
+// normally fed. The transform is configured at the first sequence header.
+func (d *decoder) sendAV1(p codec.Packet) error {
+	tu, err := av1.ParseTemporalUnit(p.Data, d.av1Seq)
+	if err != nil {
+		return fmt.Errorf("%w: %v", codec.ErrInvalidData, err)
+	}
+	d.flushed = false
+	if tu.Sequence != nil {
+		d.av1Seq = tu.Sequence
+		d.av1SeqOBU = append(d.av1SeqOBU[:0], tu.SequenceHeader.Raw...)
+	}
+	if !tu.HasFrame || d.av1Seq == nil {
+		return nil // a sequence header alone was stored above
+	}
+	if d.waitKeyframe {
+		if !tu.Keyframe {
+			return nil
+		}
+		// Decoding (re)starts here; the unit must bring its sequence
+		// header along.
+		d.needParams = true
+	}
+	if !d.streaming {
+		if err := d.configure(d.av1Seq.MaxFrameWidth, d.av1Seq.MaxFrameHeight); err != nil {
+			return err
+		}
+	}
+	d.waitKeyframe = false
+	data := av1.StripTemporalDelimiters(p.Data, tu.OBUs)
+	if d.needParams && tu.SequenceHeader == nil {
+		data = append(append([]byte{}, d.av1SeqOBU...), data...)
+	}
+	err = d.decode(data, p.PTS, tu.Keyframe)
+	if errors.Is(err, codec.ErrAgain) {
+		// The caller resends the packet after draining output.
+		return err
+	}
 	d.needParams = false
 	return err
 }

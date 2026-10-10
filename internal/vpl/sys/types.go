@@ -114,12 +114,14 @@ func fourCC(a, b, c, d byte) uint32 {
 var (
 	CodecAVC  = fourCC('A', 'V', 'C', ' ')
 	CodecHEVC = fourCC('H', 'E', 'V', 'C')
+	CodecAV1  = fourCC('A', 'V', '1', ' ')
 
 	FourCCNV12 = fourCC('N', 'V', '1', '2')
 
 	ExtBuffCodingOption       = fourCC('C', 'D', 'O', 'P')
 	ExtBuffCodingOption2      = fourCC('C', 'D', 'O', '2')
 	ExtBuffCodingOption3      = fourCC('C', 'D', 'O', '3')
+	ExtBuffVideoSignalInfo    = fourCC('V', 'S', 'I', 'N')
 	ExtBuffCodingOptionSPSPPS = fourCC('C', 'O', 'S', 'P')
 	ExtBuffCodingOptionVPS    = fourCC('C', 'O', 'V', 'P')
 )
@@ -155,6 +157,7 @@ const (
 	ProfileAVCMain                uint16 = 77
 	ProfileAVCHigh                uint16 = 100
 	ProfileHEVCMain               uint16 = 1
+	ProfileAV1Main                uint16 = 1
 
 	// mfxInfoMFX.GopOptFlag, TargetUsage and RateControlMethod.
 	GopClosed           uint16 = 1
@@ -418,6 +421,18 @@ type ExtCodingOption3 struct {
 	_      [29]uint16
 	GPB    uint16
 	_      [444]byte
+}
+
+// ExtVideoSignalInfo mirrors mfxExtVideoSignalInfo: the video signal type
+// fields of the VUI.
+type ExtVideoSignalInfo struct {
+	Header                   ExtBuffer
+	VideoFormat              uint16
+	VideoFullRange           uint16
+	ColourDescriptionPresent uint16
+	ColourPrimaries          uint16
+	TransferCharacteristics  uint16
+	MatrixCoefficients       uint16
 }
 
 // ExtCodingOptionSPSPPS mirrors mfxExtCodingOptionSPSPPS; attached to

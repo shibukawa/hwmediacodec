@@ -112,7 +112,7 @@ verification:
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
     - path: internal/bitstream/reader.go
       input_hash: b938130875981723695b8a1cdc4fb25d5ecd0d06ce210a0f05cfa162382e1630
   dpb-oracle-test:
@@ -143,7 +143,7 @@ verification:
     - path: internal/h264/dpb_test.go
       input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
     - path: internal/testutil/h264.go
-      input_hash: 21b0a4e2caeb336b13c6c0226033cbd41d7f19806d59a71e93a035bf140e17be
+      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
   layout-test:
     state: passed
     method: unit
@@ -178,15 +178,15 @@ verification:
     - path: internal/vaapi/display.go
       input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/backend.go
-      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/decoder.go
-      input_hash: 2926bd49ed6c690a4c05312048c8170a3732728e5f7e51d75d178aefb7a46def
+      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
     - path: internal/vaapi/h264fill.go
       input_hash: cdadac163fe5168cd11d5e264cfe1bdf01b78072c3699e7e30b5f07a66a14bd6
     - path: backends_linux.go
       input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
     - path: probe_test.go
-      input_hash: 5856a9df93c921297bd8d08c1bbc32a72df63cda3dcb81fde05c0113e1fd454c
+      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
   hardware-conformance:
     state: not_run
     method: integration
@@ -234,9 +234,9 @@ verification:
         VideoToolbox; VCN rate control may need the window/HRD values tuned.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 40802c4657d4f527e78650b46f57ab7b77029d0c588e718a1598496d1538761a
+      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
     - path: internal/vaapi/backend.go
-      input_hash: 664c6f84aa0b5aedef3e2c520407573c9c32a4117e8710130857e0291b0b44b3
+      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
     - path: internal/vaapi/display.go
       input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
     - path: internal/vaapi/sys/sys_linux.go

@@ -64,6 +64,46 @@ func TestEncodeParamsDefaults(t *testing.T) {
 	}
 }
 
+// TestEncodeParamsBT709 checks the video signal description attached for
+// input the public API converted from RGB, and the order in which a
+// runtime that rejects the configuration loses the optional buffers.
+func TestEncodeParamsBT709(t *testing.T) {
+	cfg := baseConfig(codec.HEVC)
+	cfg.BT709 = true
+	var p encodeParams
+	if err := p.fill(cfg); err != nil {
+		t.Fatal(err)
+	}
+	v := &p.vsi
+	if v.Header.BufferID != sys.ExtBuffVideoSignalInfo || v.Header.BufferSz != 20 {
+		t.Errorf("mfxExtVideoSignalInfo header %+v", v.Header)
+	}
+	if v.VideoFormat != 5 || v.VideoFullRange != 0 || v.ColourDescriptionPresent != 1 ||
+		v.ColourPrimaries != 1 || v.TransferCharacteristics != 1 || v.MatrixCoefficients != 1 {
+		t.Errorf("video signal %+v, want BT.709 in video range", *v)
+	}
+	if p.par.NumExtParam != 4 || p.ext[2] != unsafe.Pointer(&p.vsi) || p.ext[3] != unsafe.Pointer(&p.co3) {
+		t.Fatalf("%d buffers, want the video signal third and mfxExtCodingOption3 last", p.par.NumExtParam)
+	}
+	for _, want := range []uint16{3, 2, 0} {
+		if !p.reduce() || p.par.NumExtParam != want {
+			t.Fatalf("reduce left %d buffers, want %d", p.par.NumExtParam, want)
+		}
+	}
+	if p.reduce() {
+		t.Error("reduce reports progress with nothing left to drop")
+	}
+
+	cfg = baseConfig(codec.H264)
+	cfg.BT709 = true
+	if err := p.fill(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if p.par.NumExtParam != 3 || p.ext[2] != unsafe.Pointer(&p.vsi) {
+		t.Errorf("H.264: %d buffers, want the video signal third", p.par.NumExtParam)
+	}
+}
+
 func TestEncodeParamsControls(t *testing.T) {
 	cfg := baseConfig(codec.HEVC)
 	cfg.FrameRate = 29.97

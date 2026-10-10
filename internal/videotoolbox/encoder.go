@@ -184,10 +184,12 @@ func (e *encoder) createSession() error {
 	if err := e.setProperty("AllowFrameReordering", sys.KVTAllowFrameReordering, sys.CFBoolean(cfg.BFrames && !cfg.LowLatency), false); err != nil {
 		return err
 	}
-	if cfg.InputFormat != codec.NV12 {
+	if cfg.InputFormat != codec.NV12 || cfg.BT709 {
 		// Packed RGB input is converted to YCbCr by VideoToolbox with the
 		// BT.709 matrix (measured on an M3, 2026-10-09); say so in the
 		// stream so that decoders convert back with the same matrix.
+		// NV12 input converted with that matrix by the caller gets the
+		// same description.
 		for _, kv := range []struct {
 			name       string
 			key, value uintptr

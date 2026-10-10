@@ -248,10 +248,10 @@ verification:
       input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
     - &mf_backend
       path: internal/mediafoundation/backend.go
-      input_hash: 850c39b11fe28f246afd373894a6b283280a843b0edf9bf1c51be857cc28072d
+      input_hash: 7d1f296ce8e2400ca35f5fb905d31b2f9b9ac423e75bf8845d896f96e887c175
     - &mf_decoder
       path: internal/mediafoundation/decoder.go
-      input_hash: 6f5ca8b64eedcc5409f642b4d314742955c41d220e003be3071739983ef4b9f9
+      input_hash: 8aa6817e6808c10d946b25502503186cf13a3fb864342f963ed7d83873b23f41
     - &mf_sys
       path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
@@ -263,17 +263,17 @@ verification:
       input_hash: 8fa889aa62aa62e4a9e31790bac54ea00cf2ac6856a6d66cecaef6f9df837e66
     - &mf_guid
       path: internal/mediafoundation/sys/guid.go
-      input_hash: c6606cfef15d5c23f546718cd90087f1ab926cde25bd57e61291b642f9d70fef
+      input_hash: 941ba5008645e8c4f0479ac30d0820b5992ddf60ec207678811342a99d4d94b8
     - path: internal/mediafoundation/sys/mftenumex_amd64.go
       input_hash: a9b71b9f4c2e17761de291f630e221f84ab13965b627be1a4b1f03b80aaff5be
     - path: internal/mediafoundation/sys/mftenumex_arm64.go
       input_hash: 17adee94e73aa9bfa32381632547621fcf4d87185ab988689589451d4654332e
     - &mf_encoder
       path: internal/mediafoundation/encoder.go
-      input_hash: 1f411c198970b869008acda8db0000d6f8dca4c1a07b82a28f4dc8416606cf1f
+      input_hash: 94584d63f7f0b1ea292af050e907c3d8c41badad0289e2ed16c3180bbeed8a7e
     - &mf_sys_encode
       path: internal/mediafoundation/sys/encode.go
-      input_hash: 202b5cd3a676d70ae5f6b7893623cc31b83e91866bb612784d02903d017122af
+      input_hash: 19d25f22ffa23369663a8e6adc38dfd22b169295c4e6f58bbf4917d9cb31c6db
   layout-check-m3:
     state: passed
     method: static
@@ -392,8 +392,8 @@ facts:
       fromHNS rounds to nearest otherwise.
     display_order: the Microsoft decoders reorder natively; the decoder implements codec.DisplayOrderer
       so the public API does not wrap it in internal/reorder (milestone:display-order-rgba). Decode order
-      cannot be requested, so WithDecodeOrder has no effect on Windows. Output is NV12 only; the
-      RGBA/BGRA option of that milestone is not available on Windows yet.
+      cannot be requested, so WithDecodeOrder has no effect on Windows. The backend's output is NV12
+      only; RGBA/BGRA frames come from the conversion in Go (milestone:decoder-rgb-conversion).
     flush: MFT_MESSAGE_COMMAND_DRAIN, drain every frame into a pending queue, then
       NOTIFY_START_OF_STREAM before the next input, which is prefixed with stored VPS/SPS/PPS when
       it lacks them (annexb.ParameterSetID, shared with the VideoToolbox store).

@@ -17,6 +17,13 @@
  * Decoding fills the target surface with a pattern derived from the
  * picture order count: Y(x,y) = poc + x + 2*y, Cb(x,y) = poc + x,
  * Cr(x,y) = poc + 3*y (mod 256, chroma in chroma sample coordinates).
+ * AV1 has no picture order count: its pictures are numbered in decode
+ * order instead, and a picture shown with film grain is painted with its
+ * number plus 128 so that it can be told from the reference it leaves
+ * behind. The log line of an AV1 picture carries the picture parameters and
+ * the tile parameters in hexadecimal, with surface identifiers replaced by
+ * picture numbers, so that two clients decoding the same stream (the
+ * backend and ffmpeg's VA-API hwaccel) can be compared field by field.
  * Encoding returns the packed headers it was given followed by a fake slice
  * payload, and logs a checksum of the input surface.
  *
@@ -73,6 +80,7 @@ struct surface {
     int pitch, rows;   /* allocated layout */
     uint8_t *data;     /* Y plane, then CbCr at pitch * rows */
     int poc;           /* picture decoded or reconstructed into it */
+    int grainy;        /* AV1: the picture has film grain, so it is no reference */
     int uploaded;      /* written through an image since the last encode */
 };
 
@@ -101,6 +109,7 @@ struct context {
     VABufferID bufs[MAX_PIC_BUFFERS];
     int num_bufs;
     /* encoder state */
+    int av1_pictures;  /* AV1 pictures decoded so far */
     int have_seq;
     unsigned ctb_log2; /* HEVC */
     unsigned mbs;      /* H.264 */
@@ -186,12 +195,20 @@ static int is_h264(VAProfile p)
 {
     return p == VAProfileH264ConstrainedBaseline || p == VAProfileH264Main || p == VAProfileH264High;
 }
+static int is_av1(VAProfile p) { return p == VAProfileAV1Profile0; }
+static int is_known(VAProfile p) { return is_h264(p) || is_hevc(p) || is_av1(p); }
 static int is_encode(VAEntrypoint e) { return e == VAEntrypointEncSlice; }
+/* AV1 is decode only, as on GPUs that have an AV1 decoder and no encoder. */
+static int has_entrypoint(VAProfile p, VAEntrypoint e)
+{
+    return e == VAEntrypointVLD || (is_encode(e) && !is_av1(p));
+}
 
 /* ---- configuration ---- */
 
 static const VAProfile profiles[] = {
     VAProfileH264ConstrainedBaseline, VAProfileH264Main, VAProfileH264High, VAProfileHEVCMain,
+    VAProfileAV1Profile0,
 };
 
 static VAStatus fake_QueryConfigProfiles(VADriverContextP ctx, VAProfile *list, int *num)
@@ -203,11 +220,11 @@ static VAStatus fake_QueryConfigProfiles(VADriverContextP ctx, VAProfile *list, 
 
 static VAStatus fake_QueryConfigEntrypoints(VADriverContextP ctx, VAProfile profile, VAEntrypoint *list, int *num)
 {
-    if (!is_h264(profile) && !is_hevc(profile))
+    if (!is_known(profile))
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
     list[0] = VAEntrypointVLD;
     list[1] = VAEntrypointEncSlice;
-    *num = 2;
+    *num = is_av1(profile) ? 1 : 2;
     return VA_STATUS_SUCCESS;
 }
 
@@ -216,9 +233,9 @@ static VAStatus fake_GetConfigAttributes(VADriverContextP ctx, VAProfile profile
 {
     int i;
 
-    if (!is_h264(profile) && !is_hevc(profile))
+    if (!is_known(profile))
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
-    if (entrypoint != VAEntrypointVLD && !is_encode(entrypoint))
+    if (!has_entrypoint(profile, entrypoint))
         return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
     for (i = 0; i < num; i++) {
         unsigned v = VA_ATTRIB_NOT_SUPPORTED;
@@ -280,9 +297,9 @@ static VAStatus fake_CreateConfig(VADriverContextP ctx, VAProfile profile, VAEnt
 {
     int i, j;
 
-    if (!is_h264(profile) && !is_hevc(profile))
+    if (!is_known(profile))
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
-    if (entrypoint != VAEntrypointVLD && !is_encode(entrypoint))
+    if (!has_entrypoint(profile, entrypoint))
         return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
     for (i = 0; i < MAX_CONFIGS; i++) {
         if (configs[i].used)
@@ -879,6 +896,215 @@ static VAStatus decode_h264(struct context *c)
     return VA_STATUS_SUCCESS;
 }
 
+/* ---- AV1 ---- */
+
+/* tg_start and tg_end are deprecated in libva but still sent by clients
+ * and read by drivers. */
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+static uint64_t fnv(uint64_t h, const void *data, size_t n)
+{
+    const uint8_t *p = data;
+    size_t i;
+    for (i = 0; i < n; i++)
+        h = (h ^ p[i]) * 0x100000001b3ull;
+    return h;
+}
+
+static void hex(char *dst, const void *data, size_t n)
+{
+    static const char digits[] = "0123456789abcdef";
+    const uint8_t *p = data;
+    size_t i;
+    for (i = 0; i < n; i++) {
+        dst[2 * i] = digits[p[i] >> 4];
+        dst[2 * i + 1] = digits[p[i] & 15];
+    }
+    dst[2 * n] = 0;
+}
+
+/* picture_number returns the number of the picture in a surface, for the
+ * log: surface identifiers differ between clients, picture numbers do not. */
+static uint32_t picture_number(VASurfaceID id)
+{
+    struct surface *s = get_surface(id);
+    if (id == VA_INVALID_SURFACE)
+        return 0xffffffffu;
+    return s ? (uint32_t)s->poc : 0xfffffffeu;
+}
+
+static VAStatus decode_av1(struct context *c)
+{
+    struct buffer *pb = find(c, VAPictureParameterBufferType, 0);
+    VADecPictureParameterBufferAV1 *pp, norm;
+    struct surface *display, *recon;
+    int i, j, n = c->av1_pictures, key_shown, intra, grain, tiles = 0, groups = 0, want_data = 0;
+    unsigned frame_type, sb, frame_w, cols = 0, rows = 0, denom, last_end = 0, data_size = 0;
+    uint64_t tile_hash = 0xcbf29ce484222325ull, data_hash = 0xcbf29ce484222325ull;
+    static char pp_hex[2 * sizeof(VADecPictureParameterBufferAV1) + 1];
+    static char tile_hex[2 * 20 * 4096 + 1];
+    size_t tile_hex_len = 0;
+
+    if (!pb || count(c, VAPictureParameterBufferType) != 1)
+        return fail("av1: need exactly one picture parameter buffer");
+    if (pb->size != sizeof *pp || pb->num != 1)
+        return fail("av1: picture parameter buffer has %u x %u bytes, VADecPictureParameterBufferAV1 has %zu", pb->size, pb->num, sizeof *pp);
+    pp = (VADecPictureParameterBufferAV1 *)pb->data;
+    frame_type = pp->pic_info_fields.bits.frame_type;
+    key_shown = frame_type == 0 && pp->pic_info_fields.bits.show_frame;
+    intra = frame_type == 0 || frame_type == 2;
+    grain = pp->film_grain_info.film_grain_info_fields.bits.apply_grain;
+
+    /* The picture is rendered into the reference surface, as ffmpeg does;
+     * the surface to show is named in the parameters. */
+    if (pp->current_frame != c->target)
+        return fail("av1: current_frame names surface %#x, the render target is %#x", pp->current_frame, c->target);
+    recon = get_surface(c->target);
+    display = get_surface(pp->current_display_picture);
+    if (!display)
+        return fail("av1: current_display_picture names surface %#x, which does not exist", pp->current_display_picture);
+    if (c->num_targets && !is_target(c, pp->current_display_picture))
+        return fail("av1: current_display_picture %#x is not a render target of the context", pp->current_display_picture);
+    if (grain && pp->current_frame == pp->current_display_picture)
+        return fail("av1: film grain is applied but the picture to show is the reference picture");
+    if (!grain && pp->current_frame != pp->current_display_picture)
+        return fail("av1: no film grain, but current_frame and current_display_picture differ");
+    if (grain && !pp->seq_info_fields.fields.film_grain_params_present)
+        return fail("av1: apply_grain without film_grain_params_present");
+    if (pp->profile != 0 || pp->bit_depth_idx != 0 || pp->seq_info_fields.fields.mono_chrome ||
+        !pp->seq_info_fields.fields.subsampling_x || !pp->seq_info_fields.fields.subsampling_y)
+        return fail("av1: not Main profile 8-bit 4:2:0 (profile %u, bit_depth_idx %u)", pp->profile, pp->bit_depth_idx);
+    if (pp->frame_width_minus1 + 1 > c->width || pp->frame_height_minus1 + 1 > c->height)
+        return fail("av1: frame is %ux%u, the context %dx%d", pp->frame_width_minus1 + 1, pp->frame_height_minus1 + 1, c->width, c->height);
+    if (pp->anchor_frames_num || pp->anchor_frames_list || pp->pic_info_fields.bits.large_scale_tile)
+        return fail("av1: large scale tile fields are set");
+    if (pp->primary_ref_frame > 7 || pp->tile_cols < 1 || pp->tile_rows < 1 || pp->tile_cols > 64 || pp->tile_rows > 64)
+        return fail("av1: primary_ref_frame %u, %ux%u tiles", pp->primary_ref_frame, pp->tile_cols, pp->tile_rows);
+    denom = pp->superres_scale_denominator;
+    if (denom < 8 || denom > 16 || (denom != 8) != pp->pic_info_fields.bits.use_superres)
+        return fail("av1: superres_scale_denominator %u with use_superres %u", denom, pp->pic_info_fields.bits.use_superres);
+
+    /* The tile sizes must add up to the coded frame. */
+    sb = pp->seq_info_fields.fields.use_128x128_superblock ? 128 : 64;
+    frame_w = ((pp->frame_width_minus1 + 1) * 8 + denom / 2) / denom;
+    for (i = 0; i < pp->tile_cols && i < 63; i++)
+        cols += pp->width_in_sbs_minus_1[i] + 1;
+    for (i = 0; i < pp->tile_rows && i < 63; i++)
+        rows += pp->height_in_sbs_minus_1[i] + 1;
+    if (pp->tile_cols < 64 && cols != (((frame_w + 7) & ~7u) + sb - 1) / sb)
+        return fail("av1: tile columns cover %u superblocks, the frame is %u samples wide (superblock %u)", cols, frame_w, sb);
+    if (pp->tile_rows < 64 && rows != (((pp->frame_height_minus1 + 1 + 7) & ~7u) + sb - 1) / sb)
+        return fail("av1: tile rows cover %u superblocks, the frame is %u samples high (superblock %u)", rows, pp->frame_height_minus1 + 1, sb);
+
+    for (i = 0; i < 8; i++) {
+        struct surface *r = get_surface(pp->ref_frame_map[i]);
+        if (key_shown) {
+            if (pp->ref_frame_map[i] != VA_INVALID_SURFACE)
+                return fail("av1: shown key frame with a surface in reference slot %d", i);
+            continue;
+        }
+        if (!r)
+            return fail("av1: reference slot %d names surface %#x, which does not exist", i, pp->ref_frame_map[i]);
+        if (r->poc == NO_POC)
+            return fail("av1: reference slot %d names surface %#x, which was never decoded into", i, pp->ref_frame_map[i]);
+        if (r->grainy)
+            return fail("av1: reference slot %d holds a picture with film grain", i);
+        if (pp->ref_frame_map[i] == pp->current_frame || pp->ref_frame_map[i] == pp->current_display_picture)
+            return fail("av1: reference slot %d is the surface being decoded into", i);
+    }
+    if (!intra)
+        for (i = 0; i < 7; i++)
+            if (pp->ref_frame_idx[i] > 7)
+                return fail("av1: ref_frame_idx[%d] = %u", i, pp->ref_frame_idx[i]);
+
+    /* Tile groups: a parameter buffer with an element per tile, or one
+     * parameter buffer per tile, each followed by the data it describes. */
+    for (i = 0; i < c->num_bufs; i++) {
+        struct buffer *b = get_buffer(c->bufs[i]), *data;
+        VASliceParameterBufferAV1 *sp;
+        if (b->type == VASliceDataBufferType) {
+            if (!want_data)
+                return fail("av1: slice data without slice parameters");
+            want_data = 0;
+            continue;
+        }
+        if (b->type != VASliceParameterBufferType)
+            continue;
+        if (want_data)
+            return fail("av1: two slice parameter buffers without slice data between them");
+        want_data = 1;
+        if (b->size != sizeof *sp)
+            return fail("av1: slice parameter elements have %u bytes, VASliceParameterBufferAV1 has %zu", b->size, sizeof *sp);
+        if (i + 1 >= c->num_bufs || (data = get_buffer(c->bufs[i + 1]))->type != VASliceDataBufferType)
+            return fail("av1: slice parameters without slice data");
+        sp = (VASliceParameterBufferAV1 *)b->data;
+        if (!groups || sp->slice_data_offset < last_end || data->size != data_size) {
+            /* A new tile group (clients that send one tile per buffer
+             * repeat the group's data). */
+            groups++;
+            last_end = 0;
+            data_size = data->size;
+            data_hash = fnv(data_hash, &data->size, sizeof data->size);
+            data_hash = fnv(data_hash, data->data, data->size);
+        }
+        for (j = 0; j < (int)b->num; j++, sp++, tiles++) {
+            unsigned idx = sp->tile_row * pp->tile_cols + sp->tile_column;
+            uint8_t rec[20];
+            if (sp->slice_data_flag != VA_SLICE_DATA_FLAG_ALL)
+                return fail("av1 tile %d: slice_data_flag %u", tiles, sp->slice_data_flag);
+            if (sp->tile_row >= pp->tile_rows || sp->tile_column >= pp->tile_cols || idx != (unsigned)tiles)
+                return fail("av1 tile %d: row %u column %u of %ux%u tiles", tiles, sp->tile_row, sp->tile_column, pp->tile_cols, pp->tile_rows);
+            if (sp->tg_start > idx || sp->tg_end < idx || sp->tg_end >= pp->tile_cols * pp->tile_rows)
+                return fail("av1 tile %d: in tile group %u..%u", tiles, sp->tg_start, sp->tg_end);
+            if (sp->slice_data_size == 0 || sp->slice_data_offset < last_end ||
+                (uint64_t)sp->slice_data_offset + sp->slice_data_size > data->size)
+                return fail("av1 tile %d: %u bytes at %u of %u, the previous tile ends at %u", tiles, sp->slice_data_size,
+                            sp->slice_data_offset, data->size, last_end);
+            if (idx == sp->tg_end && sp->slice_data_offset + sp->slice_data_size != data->size)
+                return fail("av1 tile %d: the last tile of its group ends at %u of %u bytes", tiles,
+                            sp->slice_data_offset + sp->slice_data_size, data->size);
+            if (sp->anchor_frame_idx || sp->tile_idx_in_tile_list)
+                return fail("av1 tile %d: large scale tile fields are set", tiles);
+            last_end = sp->slice_data_offset + sp->slice_data_size;
+            memcpy(rec, sp, sizeof rec); /* everything up to anchor_frame_idx */
+            tile_hash = fnv(tile_hash, rec, sizeof rec);
+            if (tile_hex_len + 2 * sizeof rec < sizeof tile_hex) {
+                hex(tile_hex + tile_hex_len, rec, sizeof rec);
+                tile_hex_len += 2 * sizeof rec;
+            }
+        }
+    }
+    if (want_data)
+        return fail("av1: slice parameters without slice data");
+    if (tiles != pp->tile_cols * pp->tile_rows)
+        return fail("av1: %d tiles submitted, the frame has %ux%u", tiles, pp->tile_cols, pp->tile_rows);
+
+    /* What the picture parameters say, with surfaces named by the number
+     * of the picture they hold. */
+    norm = *pp;
+    norm.current_frame = 0;
+    norm.current_display_picture = pp->current_frame != pp->current_display_picture;
+    for (i = 0; i < 8; i++)
+        norm.ref_frame_map[i] = picture_number(pp->ref_frame_map[i]);
+    hex(pp_hex, &norm, sizeof norm);
+
+    paint(recon, n);
+    recon->grainy = 0;
+    if (display != recon) {
+        paint(display, n + 128);
+        display->grainy = 1;
+    }
+    logf_("dec codec=av1 n=%d type=%u show=%u order_hint=%u width=%u height=%u recon=%u display=%u grain=%d tiles=%d groups=%d "
+          "refs=%d,%d,%d,%d,%d,%d,%d,%d data=%016llx tp=%016llx pp=%s tiles_hex=%s",
+          n, frame_type, pp->pic_info_fields.bits.show_frame, pp->order_hint, pp->frame_width_minus1 + 1, pp->frame_height_minus1 + 1,
+          pp->current_frame - SURFACE_BASE, pp->current_display_picture - SURFACE_BASE, grain, tiles, groups,
+          (int)norm.ref_frame_map[0], (int)norm.ref_frame_map[1], (int)norm.ref_frame_map[2], (int)norm.ref_frame_map[3],
+          (int)norm.ref_frame_map[4], (int)norm.ref_frame_map[5], (int)norm.ref_frame_map[6], (int)norm.ref_frame_map[7],
+          (unsigned long long)data_hash, (unsigned long long)tile_hash, pp_hex, tile_hex);
+    c->av1_pictures++;
+    return VA_STATUS_SUCCESS;
+}
+
 /* misc returns the misc parameter buffer of a type in the current picture. */
 static void *misc(struct context *c, VAEncMiscParameterType type, unsigned payload)
 {
@@ -1170,8 +1396,12 @@ static VAStatus fake_EndPicture(VADriverContextP ctx, VAContextID id)
     cfg = &configs[c->config];
     if (is_encode(cfg->entrypoint))
         st = encode(c, cfg);
-    else if (!is_target(c, c->target))
+    else if (c->num_targets && !is_target(c, c->target))
+        /* A context created without render targets (as ffmpeg does) takes
+         * any surface. */
         st = fail("dec: surface %#x is not a render target of the context", c->target);
+    else if (is_av1(cfg->profile))
+        st = decode_av1(c);
     else if (is_hevc(cfg->profile))
         st = decode_hevc(c);
     else
