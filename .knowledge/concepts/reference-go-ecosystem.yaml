@@ -14,7 +14,9 @@ facts:
   - name: github.com/ebitengine/purego
     url: https://pkg.go.dev/github.com/ebitengine/purego@v0.10.1
     what: Dlopen/RegisterLibFunc/NewCallback without cgo; tier-1 linux, darwin, windows, android, ios
-      on amd64/arm64; v0.10.1 released 2026-05-24; still labelled beta.
+      on amd64/arm64; v0.10.1 released 2026-05-24; still labelled beta. On android and ios Tier 1 means
+      CGO_ENABLED=1 only (README footnote 1; is_ios.go fails the build otherwise, dlfcn_android.go goes
+      through internal/cgo) - checked in v0.11.1 on 2026-10-11.
   - name: golang.org/x/sys/windows
     what: LazyDLL/NewCallback for Windows; COM interfaces are called through raw vtable syscalls (pattern
       used by go-ole).

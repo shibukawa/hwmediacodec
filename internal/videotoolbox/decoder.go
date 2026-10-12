@@ -194,7 +194,13 @@ func (d *decoder) sendAnnexB(p codec.Packet) error {
 		}
 		d.waitKeyframe = false
 	}
-	return d.decodePacket(lengthPrefixed(payload), inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)})
+	data := lengthPrefixed(payload)
+	in := inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)}
+	err := d.decodePacket(data, in)
+	if err == errSessionInvalid {
+		return d.recoverSession(hasKeyframe, func() error { return d.decodePacket(data, in) })
+	}
+	return err
 }
 
 // lengthPrefixed joins NAL units in the 4-byte length-prefixed layout
@@ -255,12 +261,18 @@ func (d *decoder) decodePacket(data []byte, in inflightFrame) error {
 		d.outMu.Lock()
 		delete(d.inflight, seq)
 		d.outMu.Unlock()
+		if st == sys.StatusVTInvalidSession {
+			return errSessionInvalid
+		}
 		return &codec.BackendError{Backend: Name, Op: "VTDecompressionSessionDecodeFrame", Status: int64(st), Message: sys.StatusString(st)}
 	}
 	d.outMu.Lock()
 	err := d.cbErr
 	d.cbErr = nil
 	d.outMu.Unlock()
+	if isInvalidSession(err) {
+		return errSessionInvalid
+	}
 	return err
 }
 
@@ -301,9 +313,13 @@ func (d *decoder) recreateSession(fd uintptr) error {
 // that emits pixel buffers of the given Core Video pixel format.
 func (d *decoder) createSession(fd uintptr, pixfmt uint32) (uintptr, int32) {
 	spec := sys.NewDictionary()
-	if d.cfg.AllowSoftware {
+	// The hardware keys do not exist on iOS before 17, where every decoder
+	// VideoToolbox offers is a hardware one; the specification then stays
+	// empty.
+	switch {
+	case d.cfg.AllowSoftware && sys.KVTEnableHardwareDecoder != 0:
 		sys.CFDictionarySetValue(spec, sys.KVTEnableHardwareDecoder, sys.KCFBooleanTrue)
-	} else {
+	case !d.cfg.AllowSoftware && sys.KVTRequireHardwareDecoder != 0:
 		sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareDecoder, sys.KCFBooleanTrue)
 	}
 	attrs := sys.NewDictionary()

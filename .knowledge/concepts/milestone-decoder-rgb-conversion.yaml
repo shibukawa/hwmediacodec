@@ -130,7 +130,7 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: convert_test.go
       input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
   videotoolbox-comparison-test:
@@ -171,9 +171,9 @@ verification:
         GPU involved; run 2026-10-10
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
+      input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
   hardware-run:
     state: not_run
     method: manual
@@ -189,8 +189,10 @@ verification:
     - path: internal/pixconv/decoder.go
       input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
 open_questions:
-- Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range NV12?
-  The wrapper assumes so; VideoToolbox is the one backend known to rescale.
+  full-range-nv12:
+    text: Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range
+      NV12? The wrapper assumes so; VideoToolbox is the one backend known to rescale.
+    state: open
 history:
   delivered-2026-10-10:
     summary: Delivered the day after the encoder side; conversion, colour selection and the VA-API path

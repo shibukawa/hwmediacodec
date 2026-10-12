@@ -124,6 +124,17 @@ facts:
     - "No Go-implemented COM object was needed: the synchronous decoder MFTs avoid IMFAsyncCallback and
       the asynchronous encoder MFTs are driven with IMFMediaEventGenerator::GetEvent instead of
       BeginGetEvent callbacks, so no syscall.NewCallback-backed vtable exists yet."
+  evidence_from_ios:
+    date: '2026-10-12'
+    summary: 'Option B carries to iOS unchanged in source: the darwin VideoToolbox binding compiles and runs
+      for ios/arm64. The one blocker is in the toolchain, not the code - purego refuses CGO_ENABLED=0 on
+      iOS (is_ios.go) and on Android (dlfcn_android.go uses the cgo runtime), so mobile builds set CGO_ENABLED=1
+      with the platform clang. ebitenmobile/gomobile require that anyway.'
+    blockers_hit: purego needs the cgo runtime on ios and android (toolchain-level; no cgo source added)
+    notes:
+    - macOS-only CFString keys are bound as optional and skipped when absent instead of platform branches.
+    - purego.NewCallback for the VideoToolbox output callbacks works on ios/arm64 with cgo enabled (Simulator
+      run, 2026-10-12).
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
@@ -135,6 +146,8 @@ relations:
   to: reference:go-ecosystem
 - relation: tested_by
   to: milestone:m1-darwin-h264-decode
+- relation: tested_by
+  to: milestone:ios-videotoolbox
 history:
   accepted-2026-10-09:
     summary: Author chose direct OS/driver bindings without cgo (purego on darwin/linux, x/sys/windows

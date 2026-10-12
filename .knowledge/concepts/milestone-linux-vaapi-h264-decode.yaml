@@ -172,19 +172,19 @@ verification:
         prints "no hardware codec backend"
     basis:
     - path: internal/vaapi/sys/sys_linux.go
-      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
+      input_hash: 4de70c455ca376415931156846d2422d3427a171bb2ce5f8893e869e89779ae7
     - path: internal/vaapi/sys/sys_linux_test.go
-      input_hash: e5ccfdee741414432a931d5769e0f28ca73953505247000f60e49e69c0f0aa52
+      input_hash: 13a0404b28c7aa1a310eb276310659c3229e2ce92f573d120b24fc443f71d1ad
     - path: internal/vaapi/display.go
-      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
+      input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
     - path: internal/vaapi/backend.go
-      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
+      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
     - path: internal/vaapi/decoder.go
-      input_hash: 807bfe628d81d442029ef940d32d4d608a112fe992ac66e4748f540d14ea006b
+      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
     - path: internal/vaapi/h264fill.go
-      input_hash: cdadac163fe5168cd11d5e264cfe1bdf01b78072c3699e7e30b5f07a66a14bd6
+      input_hash: 978c940fe3fd451e314f02f6a78bc5325ab289875ff219304a64c22ef9e38069
     - path: backends_linux.go
-      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
   hardware-conformance:
@@ -234,13 +234,13 @@ verification:
         VideoToolbox; VCN rate control may need the window/HRD values tuned.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
+      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
     - path: internal/vaapi/backend.go
-      input_hash: 2ea0136402e046d8b7de070ba9a3db875730a443d552c8790764044b3b2776ec
+      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
     - path: internal/vaapi/display.go
-      input_hash: cc16e0ca2d9a3c0a8f9836dc15ea6f613ef516a781fb4dfa490aa9e135bb8e32
+      input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
     - path: internal/vaapi/sys/sys_linux.go
-      input_hash: c813ca050e70ec706ba0e208130b85d914b22545ea26e0dbe375e3db2768d110
+      input_hash: 4de70c455ca376415931156846d2422d3427a171bb2ce5f8893e869e89779ae7
     - path: encode_test.go
       input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   cross-build-check:
@@ -256,9 +256,9 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_linux.go
-      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
-      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
 facts:
   steps:
   - internal/bitstream - lazy emulation-prevention removal (slice headers no longer copy the slice) and

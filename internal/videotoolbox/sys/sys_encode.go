@@ -47,12 +47,16 @@ var (
 	KCVPixelBufferHeightKey              uintptr
 	KCVPixelBufferIOSurfacePropertiesKey uintptr
 
+	// KVTEnableHardwareEncoder and KVTRequireHardwareEncoder are the
+	// kVTVideoEncoderSpecification_{Enable,Require}HardwareAcceleratedVideoEncoder
+	// keys: present on every supported macOS release and on iOS 17.4 and
+	// later, 0 on older iOS (whose encoders are all hardware).
 	KVTEnableHardwareEncoder       uintptr
 	KVTRequireHardwareEncoder      uintptr
-	KVTEnableLowLatencyRateControl uintptr // optional, macOS 11.3
+	KVTEnableLowLatencyRateControl uintptr // optional, macOS 11.3 / iOS 14.5
 
 	KVTAverageBitRate              uintptr
-	KVTConstantBitRate             uintptr // optional, macOS 13
+	KVTConstantBitRate             uintptr // optional, macOS 13 / iOS 16
 	KVTQuality                     uintptr
 	KVTRealTime                    uintptr
 	KVTAllowFrameReordering        uintptr
@@ -104,8 +108,8 @@ func bindEncode(cf, cm, cv, vt *binder) {
 	vt.fn(&VTSessionSetProperty, "VTSessionSetProperty")
 	vt.fn(&VTCopySupportedPropertyDictionaryForEncoder, "VTCopySupportedPropertyDictionaryForEncoder")
 
-	vt.ptrConst(&KVTEnableHardwareEncoder, "kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder")
-	vt.ptrConst(&KVTRequireHardwareEncoder, "kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder")
+	vt.optPtrConst(&KVTEnableHardwareEncoder, "kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder")
+	vt.optPtrConst(&KVTRequireHardwareEncoder, "kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder")
 	vt.optPtrConst(&KVTEnableLowLatencyRateControl, "kVTVideoEncoderSpecification_EnableLowLatencyRateControl")
 	vt.ptrConst(&KVTAverageBitRate, "kVTCompressionPropertyKey_AverageBitRate")
 	vt.optPtrConst(&KVTConstantBitRate, "kVTCompressionPropertyKey_ConstantBitRate")

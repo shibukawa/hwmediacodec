@@ -124,8 +124,13 @@ var (
 	KCFTypeDictionaryKeyCallBacks    uintptr
 	KCFTypeDictionaryValueCallBacks  uintptr
 	KCVPixelBufferPixelFormatTypeKey uintptr
-	KVTRequireHardwareDecoder        uintptr
-	KVTEnableHardwareDecoder         uintptr
+	// KVTRequireHardwareDecoder and KVTEnableHardwareDecoder are the
+	// kVTVideoDecoderSpecification_{Require,Enable}HardwareAcceleratedVideoDecoder
+	// keys. They exist on every macOS release this library supports and
+	// on iOS 17 and later; they are 0 on older iOS, where VideoToolbox
+	// has hardware decoders only and the keys are not needed.
+	KVTRequireHardwareDecoder uintptr
+	KVTEnableHardwareDecoder  uintptr
 	// KCMFormatDescriptionExtensionSampleDescriptionExtensionAtoms keys the
 	// dictionary of ISOBMFF sample description atoms (such as "av1C") in a
 	// format description's extensions.
@@ -254,8 +259,8 @@ func load() error {
 	vt.fn(&VTDecompressionSessionInvalidate, "VTDecompressionSessionInvalidate")
 	vt.fn(&VTDecompressionSessionCanAcceptFormatDescription, "VTDecompressionSessionCanAcceptFormatDescription")
 	vt.fn(&VTIsHardwareDecodeSupported, "VTIsHardwareDecodeSupported")
-	vt.ptrConst(&KVTRequireHardwareDecoder, "kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder")
-	vt.ptrConst(&KVTEnableHardwareDecoder, "kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder")
+	vt.optPtrConst(&KVTRequireHardwareDecoder, "kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder")
+	vt.optPtrConst(&KVTEnableHardwareDecoder, "kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder")
 	if addr, err := purego.Dlsym(vt.handle, "VTRegisterSupplementalVideoDecoderIfAvailable"); err == nil {
 		purego.RegisterFunc(&VTRegisterSupplementalVideoDecoderIfAvailable, addr)
 	}

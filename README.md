@@ -8,6 +8,10 @@ NVDEC/NVENC and Media Foundation on Windows)
 through [purego](https://github.com/ebitengine/purego) and, for Media
 Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
+The same VideoToolbox backend serves iOS; there purego needs the cgo
+runtime, so iOS builds set `CGO_ENABLED=1` with Xcode's clang (which
+`ebitenmobile bind` does by itself) while the library still contains no cgo
+code. See [iOS notes](#ios-notes).
 
 ## Packages
 
@@ -36,6 +40,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
+| iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
@@ -194,6 +199,51 @@ encoder, so `NewEncoder` with `AV1` reports `ErrUnsupported`.
 - On an M3, 1080p AV1 (SVT-AV1 preset 10, 300 frames) decodes at roughly
   820 frames per second to NV12, 310 to BGRA and 220 to RGBA, including the
   copy.
+
+### iOS notes
+
+iOS runs the macOS backend: the `darwin` build constraint covers `ios`, the
+frameworks are the same four and are opened from the same paths, and the
+public API behaves as on macOS. What differs:
+
+- **Build.** purego needs the cgo runtime on iOS (its `CGO_ENABLED=0` mode
+  is not available there), so build with `CGO_ENABLED=1`, `GOOS=ios` and
+  Xcode's clang as `CC` with the SDK in `CGO_CFLAGS`/`CGO_LDFLAGS`;
+  `scripts/mobilebuild.sh` does this for the device and the Simulator, and
+  `ebitenmobile bind` sets it all up for an Ebitengine app. The library has
+  no cgo code of its own. Desktop builds stay `CGO_ENABLED=0`.
+- **Availability.** The decoder and encoder specification keys that require
+  hardware (`kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`
+  and the encoder counterpart) exist on iOS 17 and 17.4 respectively; on
+  older iOS they are absent and the backend leaves the specification empty,
+  which is right because every codec VideoToolbox offers on an iOS device
+  is a hardware one. Constant bitrate needs iOS 16, low-latency rate
+  control iOS 14.5; `NewEncoder` reports `ErrUnsupported` below that.
+  Nothing else the backend binds is newer than iOS 11.
+- **Background.** iOS takes the hardware codecs away from an application
+  that leaves the foreground: its VideoToolbox sessions are invalidated and
+  every call returns `kVTInvalidSessionErr`. The backend then opens a new
+  session on the same format description. Frames the old session still
+  held are lost; a decoder drops pictures until the next keyframe (the
+  packet that hit the error is decoded right away when it is one) and an
+  encoder makes its next frame a keyframe, so the stream stays decodable.
+  Neither `Send` nor `Flush` reports the event as an error. This path is
+  exercised on macOS by invalidating the live session by hand
+  (`internal/videotoolbox/invalidation_test.go`).
+- **Simulator.** The Simulator has no hardware decoder, so `Probe` lists
+  only the encoders and `NewDecoder` needs `WithSoftwareFallback`; the
+  Simulator's VideoToolbox accepts the hardware-encoder requirement and
+  lists `h264 encode` and `hevc encode` as hardware.
+- **Status.** Verified in the iOS 26 Simulator on an M3 with the
+  `hwmediacodec` CLI built for `ios/arm64`: `probe`; decoding a 30-frame
+  H.264 stream with B-frames to NV12 and RGBA gives the same frames in the
+  same display order as the Mac's hardware decoder; H.264 and HEVC encoding
+  produces streams ffmpeg decodes (about 48 dB luma PSNR against the input);
+  H.264 to HEVC transcoding works. **No run on an iPhone yet**; the
+  `examples/mobile` app is the way to do it.
+- **Android** has no backend yet (`Probe` returns nothing and the Linux
+  backends are excluded from `GOOS=android` builds). The NDK MediaCodec
+  backend is the next slice.
 
 ### AV1 on Linux and Windows
 
@@ -698,7 +748,9 @@ of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
 player
 (`examples/player`), video as a texture on a box and in a Kage shader
-(`examples/texture`) and a HEIC/AVIF converter (`examples/imgconv`). The players default to a bundled clip
+(`examples/texture`), a HEIC/AVIF converter (`examples/imgconv`) and the
+player as an Ebitengine mobile game with an Xcode project for the iPhone
+(`examples/mobile`, built with `ebitenmobile bind`). The players default to a bundled clip
 (`examples/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
@@ -942,10 +994,20 @@ playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
 hardware encoder and skip otherwise. The `image/heif` and `image/avif` tests use macOS
 ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
 
+The iOS build is checked from the Mac: `scripts/mobilebuild.sh` compiles
+the module for the device and the Simulator with cgo enabled, and the
+`hwmediacodec` CLI built for the Simulator runs inside it with
+`xcrun simctl spawn booted`, which is how the decode, encode and transcode
+results under [iOS notes](#ios-notes) were obtained (the Simulator's
+decoder is software, so `decode` needs `-software` there). The
+session-invalidation recovery that iOS needs is tested on macOS by
+invalidating the session by hand.
+
 ```sh
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
+./scripts/mobilebuild.sh      # cgo builds for ios/arm64 (device, Simulator) and, with the NDK, android
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)

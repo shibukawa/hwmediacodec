@@ -1,15 +1,19 @@
 // Package hwmediacodec drives the operating system's hardware video decode and
 // encode engines from Go without cgo.
 //
-// Native libraries are loaded at run time (dlopen on macOS and Linux,
-// LoadLibrary on Windows), so CGO_ENABLED=0 builds and cross-compilation work.
-// A platform without a usable engine reports an empty Probe result and
-// ErrUnsupported from NewDecoder and NewEncoder; it never fails at link time.
+// Native libraries are loaded at run time (dlopen on macOS, iOS and Linux,
+// LoadLibrary on Windows), so CGO_ENABLED=0 builds and cross-compilation work
+// on the desktop platforms. On iOS purego needs the cgo runtime, so iOS
+// builds (as made by ebitenmobile) set CGO_ENABLED=1 with Xcode's clang;
+// the library itself still contains no cgo code. A platform without a
+// usable engine reports an empty Probe result and ErrUnsupported from
+// NewDecoder and NewEncoder; it never fails at link time. Android has no
+// backend yet.
 //
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
-// Silicon) through VideoToolbox, on Linux and Windows (amd64) with the NVIDIA
+// Silicon) and iOS through VideoToolbox, on Linux and Windows (amd64) with the NVIDIA
 // driver through NVDEC and NVENC, on Linux with an Intel GPU through Intel
 // VPL (a VPL or Media SDK runtime), on Linux through VA-API (AMD Mesa and
 // Intel drivers), and on Windows (amd64 and arm64) through Media Foundation
@@ -23,7 +27,8 @@
 // WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
 // natively, so WithDecodeOrder has no effect on those backends).
 // AV1 decoding is available where the GPU has an AV1 decoder: on macOS with
-// an Apple M3 or newer (8-bit and 10-bit Main profile), and on Linux and
+// an Apple M3 or newer and on iOS from the A17 Pro on (8-bit and 10-bit
+// Main profile), and on Linux and
 // Windows through every backend (8-bit Main profile; NVIDIA RTX 30 series,
 // Intel Tiger Lake, AMD RX 6000 series and newer; Media Foundation needs the
 // "AV1 Video Extension" package). A Packet is then one temporal unit (an IVF

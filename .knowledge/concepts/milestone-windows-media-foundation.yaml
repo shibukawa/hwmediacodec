@@ -245,7 +245,7 @@ verification:
     - path: backends_windows.go
       input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
     - path: backends_other.go
-      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
     - &mf_backend
       path: internal/mediafoundation/backend.go
       input_hash: 7d1f296ce8e2400ca35f5fb905d31b2f9b9ac423e75bf8845d896f96e887c175

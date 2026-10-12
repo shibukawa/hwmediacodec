@@ -61,16 +61,16 @@ verification:
     basis:
     - &id004
       path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
     - &id005
       path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - &id006
       path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - &id007
       path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - &id001
       path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
@@ -173,7 +173,7 @@ verification:
       note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
   bframe-set-test:
     state: passed
     method: integration
@@ -186,13 +186,13 @@ verification:
       locator: TestDecodeBFramesMatchesReference
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: probe_test.go

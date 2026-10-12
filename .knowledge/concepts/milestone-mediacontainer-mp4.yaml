@@ -145,7 +145,7 @@ open_questions:
   ivf-annexb-placement:
     text: annexb and ivf sit at the module root while MP4 is under mediacontainer; should ivf move or
       be aliased there for consistency?
-    state: resolved
+    state: answered
     resolution: Moved without aliases on 2026-10-10 (milestone:package-layout) - ivf to mediacontainer/ivf,
       annexb to encoding/annexb.
 facts:

@@ -1,3 +1,5 @@
+//go:build !android
+
 package hwmediacodec_test
 
 // AV1 tests of the vaapi backend against the fake VA driver; see

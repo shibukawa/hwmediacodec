@@ -20,6 +20,13 @@ facts:
       - {os: linux, gpu: Intel, backend: backend:intel-vpl (Gen12+), alternative: backend:vaapi (older generations)}
       - {os: linux, gpu: AMD, backend: backend:vaapi}
       - {os: linux, gpu: NVIDIA, backend: backend:nvenc-nvdec}
+  mobile_proposed:
+    definition: Proposed on 2026-10-12 with the iOS slice, pending the author's decision on the tier. iOS
+      runs the Tier 1 VideoToolbox backend and the author has an iPhone and an Android tablet for verification,
+      which argues for Tier 1 once the device runs are done; builds need CGO_ENABLED=1 (purego on mobile).
+    targets:
+      - {os: ios, gpu: Apple A-series and M-series, backend: backend:videotoolbox, state: implemented, verified: Simulator only}
+      - {os: android, gpu: any with a hardware MediaCodec, backend: NDK MediaCodec (planned), state: planned}
   tier2:
     definition: Best effort; builds and unit tests run in CI with stub backends, hardware verification happens when the author or a contributor has the device; gaps are documented and do not block a release.
     targets:
@@ -37,6 +44,9 @@ facts:
     - Hardware integration tests cannot run on hosted CI; Tier 1 verification needs the author's machines or self-hosted runners (requirement open question ci-hardware).
     - Probe() still reports absent cleanly on out-of-scope machines; the library must not crash there.
 history:
+  mobile-proposed-2026-10-12:
+    summary: iOS and Android added as proposed targets with the iOS slice (milestone:ios-videotoolbox); tier
+      to be set by the author after the device runs.
   decided-2026-10-09:
     summary: Author set Tier 1 = Apple Silicon Macs and Intel/AMD/NVIDIA on Windows and Linux; Tier 2 = Raspberry Pi and Snapdragon X; out of scope = Intel Mac, GPU-less CI, Vulkan Video. First milestone stays on macOS.
 relations:

@@ -114,9 +114,9 @@ verification:
         unsigned long expectations into layout_lp64_test.go
     basis:
     - path: internal/nvidia/sys/layout_lp64_test.go
-      input_hash: 90f80807d6638afc04f460b2ce57311b5140526f09dcef6b3233b9244130645c
+      input_hash: 1b9001eb82a5cc67419ba6f2690601782a1c7ec60745530ea14357e12c9b70ad
     - path: internal/nvidia/sys/ulong_lp64.go
-      input_hash: bbbe8d0fe27245f05aa2808caacc4d656422e146db40db4adae4c7689a93890d
+      input_hash: a0c5f04610bf4de27b1ae040b71b8dccc7fd717337e0bfdc338e415476b3c3cc
     - path: internal/nvidia/sys/types_cuda.go
       input_hash: 010e28cf11dcb537c38661dbc24fb0e3b15f230033f2539c6a47a42469728393
     - path: internal/nvidia/sys/types_cuvid.go
@@ -143,19 +143,19 @@ verification:
         (milestone:windows-nvidia-nvdec-nvenc)
     basis:
     - path: internal/nvidia/sys/lib_linux.go
-      input_hash: 98b1ee6c6dc34406993d9973bbb97981a5bceb896a08dcf37d8b84993e8d8a8f
+      input_hash: 74d2a074311d3469180945f6c394c14b48d4d62e3fbe1a05a92dc13acd903798
     - path: internal/nvidia/sys/cuda.go
-      input_hash: de0897945e323debd3913aded02c2f55d8c311b1e02460967bdf855e1f776e6f
+      input_hash: 332494f3b15c712f02d48ca3513ff6347d312ef110ea37df79d8b486a7836174
     - path: internal/nvidia/sys/cuvid.go
-      input_hash: 472eb8c814a8f33b9d926ce95598927be5c4e88b5984e6896f227674b88ef8e3
+      input_hash: 1c7d98f4771d146732a74c512c658961d2ca0072a5c6566d4759b066f46e7d33
     - path: internal/nvidia/sys/nvenc.go
-      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+      input_hash: 28e4e07e2c7f4ac6ffa47b4c88299aa94db45019ebf3ef3b056cc8f5988ac3ba
     - path: internal/nvidia/sys/sys_test.go
-      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
+      input_hash: 3399eb849d4a7fa97aeb93411e081aae50b8afe3f6627b0672b00febe40636d8
     - path: internal/nvidia/device.go
-      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
+      input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: internal/nvidia/backend.go
-      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
   container-smoke-test:
     state: passed
     method: integration
@@ -172,13 +172,13 @@ verification:
         (2026-10-09; re-run after the Windows slice)
     basis:
     - path: backends_linux.go
-      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: internal/nvidia/backend.go
-      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/nvidia/device.go
-      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
+      input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
   hardware-decode:
     state: not_run
     method: integration
@@ -196,11 +196,11 @@ verification:
         min_num_decode_surfaces + 2 as the surface count.'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: dea0efbd5a3df5faef510e100927cfe4beaeba05decb9efedde1dbdcb3af6244
+      input_hash: 02dba1cc13f221737ce10a0e340020b9740bd104e812103bcec37739afbb7c79
     - path: internal/nvidia/backend.go
-      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/nvidia/device.go
-      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
+      input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
   hardware-encode:
@@ -220,9 +220,9 @@ verification:
         conversion.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
+      input_hash: 48d4560639dc60d02a4003bb1c43d2d1c8da0cebbbd2233c94d9be0d2be2736b
     - path: internal/nvidia/backend.go
-      input_hash: 9cb847fc0fba5a35baec85ad5a4c899037cb2767bb0aceae393a4ecdd091e144
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: encode_test.go
       input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   cross-build-check:
@@ -240,9 +240,9 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_linux.go
-      input_hash: 5fe94668837e59497042a5a5a7dd8c7892038ef6e2e0c8c06948a7080e0fbf0e
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
-      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
   host-suite:
     state: passed
     method: integration

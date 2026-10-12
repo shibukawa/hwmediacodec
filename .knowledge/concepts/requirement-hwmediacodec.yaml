@@ -26,9 +26,11 @@ constraints:
   frames; containers are outside the codec layer.
 - Backends are discovered and loaded at runtime (dlopen / LoadLibrary / ioctl); a missing driver or library
   yields a clear error, never a crash or a link-time failure.
-- CGO_ENABLED=0 builds must work for every target; native access goes through ebitengine/purego (darwin,
-  linux) and golang.org/x/sys/windows (windows). cgo is allowed only after a concrete, documented blocker
-  (see decision:ffi-strategy).
+- CGO_ENABLED=0 builds must work for every desktop target (darwin, linux, windows); native access goes
+  through ebitengine/purego (darwin, ios, linux) and golang.org/x/sys/windows (windows). cgo is allowed
+  only after a concrete, documented blocker (see decision:ffi-strategy). The mobile targets (ios, android)
+  are built with CGO_ENABLED=1 because purego needs the cgo runtime there; the library itself keeps no
+  cgo source (2026-10-12, milestone:ios-videotoolbox).
 - Every backend call that blocks (session creation, flush) must respect context cancellation or a documented
   timeout.
 - 'Encoders must expose the controls that streaming needs: target bitrate with CBR/VBR, GOP length / keyframe
@@ -38,7 +40,8 @@ non_goals:
 - Software codec implementations (no pure-Go H.264/HEVC/AV1 decoder or encoder).
 - Container formats (MP4/MKV/WebM/MPEG-TS/fMP4 demux and mux), HLS playlist generation, and audio codecs;
   these belong to companion packages or other libraries.
-- Mobile targets (iOS/Android) in the first milestones; the design must not preclude them.
+- Android until its NDK MediaCodec backend lands (iOS is covered by the VideoToolbox backend since 2026-10-12,
+  milestone:ios-videotoolbox; Probe is empty on android and the Linux backends are excluded from that build).
 - Video filtering and scaling beyond what the backend already returns. Pixel-format conversion is limited
   to what the use cases need (see facts.use_cases).
 - Intel Macs (VideoToolbox backend targets Apple Silicon only).
@@ -54,7 +57,7 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   api/probe:
@@ -133,9 +136,9 @@ capabilities:
     - encode-reference-test
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   encode/hevc:
@@ -148,9 +151,9 @@ capabilities:
     - encode-reference-test
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
   encode/av1:
@@ -332,7 +335,7 @@ verification:
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
     - path: internal/videotoolbox/backend.go
-      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
   decode-reference-test:
     state: passed
     method: integration
@@ -348,13 +351,13 @@ verification:
       note: 60 frames 320x240, per-frame SHA-256 equal to ffmpeg software decode (nv12)
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: probe_test.go
@@ -377,7 +380,7 @@ verification:
     - path: probe_test.go
       input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
   cross-build-check:
     state: passed
     method: static
@@ -395,7 +398,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: backends_other.go
-      input_hash: 7bf176cedea2537ed28f1517d640e548bfc858872ae17dc398288ef49a3b97c5
+      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
     - path: backends_darwin.go
       input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
   bframe-set-test:
@@ -413,13 +416,13 @@ verification:
         frame (H.264 bframes 3 and 8, HEVC bframes 3 and 6); before that only the frame set was compared
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: probe_test.go
@@ -442,15 +445,15 @@ verification:
         HEVC; every keyframe carries SPS/PPS (+VPS)
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: internal/videotoolbox/sys/sys_encode.go
-      input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: internal/videotoolbox/backend.go
-      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -473,15 +476,15 @@ verification:
       note: see milestone:m2-darwin-encode verification entries for the measured values
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: internal/videotoolbox/sys/sys_encode.go
-      input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: internal/videotoolbox/backend.go
-      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -503,15 +506,15 @@ verification:
       note: worst luma PSNR 52.8 dB after hardware encode + hardware decode
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: internal/videotoolbox/sys/sys_encode.go
-      input_hash: a88d7c9bca572746b156e45a31bd3e5d198ad24deb183a88d9c4bdf597f4085c
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
-      input_hash: 414ff7fc76fa1854646fd095a57cd681dfcd6fac6b029850a4ed51cb6be5b3c7
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: internal/videotoolbox/backend.go
-      input_hash: 4d6182610b7057c87592d18b9e0f6437ebc573886082960411748f121cd1d366
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -519,7 +522,7 @@ verification:
     - path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
     - path: internal/videotoolbox/decoder.go
-      input_hash: eb8bc13485bc0fa61d9ec555e300f1adc62c0c309474b4277c1e70f18cb02f12
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
   reorder-oracle-test:
     state: passed
     method: integration
@@ -569,7 +572,7 @@ verification:
       locator: TestEncodeRGBAInput
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: encode_test.go
       input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
   ebitenvideo-test:
@@ -754,6 +757,12 @@ history:
       Media Foundation) implemented by extending internal/nvidia to windows/amd64: DLL loader,
       32-bit unsigned long layouts asserted at compile time, registered before Media Foundation;
       nothing run on Windows yet (milestone:windows-nvidia-nvdec-nvenc).'
+  ios-2026-10-12:
+    summary: 'iOS slice delivered on the VideoToolbox backend (milestone:ios-videotoolbox): optional hardware
+      keys, background session recovery, cgo-enabled mobile builds, examples/mobile with an Xcode project.
+      Simulator-verified; iPhone run pending. Android (NDK MediaCodec) is the next slice: libmediandk.so
+      through purego, synchronous dequeue, AImageReader YUV_420_888 output packed to NV12 in Go, AMediaCodec_getName
+      to refuse c2.android./OMX.google. software codecs unless WithSoftwareFallback, minimum API 28.'
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.

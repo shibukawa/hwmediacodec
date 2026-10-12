@@ -136,14 +136,18 @@ func (e *encoder) createSession() error {
 	cfg := &e.cfg
 	spec := sys.NewDictionary()
 	defer sys.Release(spec)
-	if cfg.AllowSoftware {
+	// The hardware keys do not exist on iOS before 17.4, where every
+	// encoder VideoToolbox offers is a hardware one; the specification
+	// then stays empty.
+	switch {
+	case cfg.AllowSoftware && sys.KVTEnableHardwareEncoder != 0:
 		sys.CFDictionarySetValue(spec, sys.KVTEnableHardwareEncoder, sys.KCFBooleanTrue)
-	} else {
+	case !cfg.AllowSoftware && sys.KVTRequireHardwareEncoder != 0:
 		sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareEncoder, sys.KCFBooleanTrue)
 	}
 	if cfg.LowLatency {
 		if sys.KVTEnableLowLatencyRateControl == 0 {
-			return e.unsupported("low-latency mode needs macOS 11.3 or later")
+			return e.unsupported("low-latency mode needs macOS 11.3 or iOS 14.5 or later")
 		}
 		sys.CFDictionarySetValue(spec, sys.KVTEnableLowLatencyRateControl, sys.KCFBooleanTrue)
 	}
@@ -229,7 +233,7 @@ func (e *encoder) createSession() error {
 		switch cfg.RateControl {
 		case codec.CBR:
 			if sys.KVTConstantBitRate == 0 {
-				return e.unsupported("constant bitrate needs macOS 13 or later")
+				return e.unsupported("constant bitrate needs macOS 13 or iOS 16 or later")
 			}
 			if err := e.setProperty("ConstantBitRate", sys.KVTConstantBitRate, sys.CFNumberInt32(int32(cfg.Bitrate)), true); err != nil {
 				return err
@@ -336,13 +340,31 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	pts := sys.CMTime{Value: f.PTS, Timescale: e.cfg.TimeScale, Flags: sys.CMTimeFlagsValid}
 	var info uint32
 	st := sys.VTCompressionSessionEncodeFrame(e.session, pb, pts, e.duration, props, uintptr(f.PTS), &info)
+	if st == sys.StatusVTInvalidSession {
+		// The session was torn down behind the encoder's back (iOS does
+		// this while the application is in the background): open a new
+		// one and encode this frame on it as a keyframe.
+		if err := e.reopenSession(); err != nil {
+			return err
+		}
+		st = sys.VTCompressionSessionEncodeFrame(e.session, pb, pts, e.duration, e.keyProps, uintptr(f.PTS), &info)
+	}
 	if st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "VTCompressionSessionEncodeFrame", Status: int64(st), Message: sys.StatusString(st)}
 	}
 	e.flushed = false
 	e.forceNext = false
 	e.frameIndex++
-	return e.takeCallbackError()
+	err = e.takeCallbackError()
+	if isInvalidSession(err) {
+		// Reported through the callback for the frame just given, which is
+		// lost with the session; the next frame starts a new one.
+		e.outMu.Lock()
+		e.dropped++
+		e.outMu.Unlock()
+		return e.reopenSession()
+	}
+	return err
 }
 
 func (e *encoder) checkFrame(f *codec.Frame) error {
@@ -599,10 +621,19 @@ func (e *encoder) Flush(ctx context.Context) error {
 	e.flushed = true
 	e.forceNext = true
 	e.frameIndex = 0
+	if st == sys.StatusVTInvalidSession {
+		// Nothing is left to complete: the pending frames died with the
+		// session. Open a new one for what follows.
+		return e.reopenSession()
+	}
 	if st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "VTCompressionSessionCompleteFrames", Status: int64(st), Message: sys.StatusString(st)}
 	}
-	return e.takeCallbackError()
+	err := e.takeCallbackError()
+	if isInvalidSession(err) {
+		return e.reopenSession()
+	}
+	return err
 }
 
 func (e *encoder) Close() error {

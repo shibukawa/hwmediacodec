@@ -1,4 +1,4 @@
-//go:build linux || (windows && amd64)
+//go:build (linux && !android) || (windows && amd64)
 
 // Package nvidia implements the NVIDIA backend on Linux and on Windows
 // (amd64): decoding through NVDEC (the cuvid parser and decoder in

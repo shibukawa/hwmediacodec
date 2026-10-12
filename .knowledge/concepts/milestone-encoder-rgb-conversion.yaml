@@ -113,7 +113,7 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
     - path: convert_test.go
       input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
   videotoolbox-roundtrip-test:
@@ -137,7 +137,7 @@ verification:
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
-      input_hash: 1941036e15833143d13109755b156cd0d9e65d230095afa231cd3edd16550a26
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -153,11 +153,11 @@ verification:
         GPU involved; run 2026-10-09
     basis:
     - path: fakevaapi_linux_test.go
-      input_hash: 125efee838b8feedb556939239584018d72a34f050f5032b76cee027cfba8e88
+      input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: internal/vaapi/encoder.go
-      input_hash: 842af6655dafe1fe1aa27ced11bf15c1bb5dff4e9675f22b7e62d7e3427d20dd
+      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
     - path: internal/vaapi/hevcenc.go
-      input_hash: b09f066a07ee0e7bbcdbb1ec87495b40ba45d39d391eec13284e93805a5aff44
+      input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
   windows-hardware-run:
     state: not_run
     method: manual
@@ -179,8 +179,9 @@ verification:
     - path: internal/vpl/vpl_test.go
       input_hash: 30d05e3857414ef5eabf7126b020d8a9a4d1951c2f8aadff0bdddd42af1fe5f6
 open_questions:
-- Do the Intel, AMD and NVIDIA encoder MFTs copy MF_MT_YUV_MATRIX and friends into the VUI? If not, streams
-  from Windows stay untagged and players guess (BT.709 for HD in browsers, BT.601 in ffmpeg).
+  mft-colour-tags-in-vui:
+    text: Do the Intel, AMD and NVIDIA encoder MFTs copy MF_MT_YUV_MATRIX and friends into the VUI? If not, streams from Windows stay untagged and players guess (BT.709 for HD in browsers, BT.601 in ffmpeg).
+    state: open
 history:
   delivered-2026-10-09:
     summary: Delivered after the webrtc sample failed on Windows; conversion, selection and the VA-API path

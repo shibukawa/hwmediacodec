@@ -247,11 +247,11 @@ verification:
       path: internal/vpl/sys/sys_linux_test.go
     basis:
     - path: internal/vpl/sys/sys_linux.go
-      input_hash: d84bcdb48b1c33c956e2acfdb80320d4389bade3d18334581e34e2085b419e8d
+      input_hash: c4d5ceedf8eeab9215d637cb0bdfe722012b8db40eb80f2b486d0c61ed2930cf
     - path: internal/vpl/sys/sys_linux_test.go
-      input_hash: 56845c512c27c67040257386dfe246adc586b5e87ec154b33c7846669db09753
+      input_hash: 5ea74658f7bbf3ac6e91e051170528db1e1bd3a6c60cdb827537ebd1172c9565
     - path: internal/vpl/session.go
-      input_hash: 8cab8713e6b7e2477f0058df004cad170d6dff036ec6ed8560ad547782a8f586
+      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
   hardware-decode:
     state: not_run
     method: integration
@@ -266,11 +266,11 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/decoder.go
-      input_hash: fa18a69ffb0bf02a7436ea69397c0f3d90578ce294e7b43d31056e43d4a4e88d
+      input_hash: f775c7ba8d74f9195f0cfa4bdb57870a901c33c3c6fcac64eb434ae8f4cf8d1b
     - path: internal/vpl/session.go
-      input_hash: 8cab8713e6b7e2477f0058df004cad170d6dff036ec6ed8560ad547782a8f586
+      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
     - path: internal/vpl/backend.go
-      input_hash: 9a117eb1af538b586de2e3d973aae9969c97ba24d2563f5db166c6b81040763d
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
   hardware-encode:
     state: not_run
     method: integration
@@ -285,11 +285,11 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 0d0d615d40bd92a3d979eddc3d0e26ba83e862efb68c068d0c4c8f935dc2b855
+      input_hash: 4fe46b48f1c4149cd1355927a68fcf301274e6a8e60ed36b2bbad39e78f50c37
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/backend.go
-      input_hash: 9a117eb1af538b586de2e3d973aae9969c97ba24d2563f5db166c6b81040763d
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
 history:
   researched-2026-10-08:
     summary: Backend landscape entry written from Intel and Debian documentation (libraries, API model,

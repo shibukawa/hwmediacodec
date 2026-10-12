@@ -35,10 +35,14 @@ func vtCodecType(c codec.Codec) (uint32, bool) {
 // hasHardwareEncoder reports whether VideoToolbox can select a hardware
 // encoder for the codec. It asks for the supported-property dictionary with
 // the hardware requirement set, which fails when only software is available.
+// iOS before 17.4 has no such key; its encoders are all hardware, so there
+// the question is whether an encoder exists at all.
 func hasHardwareEncoder(vt uint32) bool {
 	spec := sys.NewDictionary()
 	defer sys.Release(spec)
-	sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareEncoder, sys.KCFBooleanTrue)
+	if sys.KVTRequireHardwareEncoder != 0 {
+		sys.CFDictionarySetValue(spec, sys.KVTRequireHardwareEncoder, sys.KCFBooleanTrue)
+	}
 	var id, props uintptr
 	st := sys.VTCopySupportedPropertyDictionaryForEncoder(1920, 1080, vt, spec, &id, &props)
 	sys.Release(id)

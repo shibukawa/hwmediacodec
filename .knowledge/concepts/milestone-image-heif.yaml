@@ -5,10 +5,8 @@ summary: 'The HEIF reader and writer of the samples (examples/heif) moved to the
   and gained the conventions of the standard image packages: Decode(io.Reader) (image.Image, error), DecodeConfig(io.Reader)
   (image.Config, error), Encode(w, img, *Options) and registration with image.RegisterFormat, so a blank
   import makes image.Decode read HEIC and AVIF. The former Decode(data, opts...) is DecodeBytes; DecodeInfo
-  describes a file without decoding.'
+  describes a file without decoding. Revision note: Split the same day into image/heif (HEVC only) and image/avif (AV1 only) over internal/imageitem; see the split-2026-10-10 history entry. The summary describes the first, combined form.'
 lifecycle: active
-revision_note: 'Split the same day into image/heif (HEVC only) and image/avif (AV1 only) over internal/imageitem;
-  see the split-2026-10-10 history entry. The summary describes the first, combined form.'
 authority: authored
 aliases:
 - heif package
