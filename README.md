@@ -41,7 +41,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order from the codec; NV12 in CPU memory, RGBA or BGRA converted in Go; **compiled with the NDK and unit-tested on the Mac, never run on a device** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **never run on a device** |
+| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on the Android 14 emulator (its decoders), a device run is pending** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Android 14 emulator (software encoders), a device run is pending** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -288,28 +288,45 @@ MediaTek, Tensor) sit behind it.
   and `slice-height`, and the crop rectangle from `crop`. Every layout is
   packed into NV12 in Go (interleaved CbCr rows are copied, planar or
   swapped ones interleaved); a layout the backend does not understand is
-  reported as `ErrUnsupported` quoting the format. Frames come out in display
-  order with the input timestamps attached, so `WithDecodeOrder` has no
-  effect, as on Windows.
+  reported as `ErrUnsupported` quoting the format. MediaCodec orders its
+  output by the timestamps it is given (the emulator's decoders returned a
+  B-frame stream in decode order when the packets carried decode-order
+  timestamps, as raw Annex-B streams do), so H.264 and HEVC frames go
+  through the Go reorder layer as on macOS: display order by picture order
+  count whatever the timestamps, and `WithDecodeOrder` returns MediaCodec's
+  own order. AV1 temporal units come in presentation order and are passed
+  through.
 - **Encoding.** The encoder is configured with `bitrate` and
   `bitrate-mode` (VBR, CBR, or CQ with `quality` for `WithQuality`),
   `frame-rate`, `i-frame-interval` (a hint; keyframes are forced from Go at
   the exact interval with `request-sync`), `profile` and `level` for
   `WithProfile`, `latency`/`low-latency` for low-latency mode, `max-bframes`
-  1 or 0, and the BT.709 colour keys for RGB input. Input is asked for as
+  1 or 0, and the BT.709 colour keys for RGB input (not
+  `prepend-sps-pps-to-idr-frames`: an encoder without that control, such
+  as the framework's software H.264 encoder, fails `configure` with
+  `BAD_VALUE`). Input is asked for as
   NV12 (`COLOR_FormatYUV420SemiPlanar`) and, when the encoder refuses that,
   I420 (planar), with the layout from the input format; the caller's NV12
   frame is copied (and de-interleaved for I420) into the input buffer. The
   parameter sets arrive in a codec-config buffer and are prepended to every
   keyframe that lacks them. With B-frames the DTS of a packet is the PTS of
   the frame given to the encoder at the same position minus one frame.
-- **Status.** Nothing of this has run on a device, and the emulator has
-  software codecs only. The module, its test binaries and the CLI compile
-  for `android/arm64` and `android/amd64` with NDK r27 and pass `go vet`
-  there; the buffer-layout code (MediaImage2 parsing, NV12/NV21/I420/YV12
-  packing with strides and crops) is unit-tested on the Mac.
-  `examples/mobile/android` is the app to run on a device; the author's
-  Android tablet is the first target.
+- **Status.** Verified on the Android 14 (API 34, arm64) emulator with
+  `scripts/android_device_check.sh`, which pushes the `hwmediacodec` CLI
+  over adb: `Probe` lists the emulator's `c2.goldfish` H.264 and HEVC
+  decoders (they decode on the host and go by a hardware name) and refuses
+  the software AV1 decoder and encoders without `-software`; decoding a
+  30-frame B-frame H.264 stream, an HEVC stream and an SVT-AV1 IVF stream
+  gives frames identical to ffmpeg's, in display order; H.264 and HEVC
+  encoding with the framework's software encoders produce streams ffmpeg
+  decodes (about 47 and 56 dB luma PSNR); H.264 to HEVC transcoding works.
+  The emulator run found the MediaImage2 type value, the
+  `prepend-sps-pps-to-idr-frames` rejection and the timestamp ordering,
+  all fixed. The same script runs against a device
+  (`ARCH=arm64`, without `SOFTWARE=1`), which is the step still open; the
+  module, its test binaries and the CLI compile for `android/arm64` and
+  `android/amd64` with NDK r27. `examples/mobile/android` is the app to
+  run on a device; the author's Android tablet is the first target.
 
 ### AV1 on Linux and Windows
 
@@ -1060,6 +1077,12 @@ playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
 hardware encoder and skip otherwise. The `image/heif` and `image/avif` tests use macOS
 ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
 
+The Android backend is checked against an emulator or a device over adb:
+`scripts/android_device_check.sh` builds the CLI with the NDK, pushes it
+with ffmpeg-made streams, and compares decoded frames with ffmpeg's and
+encoded streams with ffprobe and ffmpeg (`SOFTWARE=1` for emulators, whose
+codecs are the framework's software ones; `android emulator create` and
+`android emulator start --headless` from the command-line tools make one).
 The iOS build is checked from the Mac: `scripts/mobilebuild.sh` compiles
 the module for the device and the Simulator with cgo enabled, and the
 `hwmediacodec` CLI built for the Simulator runs inside it with
@@ -1074,6 +1097,7 @@ go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 ./scripts/mobilebuild.sh      # cgo builds for ios/arm64 (device, Simulator), the Android backend type-check and, with the NDK, android
+SOFTWARE=1 ./scripts/android_device_check.sh   # Android: the CLI on the attached emulator or device over adb, against ffmpeg
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)

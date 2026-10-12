@@ -109,7 +109,7 @@ verification:
         display-order output frame for frame
     basis:
     - path: internal/reorder/decoder.go
-      input_hash: fbde92b512c474894520064bbd56ee0a0520c427b258de23d2906c78d0207746
+      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
@@ -141,7 +141,7 @@ verification:
         streams without B-frames hold nothing back
     basis:
     - path: internal/reorder/decoder.go
-      input_hash: fbde92b512c474894520064bbd56ee0a0520c427b258de23d2906c78d0207746
+      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
@@ -442,3 +442,8 @@ history:
     summary: Reorder layer, RGBA/BGRA on VideoToolbox decode and encode, ebitenvideo module with player
       and example, CLI flags, ffmpeg-oracle tests; all acceptance checks passed on the author's M3 with
       CGO_ENABLED=1 and 0.
+  flush-drain-2026-10-12:
+    summary: The reorder layer released buffered frames one by one as soon as Flush was called, so frames
+      a backend hands over only after Flush (MediaCodec keeps a few in flight) came out unsorted at the
+      end of the stream; Receive now drains the backend to io.EOF before releasing, found on the Android
+      14 emulator (milestone:android-mediacodec).

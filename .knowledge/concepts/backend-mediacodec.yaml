@@ -112,8 +112,11 @@ facts:
     - AMediaCodec_setParameters request-sync for forced keyframes
   software_names: c2.android.*, OMX.google.*, anything containing ".sw." (MediaCodecInfo.isSoftwareOnly
     logic); refused unless WithSoftwareFallback; emulators have nothing else
-  display_order: native (OutputsDisplayOrder true), timestamps carried through presentationTimeUs in
-    microseconds, kept unique per in-flight frame
+  display_order: H.264/HEVC through the Go reorder layer (OutputsDisplayOrder false) because MediaCodec
+    orders output by the timestamps it is given - the Android 14 emulator's goldfish decoders returned
+    decode-order packets with decode-order timestamps in decode order (2026-10-12); AV1 native (one
+    shown frame per temporal unit, units in presentation order). Timestamps carried through
+    presentationTimeUs in microseconds, kept unique per in-flight frame
   ffi_notes:
   - purego on Android needs CGO_ENABLED=1 (dlfcn_android.go uses internal/cgo); the NDK clang is the
     C compiler; ebitenmobile bind sets this up.
@@ -122,14 +125,25 @@ facts:
     struct by pointer; layouts asserted in sys/types_test.go.
   - The backend compiles on any host with the mediacodec_typecheck build tag for go vet; the pure-Go
     layout code (layout.go, paramsets.go, names.go) carries no tag and is unit-tested everywhere.
+  emulator_findings_2026-10-12:
+  - The NDK output format does carry "image-data" (MediaImage2) for flexible output; its mType for YUV
+    is 1 (the enum is sequential), not 0x100 - the first run rejected every frame until that was fixed.
+  - With a 320x240 stream the MediaImage2 describes the whole 320x240 buffer with stride 320 and the
+    crop rectangle (0,0,319,239); offsets relative to the buffer worked (BufferInfo.offset was 0).
+  - 'The "prepend-sps-pps-to-idr-frames" key makes configure fail with BAD_VALUE on c2.android.avc.encoder
+    (CCodec "Failed to set KEY_PREPEND_HEADER_TO_SYNC_FRAMES"); the key is no longer set. "max-bframes"
+    and "color-format" are logged as having no C2 equivalent and are ignored.'
+  - MediaCodec output order follows the input timestamps; the reorder layer now sorts H.264/HEVC, and
+    the layer itself had to be fixed to drain the backend fully after Flush before releasing frames.
+  - c2.goldfish.h264.decoder / c2.goldfish.hevc.decoder (host-side decoding) are classified as hardware
+    by name and decode bit-exactly against ffmpeg; the software AV1 decoder and the software encoders
+    are refused without WithSoftwareFallback, as designed.
   risks_until_a_device_run:
-  - Whether the NDK output format carries "image-data" (it is the native AMessage Java's getOutputImage
-    reads, so it should); the colour-format fallback covers 19 and 21.
-  - Whether plane offsets in MediaImage2 are relative to the buffer start or to BufferInfo.offset
-    (assumed relative to offset, which is normally 0).
-  - Whether MediaImage2 describes the cropped picture or the whole buffer; the crop rectangle is
-    applied only when it fits inside the layout and is clamped to the stream's own size.
+  - Vendor codecs whose MediaImage2 or crop semantics differ from the emulator's (buffers larger than
+    the picture, BufferInfo.offset other than 0).
   - Whether configure needs "level" alongside "profile" on every vendor; both are set.
+  - Whether a vendor hardware decoder keeps the input timestamp attached to the right picture (the
+    reorder layer relies on it); the goldfish decoders do.
   - AV1 csd: none is set; the sequence header travels in-band and is re-inserted at key temporal units.
   alternative_if_needed: AImageReader (YUV_420_888 with AImage plane accessors) as the decoder's output
     surface, when a vendor codec's ByteBuffer layout turns out unreadable.
@@ -161,9 +175,9 @@ verification:
     - path: internal/mediacodec/backend.go
       input_hash: 9d34e03aa492bbc9c9785274841e5c147586d578a151678651420781eb185deb
     - path: internal/mediacodec/decoder.go
-      input_hash: ed1a74330d20e6ddbd108adf603634ec5c27ce5e0653190a1fdc5eee61e53c1e
+      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
     - path: internal/mediacodec/encoder.go
-      input_hash: 4f08d02c5e458c6b17ff244a02f7d1762c496662099e6e690ec510fa85cd11b9
+      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
     - path: internal/mediacodec/common.go
       input_hash: 676765d2e770e27ccc44d9a5eff1666dfcdaedc68fba654b2bb35e3760466f21
     - path: internal/mediacodec/sys/sys.go
@@ -180,24 +194,51 @@ verification:
     - path: internal/mediacodec/layout.go
       input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
     - path: internal/mediacodec/layout_test.go
-      input_hash: a8ab39b84586177f89567372f41cae2e11d20fb1bbfe9c33b759b2ca6c7a8d5a
+      input_hash: 9d02c906897020775c1d74d8fb4b0401163ec78542a0432f333eae70ca808c5c
     - path: internal/mediacodec/names.go
       input_hash: 32847ce94c7520bc0c31fc2131f1bb036c4957a9cd1f379023d4fb28288d8409
     - path: internal/mediacodec/names_test.go
       input_hash: fecb9d27534a0d795918223fb1037c33653fc7bbecd2625a3a964e82e42cf1ea
     - path: internal/mediacodec/sys/types.go
-      input_hash: 8a4c1e8bc725160658e7a95dc7d6533e3aabd85f9bbe497af69c77cb962da47d
+      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
     - path: internal/mediacodec/sys/types_test.go
       input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
+  emulator-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: android
+    test: SOFTWARE=1 ARCH=arm64 scripts/android_device_check.sh against the Android 14 (API 34, default
+      arm64) emulator created with android emulator create / start --headless
+    evidence:
+      path: scripts/android_device_check.sh
+      note: '2026-10-12: probe lists goldfish h264/hevc decode as hardware; decode h264 (libx264 bf=2),
+        hevc (libx265 bframes=2) and av1 (SVT-AV1 IVF) 30 frames each identical to ffmpeg in display order;
+        RGBA 30 frames; encode h264 10 frames PSNR y 46.7 dB and hevc 56.1 dB with c2.android encoders;
+        transcode h264->hevc 30 frames'
+    basis:
+    - path: scripts/android_device_check.sh
+      input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
+    - path: internal/mediacodec/decoder.go
+      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
+    - path: internal/mediacodec/encoder.go
+      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
+    - path: internal/mediacodec/layout.go
+      input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
+    - path: internal/mediacodec/sys/types.go
+      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
+    - path: internal/reorder/decoder.go
+      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
   device-run:
     state: not_run
     method: manual
     authority: authored
-    test: examples/mobile/android on the author's Android tablet, then go test ./... on a device (needs
-      ffmpeg; or the CLI with pre-made streams via adb)
+    test: scripts/android_device_check.sh (ARCH=arm64, no SOFTWARE) and examples/mobile/android on the
+      author's Android tablet
     evidence:
       path: examples/mobile/README.md
-      note: no Android SDK/NDK on the development Mac; the user will run the device tests together with
+      note: no device attached to the development Mac; the user will run the device tests together with
         the iPhone ones
 history:
   implemented-2026-10-12:

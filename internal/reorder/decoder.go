@@ -15,8 +15,10 @@ type Decoder struct {
 	tracker *Tracker
 	buf     buffer
 	// flushing is set by Flush and cleared by Send; while set, buffered
-	// frames are released in order without waiting for the reorder bound.
+	// frames are released in order without waiting for the reorder bound,
+	// once the backend has been drained (drained).
 	flushing bool
+	drained  bool
 	closed   bool
 }
 
@@ -37,6 +39,7 @@ func (d *Decoder) Send(ctx context.Context, p codec.Packet) error {
 		return codec.ErrClosed
 	}
 	d.flushing = false
+	d.drained = false
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
 		return d.inner.Send(ctx, p) // the backend reports ErrInvalidData
@@ -54,8 +57,29 @@ func (d *Decoder) Receive(ctx context.Context) (*codec.Frame, error) {
 	if d.closed {
 		return nil, codec.ErrClosed
 	}
+	if d.flushing {
+		// After Flush the backend hands over the frames it still held, in
+		// its own order. They all take part in the sort, so the backend is
+		// drained before anything is released: a backend with a few
+		// frames of delay (MediaCodec) delivers whole B-frame groups here.
+		for !d.drained {
+			f, err := d.inner.Receive(ctx)
+			if err == io.EOF {
+				d.drained = true
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			d.buf.push(f)
+		}
+		if f := d.buf.pop(true); f != nil {
+			return f, nil
+		}
+		return nil, io.EOF
+	}
 	for {
-		if f := d.buf.pop(d.flushing); f != nil {
+		if f := d.buf.pop(false); f != nil {
 			return f, nil
 		}
 		f, err := d.inner.Receive(ctx)

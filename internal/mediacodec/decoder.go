@@ -62,11 +62,16 @@ type decoder struct {
 	pool sync.Pool
 }
 
-// OutputsDisplayOrder implements codec.DisplayOrderer: MediaCodec decoders
-// reorder pictures themselves and attach the input timestamps, so the
-// public API does not wrap this decoder in the Go reorder layer and
-// WithDecodeOrder has no effect on Android.
-func (d *decoder) OutputsDisplayOrder() bool { return true }
+// OutputsDisplayOrder implements codec.DisplayOrderer. An AV1 temporal
+// unit yields exactly one shown frame and the units come in presentation
+// order, so MediaCodec's AV1 output is display order. For H.264 and HEVC
+// the answer is false: MediaCodec decoders order their output by the
+// timestamps they are given (the Android 14 emulator's decoders returned
+// B-frame streams in decode order when the packets carried decode-order
+// timestamps), so the public API's reorder layer sorts the frames by
+// picture order count, as on macOS, and WithDecodeOrder returns MediaCodec's
+// own order.
+func (d *decoder) OutputsDisplayOrder() bool { return d.cfg.Codec == codec.AV1 }
 
 func newDecoder(cfg codec.DecoderConfig, mime, name string, c uintptr) *decoder {
 	return &decoder{

@@ -181,9 +181,10 @@ func (e *encoder) format(colorFormat int32) (uintptr, error) {
 		sys.AMediaFormat_setInt32(f, sys.KeyColorRange, sys.ColorRangeLimited)
 		sys.AMediaFormat_setInt32(f, sys.KeyColorTransfer, sys.ColorTransferSDRVideo)
 	}
-	// Ask for in-band parameter sets too; they are prepended from Go
-	// whenever the encoder leaves them out.
-	sys.AMediaFormat_setInt32(f, sys.KeyPrependHeaders, 1)
+	// prepend-sps-pps-to-idr-frames is not asked for: an encoder without
+	// that control fails configure with BAD_VALUE (the Android 14
+	// emulator's c2.android.avc.encoder does), and the parameter sets are
+	// prepended from Go anyway.
 	return f, nil
 }
 

@@ -154,10 +154,15 @@ type MediaImagePlane struct {
 	VertSubsampling  uint32
 }
 
-// MediaImage2 type values.
+// MediaImage2 type values (sequential in VideoAPI.h: UNKNOWN, YUV, YUVA,
+// RGB, RGBA, Y; the Android 14 emulator reports 1 for its YUV buffers).
 const (
 	MediaImageTypeUnknown uint32 = 0
-	MediaImageTypeYUV     uint32 = 0x100
+	MediaImageTypeYUV     uint32 = 1
+	MediaImageTypeYUVA    uint32 = 2
+	MediaImageTypeRGB     uint32 = 3
+	MediaImageTypeRGBA    uint32 = 4
+	MediaImageTypeY       uint32 = 5
 )
 
 // MediaImage2Size is the size of the structure in bytes.

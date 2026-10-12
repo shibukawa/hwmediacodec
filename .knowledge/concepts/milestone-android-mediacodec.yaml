@@ -35,8 +35,9 @@ constraints:
 - Encoder input is NV12 (colour format 21) or, when refused, I420 (19), converted while copying; forced
   keyframes go through AMediaCodec_setParameters request-sync; parameter sets from the codec-config buffer
   are prepended to keyframes that lack them. AV1 encoding is not offered.
-- WithDecodeOrder has no effect (OutputsDisplayOrder is true); RGBA/BGRA go through pixconv as on the
-  other NV12-only backends.
+- H.264 and HEVC frames go through the Go reorder layer (OutputsDisplayOrder false; MediaCodec orders
+  output by input timestamps), AV1 is passed through; RGBA/BGRA go through pixconv as on the other
+  NV12-only backends.
 non_goals:
 - Running on a device from this session (the author has an Android tablet and will test both platforms
   together); the Android Studio project was not built here either.
@@ -65,6 +66,14 @@ acceptance:
       milestone: android-mediacodec
     verified_by:
     - aar-build
+  emulator-probe-decode-encode:
+    text: On the Android 14 emulator, scripts/android_device_check.sh with SOFTWARE=1 decodes B-frame
+      H.264, HEVC and AV1 streams identically to ffmpeg in display order, encodes H.264 and HEVC that
+      ffmpeg decodes, and transcodes.
+    scope:
+      milestone: android-mediacodec
+    verified_by:
+    - emulator-run
   device-probe-decode-encode:
     text: On an Android 14 device the examples/mobile app's top line names mediacodec with hardware h264
       and hevc decode and encode, the clip plays, and go test ./... (or the CLI with adb-pushed streams)
@@ -96,9 +105,9 @@ verification:
     - path: internal/mediacodec/backend.go
       input_hash: 9d34e03aa492bbc9c9785274841e5c147586d578a151678651420781eb185deb
     - path: internal/mediacodec/decoder.go
-      input_hash: ed1a74330d20e6ddbd108adf603634ec5c27ce5e0653190a1fdc5eee61e53c1e
+      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
     - path: internal/mediacodec/encoder.go
-      input_hash: 4f08d02c5e458c6b17ff244a02f7d1762c496662099e6e690ec510fa85cd11b9
+      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
     - path: internal/mediacodec/common.go
       input_hash: 676765d2e770e27ccc44d9a5eff1666dfcdaedc68fba654b2bb35e3760466f21
     - path: internal/mediacodec/sys/sys.go
@@ -121,7 +130,7 @@ verification:
     - path: internal/mediacodec/layout.go
       input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
     - path: internal/mediacodec/layout_test.go
-      input_hash: a8ab39b84586177f89567372f41cae2e11d20fb1bbfe9c33b759b2ca6c7a8d5a
+      input_hash: 9d02c906897020775c1d74d8fb4b0401163ec78542a0432f333eae70ca808c5c
     - path: internal/mediacodec/names.go
       input_hash: 32847ce94c7520bc0c31fc2131f1bb036c4957a9cd1f379023d4fb28288d8409
     - path: internal/mediacodec/names_test.go
@@ -129,7 +138,7 @@ verification:
     - path: internal/mediacodec/paramsets.go
       input_hash: 5d45e8ee7ffbbd1e61d993846bbb506c70ba514329e54483052c770931efd549
     - path: internal/mediacodec/sys/types.go
-      input_hash: 8a4c1e8bc725160658e7a95dc7d6533e3aabd85f9bbe497af69c77cb962da47d
+      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
     - path: internal/mediacodec/sys/types_test.go
       input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
   android-deps:
@@ -167,6 +176,27 @@ verification:
       input_hash: bd0e89cc9c768dd2d4e568c51424bf07d28dfe8bd5f4ed0f0e0ac14ec3ac786a
     - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.kt
       input_hash: e47c0ae7886330758bedfea44f87c8662b35a61e931b3c16b076a03a3aa1c759
+  emulator-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: android-mediacodec
+      platform: android
+    test: SOFTWARE=1 ARCH=arm64 scripts/android_device_check.sh on the hwmc34 AVD (system-images/android-34/default/arm64-v8a)
+    evidence:
+      path: scripts/android_device_check.sh
+      note: 2026-10-12; all checks passed after three fixes found by the run (MediaImage2 type, prepend
+        header key, reorder-layer flush drain)
+    basis:
+    - path: scripts/android_device_check.sh
+      input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
+    - path: internal/mediacodec/decoder.go
+      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
+    - path: internal/mediacodec/encoder.go
+      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
+    - path: internal/reorder/decoder.go
+      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
   device-run:
     state: not_run
     method: manual
@@ -174,7 +204,8 @@ verification:
     scope:
       milestone: android-mediacodec
       platform: android
-    test: examples/mobile/android (Android Studio or gradle wrapper + installDebug) on the author's tablet
+    test: scripts/android_device_check.sh without SOFTWARE and examples/mobile/android (Android Studio or
+      gradle wrapper + installDebug) on the author's tablet
     evidence:
       path: examples/mobile/README.md
       note: no device attached to the development Mac; the author will test with the iPhone run

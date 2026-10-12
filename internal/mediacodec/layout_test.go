@@ -133,7 +133,7 @@ func TestParseMediaImage2(t *testing.T) {
 	}
 	// Not YUV.
 	bad := append([]byte(nil), b...)
-	binary.LittleEndian.PutUint32(bad, 0x300)
+	binary.LittleEndian.PutUint32(bad, sys.MediaImageTypeRGB)
 	if _, err := parseMediaImage2(bad); err == nil {
 		t.Error("an RGB image must be rejected")
 	}
