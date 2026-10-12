@@ -261,6 +261,9 @@ func TestTranscodeRoundTrip(t *testing.T) {
 					if errors.Is(err, hwmediacodec.ErrAgain) {
 						break
 					}
+					if errors.Is(err, hwmediacodec.ErrUnsupported) {
+						t.Skipf("configuration not available on this backend: %v", err)
+					}
 					if err != nil {
 						t.Fatalf("decoder Receive: %v", err)
 					}

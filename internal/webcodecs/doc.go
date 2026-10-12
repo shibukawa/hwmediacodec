@@ -63,5 +63,14 @@
 // output they are drawn on an OffscreenCanvas and read back. NV12 output
 // exists for 8-bit 4:2:0 pictures the browser hands over as NV12 or I420
 // only: a stream of another depth or sampling is refused with
-// ErrUnsupported when its keyframe arrives.
+// ErrUnsupported when its keyframe arrives, and a browser whose decoders
+// hand over RGB (Firefox on macOS returns BGRX) gets ErrUnsupported from
+// Receive.
+//
+// # Browsers
+//
+// Chrome on macOS passes the conformance tests. Firefox on macOS runs
+// with limits that are its own (RGB frames only, the colour description of
+// a configuration ignored for H.264 and not written by its encoder, no
+// constant-quality mode, no HEVC); the README's browser notes list them.
 package webcodecs

@@ -190,6 +190,10 @@ func decodePackets(t *testing.T, dec hwmediacodec.Decoder, packets [][]byte, for
 				}
 				return
 			}
+			if errors.Is(err, hwmediacodec.ErrUnsupported) {
+				// A browser whose decoders hand over RGB has no NV12.
+				t.Skipf("configuration not available on this backend: %v", err)
+			}
 			if err != nil {
 				t.Fatalf("Receive: %v", err)
 			}
@@ -458,6 +462,9 @@ func TestFlushResumesAtKeyframe(t *testing.T) {
 					f, err := dec.Receive(ctx)
 					if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
 						return n
+					}
+					if errors.Is(err, hwmediacodec.ErrUnsupported) {
+						t.Skipf("configuration not available on this backend: %v", err)
 					}
 					if err != nil {
 						t.Fatal(err)

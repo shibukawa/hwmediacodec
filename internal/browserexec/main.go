@@ -23,7 +23,8 @@
 //	HWMEDIACODEC_BROWSER       the browser executable (default: Chrome,
 //	                           Chromium or Edge where they are usually
 //	                           installed). A Firefox binary gets Firefox's
-//	                           flags; any other program (for example
+//	                           flags (and on macOS is started through
+//	                           "open"); any other program (for example
 //	                           "open" with the arguments "-a Safari") is
 //	                           started with the arguments below and the
 //	                           page URL
@@ -182,20 +183,18 @@ func run(wasm string, args []string) (int, error) {
 	go srv.Serve(ln)
 	defer srv.Close()
 
-	browser, err := startBrowser(base, filepath.Join(work, "profile"))
+	browser, signalBrowser, err := startBrowser(base, filepath.Join(work, "profile"))
 	if err != nil {
 		return 0, err
 	}
 	died := make(chan error, 1)
 	go func() { died <- browser.Wait() }()
 	stop := func() {
-		if browser.Process != nil {
-			browser.Process.Signal(syscall.SIGTERM)
-			select {
-			case <-died:
-			case <-time.After(3 * time.Second):
-				browser.Process.Kill()
-			}
+		signalBrowser(syscall.SIGTERM)
+		select {
+		case <-died:
+		case <-time.After(3 * time.Second):
+			signalBrowser(syscall.SIGKILL)
 		}
 	}
 
@@ -289,23 +288,47 @@ func findBrowser() (string, error) {
 	return "", errors.New("no Chrome, Chromium or Edge found; set HWMEDIACODEC_BROWSER to a browser executable")
 }
 
-func startBrowser(url, profile string) (*exec.Cmd, error) {
+// appBundle returns the macOS application bundle a path lies in (or is),
+// or "".
+func appBundle(path string) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	if i := strings.Index(path, ".app/"); i >= 0 {
+		return path[:i+len(".app")]
+	}
+	if strings.HasSuffix(path, ".app") {
+		return path
+	}
+	return ""
+}
+
+// startBrowser opens the page in the browser. The returned function sends
+// a signal to the browser; the command ends when the browser does.
+func startBrowser(url, profile string) (cmd *exec.Cmd, signal func(syscall.Signal), err error) {
 	path, err := findBrowser()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	headed := os.Getenv("HWMEDIACODEC_BROWSER_HEADED") != ""
 	var args []string
 	name := strings.ToLower(filepath.Base(path))
+	bundle := ""
 	switch {
 	case strings.Contains(name, "firefox"):
 		if err := os.MkdirAll(profile, 0o755); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		args = []string{"-no-remote", "-profile", profile}
 		if !headed {
 			args = append(args, "-headless")
 		}
+		// A Firefox started by the path of its binary from a terminal
+		// cannot start its content processes on macOS
+		// ("sandbox_extension_issue_file_to_process failed ... Operation
+		// not permitted") and spins without ever loading the page; started
+		// as an application it can.
+		bundle = appBundle(path)
 	case !strings.Contains(name, "chrom") && !strings.Contains(name, "edge"):
 		// Not a browser this wrapper knows the flags of.
 	default:
@@ -324,14 +347,28 @@ func startBrowser(url, profile string) (*exec.Cmd, error) {
 	}
 	args = append(args, strings.Fields(os.Getenv("HWMEDIACODEC_BROWSER_ARGS"))...)
 	args = append(args, url)
-	cmd := exec.Command(path, args...)
+	if bundle != "" {
+		// A new instance (-n) that "open" waits for (-W); "-g" keeps a
+		// headed window from taking the focus.
+		cmd = exec.Command("open", append([]string{"-n", "-W", "-g", "-a", bundle, "--args"}, args...)...)
+	} else {
+		cmd = exec.Command(path, args...)
+	}
 	if os.Getenv("HWMEDIACODEC_BROWSER_LOG") != "" {
 		cmd.Stderr = os.Stderr
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start %s: %w", path, err)
+		return nil, nil, fmt.Errorf("start %s: %w", path, err)
 	}
-	return cmd, nil
+	if bundle != "" {
+		// The browser is not a child of this process; it is found by
+		// the profile directory in its command line, which is this
+		// run's own.
+		return cmd, func(sig syscall.Signal) {
+			exec.Command("pkill", "-"+strconv.Itoa(int(sig)), "-f", profile).Run()
+		}, nil
+	}
+	return cmd, func(sig syscall.Signal) { cmd.Process.Signal(sig) }, nil
 }
 
 func (s *server) routes() http.Handler {

@@ -165,16 +165,38 @@ facts:
   - 'A browser that ignores {format: "annexb"} and returns length-prefixed NAL units with an avcC/hvcC
     description is handled (paramSets.addDescription + annexb.FromLengthPrefixed); unit-tested against
     mp4ff-built records, never taken by Chrome.'
+  firefox_macos_2026-10-13:
+  - 'Decoded VideoFrames are BGRX (H.264 and AV1, hardware and prefer-software, headless and with a window),
+    not NV12/I420. RGBA/BGRA output works through copyTo; NV12 output is an UnsupportedError from Receive
+    - inverting the RGB would need the matrix Firefox used, which the frame no longer tells.'
+  - VideoDecoderConfig.colorSpace is ignored for H.264 - an untagged 320x240 stream is shown as BT.709
+    (24.9 dB against ffmpeg's BT.601) with smpte170m in the configuration; untagged AV1 comes out right
+    (41 dB).
+  - The encoder writes no colour description (ffprobe color_space unknown) although the VideoFrame carries
+    colorSpace bt709; RGB input converted with BT.709 is then read as BT.601 by decoders at SD sizes
+    (27.6 dB at 320x240). HD is unaffected by the usual rule.
+  - 'bitrateMode quantizer is accepted by isConfigSupported and the per-frame quantizer has no effect (identical
+    stream sizes). latencyMode realtime is accepted by isConfigSupported and fails configure with "EncodingError:
+    The given encoding is not supported"; the encoder now waits for configure (an empty flush) and retries
+    with latencyMode quality.'
+  - No HEVC decode or encode. Probe reports h264 decode/encode and av1 decode as hardware; whether Firefox
+    treats prefer-hardware as a requirement was not measured.
+  - 'A Firefox started by the path of its binary from a shell spins at 100% CPU without loading the page ("sandbox_extension_issue_file_to_process
+    failed for plugin-container.app: Operation not permitted"), in the agent sandbox and in a plain terminal
+    alike; started through LaunchServices (open -n -W -g -a Firefox.app --args ...) it works, which is what
+    internal/browserexec does on macOS, stopping it by its profile path.'
   not_run:
-  - Firefox (headless Firefox cannot start its content processes inside the development sandbox), Safari
-    (no headless mode), Chrome on Windows, Linux and Android
+  - Safari (no headless mode), Chrome on Windows, Linux and Android
   - TinyGo (-target wasm shares GOOS=js and syscall/js) and GopherJS, neither tried; WASI targets have
     no access to the page's API and are out of scope
   future:
   - Zero-copy display - hand the VideoFrame to WebGL (texImage2D) instead of copyTo; needs a hook into
     the renderer that Ebitengine does not expose; Frame.Native() is reserved for it
   - AV1 encoding ("av01.0.xxM.08"), with the AV1 slice of the other backends
-  - Running the conformance tests in Firefox and Safari (HWMEDIACODEC_BROWSER) and on Windows/Linux/Android Chrome
+  - Running the conformance tests in Safari and on Windows/Linux/Android Chrome
+  - 'Firefox colours: write the colour description into the SPS/VPS VUI of encoder output ourselves when
+    the browser did not (internal/h264 and internal/hevc have the writers), and give untagged H.264 input
+    a tagged SPS for RGB output'
   support_tier: proposed (policy:support-tiers browser_proposed)
 relations:
 - relation: candidate_for
@@ -197,11 +219,11 @@ verification:
         Chrome (VideoToolbox).'
     basis:
     - path: internal/webcodecs/backend.go
-      input_hash: 969f7a9e224fb40e50c124894a954ae3efcba23b081c060538f70c476c8eb429
+      input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: internal/webcodecs/decoder.go
-      input_hash: cfdbd252d458291b7321d1632beb3ea0f7fc1c17cda571625c8bd7cf9c2178ef
+      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
     - path: internal/webcodecs/encoder.go
-      input_hash: 0ad808f93fb92691571f9ad6034f3b498bc003e5f051e2c2f13ecc1f68c5a3a7
+      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
     - path: internal/webcodecs/jsutil.go
       input_hash: d574ef87894dffd1b580b7c57b80c6f1f42da49b4f85cd91cacdcb4f6ade6342
     - path: internal/webcodecs/names.go
@@ -227,11 +249,11 @@ verification:
         the next stream decoded bit-exactly
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 7db0b507b2adc9174a63bebb4421942488fd03e91ddf056b37490438348b8b69
+      input_hash: 57ecb8f24b588b373a679ae915ec0986eda4130df22ef915d5dfb26991a090b9
     - path: internal/webcodecs/decoder.go
-      input_hash: cfdbd252d458291b7321d1632beb3ea0f7fc1c17cda571625c8bd7cf9c2178ef
+      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
     - path: internal/webcodecs/encoder.go
-      input_hash: 0ad808f93fb92691571f9ad6034f3b498bc003e5f051e2c2f13ecc1f68c5a3a7
+      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
   unit-tests:
     state: passed
     method: unit
@@ -255,15 +277,39 @@ verification:
       input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
+  firefox-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox scripts/browser_test.sh -v
+      . ./internal/webcodecs (Firefox 146.0.1, Apple M3; headless, and with HWMEDIACODEC_BROWSER_HEADED=1 for
+      the decode, RGBA, quality and low-latency tests - same results)
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: '2026-10-13: runs to the end. Pass - H.264 and AV1 decode to RGBA/BGRA (AV1 41 dB, 10-bit AV1 to
+        BGRA), H.264 encode (45 dB), bitrate modes, keyframe interval and forced keyframes, profiles, flush
+        and reuse, low latency after the fallback, software H.264 encode, the pipelines. Skip - every NV12
+        decode test (frames are BGRX, ErrUnsupported), HEVC (none). Fail - TestDecodeRGBA h264 (24.9 dB, BT.709
+        used for an untagged SD stream although the configuration said smpte170m), TestEncodeRGBAInput and
+        TestEncodeConvertedRGB (stream untagged, 27.6 dB at 320x240), TestEncodeQuality (same size for quality
+        0.5 and 0.9).'
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+    - path: internal/webcodecs/encoder.go
+      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+    - path: internal/browserexec/main.go
+      input_hash: 2647853b1546eaea66f505224d766f6a9e34d20843d2096a1a2f8d9bfc9aff55
   other-browsers:
     state: not_run
     method: integration
     authority: authored
     scope:
       platform: js
-    test: HWMEDIACODEC_BROWSER=<firefox binary> scripts/browser_test.sh . ./internal/webcodecs ; HWMEDIACODEC_BROWSER=open
-      HWMEDIACODEC_BROWSER_ARGS="-a Safari" for Safari; the same script on Windows, Linux and Android Chrome
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh . ./internal/webcodecs
+      for Safari; the same script on Windows, Linux and Android Chrome
     evidence:
       path: internal/browserexec/main.go
-      note: headless Firefox 146 did not load the page from the development sandbox (its content processes
-        failed to start there); Safari has no headless mode and was left to the author
+      note: Safari has no headless mode and was left to the author; no Windows, Linux or Android machine here

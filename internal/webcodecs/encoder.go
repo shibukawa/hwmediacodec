@@ -4,6 +4,7 @@ package webcodecs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -142,7 +143,7 @@ type encoder struct {
 	outSize int
 }
 
-func newEncoder(cfg codec.EncoderConfig, cls js.Value, config map[string]any) (*encoder, error) {
+func newEncoder(ctx context.Context, cfg codec.EncoderConfig, cls js.Value, config map[string]any) (*encoder, error) {
 	size := codec.NV12.FrameSize(cfg.Width, cfg.Height)
 	e := &encoder{
 		cfg:        cfg,
@@ -178,29 +179,63 @@ func newEncoder(cfg codec.EncoderConfig, cls js.Value, config map[string]any) (*
 		e.wake.signal()
 		return nil
 	})
-	if err := e.open(); err != nil {
+	if err := e.open(ctx); err != nil {
 		e.Close()
 		return nil, err
 	}
 	return e, nil
 }
 
-// open creates and configures the VideoEncoder if there is none.
-func (e *encoder) open() error {
+// open creates and configures the VideoEncoder if there is none, and
+// waits until the browser has taken the configuration: a browser may
+// answer isConfigSupported with yes and still fail configure, which it
+// reports later, through the error callback (Firefox on macOS does for
+// latencyMode "realtime"). The empty flush behind configure settles when
+// configure has been dealt with. WithLowLatency asks for the low-latency
+// mode where the backend has one, so a configuration that fails with it is
+// tried again without.
+func (e *encoder) open(ctx context.Context) error {
 	if e.opened {
 		return nil
 	}
-	err := try("new VideoEncoder", func() {
-		e.enc = e.class.New(map[string]any{"output": e.onOutput, "error": e.onError})
-		e.enc.Call("addEventListener", "dequeue", e.onDequeue)
-		e.enc.Call("configure", e.config)
-	})
-	if err != nil {
-		return err
+	for {
+		var promise js.Value
+		err := try("new VideoEncoder", func() {
+			e.enc = e.class.New(map[string]any{"output": e.onOutput, "error": e.onError})
+			e.enc.Call("addEventListener", "dequeue", e.onDequeue)
+			e.enc.Call("configure", e.config)
+			promise = e.enc.Call("flush")
+		})
+		if err != nil {
+			return err
+		}
+		e.opened = true
+		_, err = await(ctx, "VideoEncoder.configure", promise)
+		if failure := e.takeFailure(); failure != nil {
+			err = failure
+		}
+		if err == nil {
+			e.forceNext = true
+			return nil
+		}
+		e.abandon()
+		e.failure = nil
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var stalled *stallError
+		if errors.As(err, &stalled) {
+			return err
+		}
+		if e.config["latencyMode"] == "realtime" {
+			e.config["latencyMode"] = "quality"
+			continue
+		}
+		if errors.Is(err, codec.ErrUnsupported) {
+			return err
+		}
+		return unsupported(e.cfg.Codec, codec.Encode, fmt.Sprintf("the browser rejected the configuration for %s: %v", describe(&e.cfg), err))
 	}
-	e.opened = true
-	e.forceNext = true
-	return nil
 }
 
 // abandon drops what is in flight and the VideoEncoder itself.
@@ -256,7 +291,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	if len(e.pending) >= maxPending {
 		return codec.ErrAgain
 	}
-	if err := e.open(); err != nil {
+	if err := e.open(ctx); err != nil {
 		return err
 	}
 	e.flushed = false

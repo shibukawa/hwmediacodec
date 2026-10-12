@@ -96,6 +96,10 @@ func decode(t *testing.T, d codec.Decoder, packets [][]byte) [][32]byte {
 			if err == end {
 				return
 			}
+			if errors.Is(err, codec.ErrUnsupported) {
+				// A browser whose decoders hand over RGB has no NV12.
+				t.Skipf("not available in this browser: %v", err)
+			}
 			if err != nil {
 				t.Fatalf("Receive: %v", err)
 			}

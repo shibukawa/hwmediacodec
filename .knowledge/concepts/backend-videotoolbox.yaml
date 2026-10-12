@@ -351,7 +351,7 @@ verification:
     - *id005
     - &id006
       path: decode_test.go
-      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
+      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
     - &id007
       path: probe_test.go
       input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
@@ -397,7 +397,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
-      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   hevc-encode-reference:
@@ -423,7 +423,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
-      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   av1-reference:
@@ -456,7 +456,7 @@ verification:
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
     - path: decode_test.go
-      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
+      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
     - path: internal/testutil/av1.go
       input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
 history:

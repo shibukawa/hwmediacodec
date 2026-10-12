@@ -502,10 +502,14 @@ func (d *decoder) output(vf js.Value) {
 		finish(d.drawFrame(vf, w, h, in))
 		return
 	case !rgb && size == 0:
+		// Not NV12 or I420: an opaque frame, or a browser whose decoders
+		// hand over RGB (Firefox on macOS returns BGRX). Turning RGB
+		// back into YUV would need the matrix the browser converted
+		// with, which it does not tell.
 		if format == "" {
 			format = "opaque"
 		}
-		finish(nil, backendErr("VideoFrame.copyTo", fmt.Sprintf("the browser decoded to %s frames, which have no NV12 form; ask for RGBA or BGRA output", format)))
+		finish(nil, unsupported(d.cfg.Codec, codec.Decode, fmt.Sprintf("this browser hands decoded pictures over as %s, which has no NV12 form; ask for RGBA or BGRA output", format)))
 		return
 	}
 

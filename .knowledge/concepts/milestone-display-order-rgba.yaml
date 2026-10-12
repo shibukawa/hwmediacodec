@@ -123,7 +123,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 0c9976618308d6c431d25314d28bb5fcd8d9225180fbcf06e39ca8c9a787952a
     - path: decode_test.go
-      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
+      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   reorder-oracle-test:
@@ -207,7 +207,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 0c9976618308d6c431d25314d28bb5fcd8d9225180fbcf06e39ca8c9a787952a
     - path: decode_test.go
-      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
+      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
   rgba-decode-test:
     state: passed
     method: integration
@@ -233,7 +233,7 @@ verification:
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: decode_test.go
-      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
+      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   rgb-encode-test:
@@ -258,7 +258,7 @@ verification:
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: encode_test.go
-      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   timeline-unit-test:

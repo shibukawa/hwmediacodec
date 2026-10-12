@@ -443,6 +443,10 @@ func decodeRGB(t *testing.T, dec Decoder, c Codec, stream []byte, f PixelFormat,
 			if err == end || (end == ErrAgain && errors.Is(err, ErrAgain)) {
 				return
 			}
+			if errors.Is(err, ErrUnsupported) {
+				// A browser whose decoders hand over RGB has no NV12.
+				t.Skipf("configuration not available on this backend: %v", err)
+			}
 			if err != nil {
 				t.Fatalf("Receive: %v", err)
 			}

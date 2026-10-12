@@ -45,7 +45,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
 | Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on the Android 14 emulator (its decoders), a device run is pending** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Android 14 emulator (software encoders), a device run is pending** |
-| Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; other browsers and operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; other browsers and operating systems not run yet** |
+| Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only (see the notes); Safari and other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox on macOS with the limits in the notes; Safari and other operating systems not run yet** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -396,6 +396,26 @@ Foundation, VA-API or MediaCodec behind it.
   ignores the request for Annex-B output and returns length-prefixed NAL
   units with an `avcC` / `hvcC` record gets them converted (that path has
   unit tests but no browser that takes it was run).
+- **Firefox** (146 on macOS, measured 2026-10-13) differs from Chrome in
+  what it gives the page:
+  - Its decoders hand over `BGRX` frames, not YUV. RGBA and BGRA output
+    work; NV12 output is `ErrUnsupported` at `Receive`, because turning RGB
+    back into YUV would need the matrix Firefox converted with. A
+    transcoder there decodes to RGBA and encodes from RGBA.
+  - It ignores the colour description in the decoder configuration for
+    H.264: an untagged 320x240 stream comes out as BT.709 where every
+    other backend shows BT.601. Tagged streams and HD are not affected by
+    the rule.
+  - Its encoder does not write the colour description into the stream, so
+    RGB input (converted with BT.709) is untagged; decoders then assume
+    BT.601 for pictures up to 704x576, and those come out in slightly wrong
+    colours. HD is assumed BT.709 and is fine.
+  - `WithQuality` is accepted and has no effect (the stream has the same
+    size for every value), and `latencyMode: "realtime"` is refused at
+    configure although `isConfigSupported` accepts it; the backend
+    notices (it waits for the configuration to take) and configures
+    without it.
+  - No HEVC.
 - **Not done.** Frames always go through CPU memory; handing the
   `VideoFrame` to WebGL as a texture without the copy is future work (it
   needs a way into the renderer that Ebitengine does not offer yet). No
@@ -418,8 +438,14 @@ ffmpeg for H.264 and AV1, the software H.264 encoder's output decodes
 with ffmpeg, and a decoder that the browser closed after a broken keyframe
 decodes the next stream. `examples/player` plays the bundled 720x1280 HEVC
 clip in the browser at 60 frames per second without a skipped frame, with
-seeking. Firefox, Safari, and Chrome on Windows, Linux and Android have
-not been run.
+seeking. In Firefox 146 on the same Mac (headless and with a window, the
+same results) the suite runs with the limits listed above: H.264 and AV1
+decode to RGBA and BGRA (AV1 at 41 dB against ffmpeg, a 10-bit AV1 stream
+included), H.264 encoding with the bitrate modes, keyframe controls,
+profiles and low-latency fallback (45 dB), and the software H.264 encoder
+pass; every NV12 decode test skips, and four tests fail for the colour
+and quality reasons above. Safari, and Chrome on Windows, Linux and
+Android have not been run.
 
 ### AV1 on Linux and Windows
 
@@ -1201,7 +1227,10 @@ Go toolchain runs js/wasm tests in) has no WebCodecs.
 and a page that starts it on a loopback port, opens the page in headless
 Chrome (Chromium or Edge; `HWMEDIACODEC_BROWSER` names another browser,
 `HWMEDIACODEC_BROWSER_HEADED=1` shows the window) and relays the output
-and the exit code. A browser has neither processes nor files, so
+and the exit code. Firefox works the same way
+(`HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox`;
+on macOS the wrapper starts it through `open`, since a Firefox started by
+the path of its binary cannot start its content processes). A browser has neither processes nor files, so
 `internal/testutil` sends its ffmpeg and ffprobe calls and its temporary
 files to the wrapper instead (a random path token, 127.0.0.1 only, the
 tools named in the wrapper's list, files below its own temporary

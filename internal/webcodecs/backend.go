@@ -174,5 +174,5 @@ func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.E
 		}
 		return nil, unsupported(cfg.Codec, codec.Encode, reason)
 	}
-	return newEncoder(cfg, cls, config)
+	return newEncoder(ctx, cfg, cls, config)
 }

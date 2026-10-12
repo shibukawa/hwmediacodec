@@ -34,7 +34,7 @@ facts:
       Windows is run, and best effort for Firefox and Safari until they are.
     targets:
       - {os: js (GOOS=js GOARCH=wasm), browser: Chrome / Edge (Chromium), backend: backend:webcodecs, state: implemented, verified: headless Chrome on an Apple M3}
-      - {os: js (GOOS=js GOARCH=wasm), browser: Firefox, backend: backend:webcodecs, state: implemented, verified: not yet}
+      - {os: js (GOOS=js GOARCH=wasm), browser: Firefox, backend: backend:webcodecs, state: 'partial (RGBA/BGRA decode and H.264 encode; no NV12 decode, colour and quality gaps inside Firefox)', verified: Firefox 146 on an Apple M3 (2026-10-13)}
       - {os: js (GOOS=js GOARCH=wasm), browser: Safari, backend: backend:webcodecs, state: implemented, verified: not yet}
   tier2:
     definition: Best effort; builds and unit tests run in CI with stub backends, hardware verification happens when the author or a contributor has the device; gaps are documented and do not block a release.

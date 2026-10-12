@@ -115,7 +115,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 0c9976618308d6c431d25314d28bb5fcd8d9225180fbcf06e39ca8c9a787952a
     - path: convert_test.go
-      input_hash: e734ef025e26410b97d3ae4ce757e1622cc9247eaa669dcfa82e58c8060c3479
+      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
   videotoolbox-roundtrip-test:
     state: passed
     method: integration
@@ -133,7 +133,7 @@ verification:
         own RGB input; color_space bt709. Apple M3, ffmpeg; run 2026-10-09'
     basis:
     - path: convert_test.go
-      input_hash: e734ef025e26410b97d3ae4ce757e1622cc9247eaa669dcfa82e58c8060c3479
+      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
