@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
@@ -29,13 +28,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 }
 
 dependencies {
     // Built by `ebitenmobile bind` (see ../../README.md); not checked in.
     implementation(files("libs/mobile.aar"))
-    implementation("androidx.appcompat:appcompat:1.7.0")
 }

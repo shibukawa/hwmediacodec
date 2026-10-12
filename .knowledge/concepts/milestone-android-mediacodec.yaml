@@ -61,11 +61,14 @@ acceptance:
     verified_by:
     - android-deps
   aar-builds:
-    text: ebitenmobile bind produces mobile.aar for android/arm64 and android/amd64 from the examples/mobile package.
+    text: ebitenmobile bind produces mobile.aar for android/arm64 and android/amd64 from the examples/mobile package,
+      build-apk.sh turns it into an APK with the SDK tools alone, and the app plays the bundled clip on the
+      Android 14 emulator through the mediacodec backend.
     scope:
       milestone: android-mediacodec
     verified_by:
     - aar-build
+    - emulator-app-run
   emulator-probe-decode-encode:
     text: On the Android 14 emulator, scripts/android_device_check.sh with SOFTWARE=1 decodes B-frame
       H.264, HEVC and AV1 streams identically to ffmpeg in display order, encodes H.264 and HEVC that
@@ -173,9 +176,9 @@ verification:
     - path: examples/mobile/init_mobile.go
       input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
     - path: examples/mobile/android/app/build.gradle.kts
-      input_hash: bd0e89cc9c768dd2d4e568c51424bf07d28dfe8bd5f4ed0f0e0ac14ec3ac786a
-    - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.kt
-      input_hash: e47c0ae7886330758bedfea44f87c8662b35a61e931b3c16b076a03a3aa1c759
+      input_hash: 118c6d520ac82e17cc2c32d8cd42c3981a5dab1e732076290c1cc26dbd6fb3d7
+    - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java
+      input_hash: 325cca59c4d5cf4e523e82a89ab5e047504d44a10cd19e1d9d3cda14fc36227e
   emulator-run:
     state: passed
     method: integration
@@ -197,6 +200,27 @@ verification:
       input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
     - path: internal/reorder/decoder.go
       input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
+  emulator-app-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: android-mediacodec
+      platform: android
+    test: examples/mobile/android/build-apk.sh (aapt2, javac, d8, zipalign, apksigner; no Gradle) on the hwmc34
+      AVD started with a window
+    evidence:
+      path: examples/mobile/android/build-apk.sh
+      note: '2026-10-12: the app shows "android/arm64 mediacodec: h264 decode, hevc decode" and plays
+        waterfall-720p-hevc.mp4 (720x1280) at 60 fps with 0 skipped frames through c2.goldfish.hevc.decoder;
+        an aar built before the MediaImage2 fix showed the ErrUnsupported text on screen instead, as designed'
+    basis:
+    - path: examples/mobile/android/build-apk.sh
+      input_hash: 0118e28b905db3105f9cd95d0eaaf0bb2833eed89826b993e9816e3401403022
+    - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java
+      input_hash: 325cca59c4d5cf4e523e82a89ab5e047504d44a10cd19e1d9d3cda14fc36227e
+    - path: examples/mobile/mobile.go
+      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
   device-run:
     state: not_run
     method: manual
@@ -204,8 +228,8 @@ verification:
     scope:
       milestone: android-mediacodec
       platform: android
-    test: scripts/android_device_check.sh without SOFTWARE and examples/mobile/android (Android Studio or
-      gradle wrapper + installDebug) on the author's tablet
+    test: scripts/android_device_check.sh without SOFTWARE and examples/mobile/android (build-apk.sh, or
+      Android Studio) on the author's tablet
     evidence:
       path: examples/mobile/README.md
       note: no device attached to the development Mac; the author will test with the iPhone run

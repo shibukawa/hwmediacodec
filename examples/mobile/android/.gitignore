@@ -6,4 +6,5 @@
 /.gradle/
 /.idea/
 /local.properties
-/.kotlin/
+/app/build-apk/
+/app/debug.keystore

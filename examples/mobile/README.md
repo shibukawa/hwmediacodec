@@ -81,21 +81,28 @@ go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile bind -target android/ar
     -o mobile/android/app/libs/mobile.aar github.com/shibukawa/hwmediacodec/examples/mobile
 ```
 
-Then open `mobile/android` in Android Studio (it adds the Gradle wrapper on
-first open) and run the `app` configuration on the device, or from the
-command line:
+Then either open `mobile/android` in Android Studio (it adds the Gradle
+wrapper on first open) and run the `app` configuration on the device, or
+build the APK with the SDK's own tools, which needs neither Gradle nor
+Android Studio:
 
 ```sh
 cd mobile/android
-gradle wrapper && ./gradlew installDebug
-adb shell am start -n jp.shibu.hwmediacodec.player/.MainActivity
+./build-apk.sh        # aapt2, javac, d8, zipalign, apksigner; installs and launches when adb sees a device
 ```
+
+An emulator does as a device for this (`android sdk install emulator
+"system-images/android-34/default/arm64-v8a"`, then
+`android emulator create` / `android emulator start`); its codecs are the
+framework's software ones and the goldfish host decoders, so the app says
+`(software decoder)` only where no goldfish decoder exists.
 
 `ebitenmobile bind` compiles the Go code with the NDK's clang (purego needs
 the cgo runtime on Android; the library itself has no cgo code) into
 `mobile.aar`, which the app module references but which is not checked in.
-The activity is one `EbitenView` from the aar
-([`android/app/src/main/java/.../MainActivity.kt`](android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.kt)).
+The activity is one `EbitenView` from the aar in a plain `Activity`, no
+AndroidX
+([`android/app/src/main/java/.../MainActivity.java`](android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java)).
 
 What to expect on a device:
 
@@ -108,7 +115,8 @@ What to expect on a device:
   that quotes the MediaCodec output format; please report it.
 
 `mobile.aar` builds on the Mac with the command above (NDK r27, API 34,
-about a minute); the Gradle app around it has not been built or run here
-(no Gradle or Android Studio on the development machine), and the Go
-backend has not run on a device. See the Android notes in the repository
-README.
+about a minute) and `build-apk.sh` turns it into an APK that runs on the
+Android 14 emulator (that is how the app was verified; the Gradle project
+itself was not built here, there being no Gradle or Android Studio on the
+development machine). The Go backend has not run on a real device. See the
+Android notes in the repository README.
