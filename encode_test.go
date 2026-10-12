@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -73,14 +72,12 @@ func encodeAll(t *testing.T, enc hwmediacodec.Encoder, frames [][]byte, width, h
 
 func writeStream(t *testing.T, name string, pkts []hwmediacodec.Packet) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
+	path := filepath.Join(testutil.TempDir(t), name)
 	var buf bytes.Buffer
 	for _, p := range pkts {
 		buf.Write(p.Data)
 	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteFile(t, path, buf.Bytes())
 	return path
 }
 

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,7 +20,7 @@ func GenerateHEVC(t testing.TB, width, height, frames int, params string, extra 
 	if !HasEncoder(t, "libx265") {
 		t.Skip("ffmpeg has no libx265 encoder")
 	}
-	path := filepath.Join(t.TempDir(), "stream.hevc")
+	path := filepath.Join(TempDir(t), "stream.hevc")
 	if params != "" {
 		params += ":"
 	}
@@ -32,7 +30,7 @@ func GenerateHEVC(t testing.TB, width, height, frames int, params string, extra 
 		"-x265-params", params + "log-level=error"}
 	args = append(args, extra...)
 	args = append(args, "-f", "hevc", path)
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := Command(ffmpeg, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -70,13 +68,13 @@ func FadeSource(width, height int) string {
 func GenerateX265Source(t testing.TB, source string, frames int, args ...string) (string, []X265Frame) {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	x265, err := exec.LookPath("x265")
+	x265, err := LookPath("x265")
 	if err != nil {
 		t.Skip("x265 command line encoder not found in PATH")
 	}
-	dir := t.TempDir()
+	dir := TempDir(t)
 	y4m := filepath.Join(dir, "in.y4m")
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+	cmd := Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", source,
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", y4m)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -86,15 +84,10 @@ func GenerateX265Source(t testing.TB, source string, frames int, args ...string)
 	report := filepath.Join(dir, "frames.csv")
 	full := append([]string{"--log-level", "error", "--csv", report, "--csv-log-level", "1"}, args...)
 	full = append(full, "-o", path, y4m)
-	if out, err := exec.Command(x265, full...).CombinedOutput(); err != nil {
+	if out, err := Command(x265, full...).CombinedOutput(); err != nil {
 		t.Fatalf("x265 failed: %v\n%s", err, tail(out))
 	}
-	f, err := os.Open(report)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	rd := csv.NewReader(f)
+	rd := csv.NewReader(bytes.NewReader(ReadFile(t, report)))
 	rd.FieldsPerRecord = -1
 	rd.TrimLeadingSpace = true
 	rows, err := rd.ReadAll()

@@ -275,7 +275,7 @@ verification:
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
-      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
   dpb-oracle:
     state: passed
     method: integration
@@ -358,7 +358,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: 4de70c455ca376415931156846d2422d3427a171bb2ce5f8893e869e89779ae7
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
   h264-reference-linux:
     state: not_run
     method: integration

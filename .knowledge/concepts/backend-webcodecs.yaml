@@ -1,0 +1,269 @@
+id: backend:webcodecs
+type: backend
+title: Browser WebCodecs (syscall/js)
+summary: The one codec API a web page has. VideoDecoder and VideoEncoder are full codecs behind which
+  the browser puts the platform's engine (VideoToolbox, Media Foundation, VA-API, MediaCodec); the
+  backend in internal/webcodecs drives them through syscall/js in a GOOS=js GOARCH=wasm build, the
+  target Ebitengine builds for the web.
+lifecycle: proposed
+authority: inferred
+aliases:
+- WebCodecs
+- VideoDecoder
+- VideoEncoder
+- browser backend
+- ブラウザ対応
+- GOOS=js
+- wasm
+scope:
+  platform: js
+capabilities:
+  decode/h264:
+    state: implemented
+    about: capability:hwmediacodec/decode-h264
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: bit-exact with ffmpeg in headless Chrome on an Apple M3 (hardware and software decoder), 2026-10-12
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  decode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/decode-hevc
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: bit-exact with ffmpeg in headless Chrome on an Apple M3 (hardware only; Chrome has no software HEVC decoder)
+    verified_by:
+    - chrome-conformance
+  decode/av1:
+    state: implemented
+    about: capability:hwmediacodec/decode-av1
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: 8-bit bit-exact with libdav1d (hardware and software decoder); 10-bit to RGBA/BGRA only, through
+        an OffscreenCanvas because Chrome's 10-bit hardware frames have no pixel format
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  encode/h264:
+    state: implemented
+    about: capability:hwmediacodec/encode-h264
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: ffmpeg decodes the output at about 50 dB luma PSNR (hardware) and 47 dB (Chrome's software encoder)
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  encode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/encode-hevc
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/encoder.go
+    verified_by:
+    - chrome-conformance
+  encode/av1:
+    state: absent
+    about: capability:hwmediacodec/encode-av1
+    authority: authored
+    scope:
+      platform: js
+    evidence:
+      path: internal/webcodecs/backend.go
+      note: NewEncoder(AV1) reports ErrUnsupported; AV1 encoding is a separate slice on every backend
+        (WebCodecs would take "av01.*" with little extra code)
+facts:
+  api_model: full decoder/encoder objects with callbacks on the page's event loop; no native library, no
+    purego, only syscall/js
+  build: GOOS=js GOARCH=wasm with the standard Go toolchain (build tag "js && wasm"); names.go, pixels.go
+    and paramsets.go carry no tag and are unit-tested on every host
+  availability: window and dedicated worker, secure context only (https or localhost); under Node.js and
+    on http pages the constructors are missing, Probe is empty and NewDecoder/NewEncoder report ErrUnsupported
+  key_calls:
+    common:
+    - VideoDecoder.isConfigSupported / VideoEncoder.isConfigSupported (Probe, NewDecoder, NewEncoder, every
+      reconfiguration)
+    - hardwareAcceleration "prefer-hardware" by default, "no-preference" with WithSoftwareFallback
+    - decodeQueueSize / encodeQueueSize and the dequeue event for back-pressure; flush() promise for Flush
+    decode:
+    - 'configure({codec, hardwareAcceleration, codedWidth, codedHeight, colorSpace?}) without a description:
+      chunks are Annex-B (AV1: temporal units) with the parameter sets in every key chunk, prepended from
+      the Go store when a keyframe lacks them'
+    - codec string from the stream (avc1.PPCCLL from the SPS; hev1./hvc1. from profile_tier_level; av01.P.LLT.DD
+      from the sequence header); reconfigured (after a flush) when the string or the coded size changes
+    - EncodedVideoChunk({type key|delta, timestamp, data}); the timestamp is a counter in 10 ms steps that
+      maps back to the packet's PTS and display-order key
+    - 'output: VideoFrame.copyTo into a Uint8Array, then js.CopyBytesToGo; NV12 as is, I420/I420A (software
+      decoders) interleaved to NV12 in Go, RGBA/BGRA through copyTo({format}); the frame is closed when
+      the copy is done'
+    encode:
+    - 'configure({codec, width, height, bitrate, bitrateMode variable|constant|quantizer, framerate, latencyMode,
+      avc|hevc: {format: "annexb"}})'
+    - new VideoFrame(Uint8Array, {format NV12, codedWidth, codedHeight, timestamp, duration, colorSpace
+      bt709 when the Go converter made the pixels})
+    - 'encode(frame, {keyFrame, avc|hevc: {quantizer}}); output chunks copied with EncodedVideoChunk.copyTo'
+  hardware_semantics: Chrome treats prefer-hardware as a requirement (measured 2026-10-12 - with --disable-accelerated-video-decode
+    --disable-accelerated-video-encode Probe is empty). The specification calls it a hint, so another
+    engine may answer for a software codec and Capability.Hardware would then be wrong there.
+  threading: 'A js/wasm Go program shares one thread with the page. Callbacks (js.FuncOf) run only while
+    every goroutine is blocked, and a callback must not block. Send blocks while decodeQueueSize /
+    encodeQueueSize is above zero, Flush on the flush() promise and on the outstanding copies; Receive
+    waits only for a copy that is already running and otherwise reports ErrAgain. No mutex: methods and
+    callbacks never run concurrently. Every wait is bounded by 30 s and the context.'
+  display_order: H.264/HEVC through the Go reorder layer (OutputsDisplayOrder false). Chrome emits presentation
+    order from the picture order counts whatever the chunk timestamps say (measured - the decode-order
+    test saw display order), so WithDecodeOrder returns that; the reorder layer makes the result independent
+    of the engine and of the caller's timestamps at the price of the reorder bound in latency a second
+    time. AV1 native.
+  colour: 'RGBA/BGRA are converted by the browser with the stream''s declared matrix. For a stream that
+    declares none the decoder configuration carries colorSpace from pixconv.ColorFor (BT.709 above 704x576,
+    BT.601 otherwise), because Chrome converted an untagged 320x240 AV1 stream with BT.709 (24.9 dB against
+    ffmpeg) and the same pictures in H.264 with BT.601; with the override all three codecs score 86 dB
+    or more. rgbCopySupported detects a copyTo that ignores the format option (allocationSize of a 4x4
+    NV12 frame); the public API then converts in Go.'
+  opaque_frames: 'VideoFrame.format null (Chrome 10-bit hardware frames on macOS; expected from some Android
+    hardware decoders): copyTo and allocationSize reject them, so for RGB output the frame is drawn on
+    an OffscreenCanvas 2D context and read with getImageData. For NV12 output a stream of more than 8
+    bits or other than 4:2:0 is refused with ErrUnsupported at its keyframe; an opaque 8-bit frame is
+    a BackendError at Receive.'
+  error_model: 'The browser closes a VideoDecoder/VideoEncoder for good when it reports an error. The
+    error (EncodingError and DataError as ErrInvalidData, NotSupportedError as UnsupportedError, else
+    BackendError with the DOMException text) is returned by the next method call and a new codec object
+    is created at the next keyframe.'
+  encoder_notes:
+  - Without a bitrate the configuration carries 0.1 bit per pixel per frame (at least 200 kbit/s), as
+    on Windows and Android, instead of the browser's default.
+  - 'H.264 level from Table A-1 and HEVC level from Table A.8 for the picture size and frame rate, never
+    below 3.1; profile from WithProfile, otherwise High, Main, Constrained Baseline (42E0), Baseline tried
+    in that order.'
+  - WithQuality maps to the quantizer mode with QP round(51 - 45 q) on every frame, the VA-API/NVENC line.
+  - WithBFrames has no WebCodecs equivalent; packets have DTS = PTS.
+  - 'A browser that ignores {format: "annexb"} and returns length-prefixed NAL units with an avcC/hvcC
+    description is handled (paramSets.addDescription + annexb.FromLengthPrefixed); unit-tested against
+    mp4ff-built records, never taken by Chrome.'
+  not_run:
+  - Firefox (headless Firefox cannot start its content processes inside the development sandbox), Safari
+    (no headless mode), Chrome on Windows, Linux and Android
+  - TinyGo (-target wasm shares GOOS=js and syscall/js) and GopherJS, neither tried; WASI targets have
+    no access to the page's API and are out of scope
+  future:
+  - Zero-copy display - hand the VideoFrame to WebGL (texImage2D) instead of copyTo; needs a hook into
+    the renderer that Ebitengine does not expose; Frame.Native() is reserved for it
+  - AV1 encoding ("av01.0.xxM.08"), with the AV1 slice of the other backends
+  - Running the conformance tests in Firefox and Safari (HWMEDIACODEC_BROWSER) and on Windows/Linux/Android Chrome
+  support_tier: proposed (policy:support-tiers browser_proposed)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers
+verification:
+  chrome-conformance:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh . (the root package's conformance tests in headless Chrome through internal/browserexec,
+      ffmpeg on the host as the oracle)
+    evidence:
+      path: scripts/browser_test.sh
+      note: '2026-10-12, Apple M3, go1.27.0: every test passes or skips for a stated reason (TestDecodeOrderOption:
+        the browser reorders natively). Hardware H.264, HEVC and AV1 decode, H.264 and HEVC encode behind
+        Chrome (VideoToolbox).'
+    basis:
+    - path: internal/webcodecs/backend.go
+      input_hash: 969f7a9e224fb40e50c124894a954ae3efcba23b081c060538f70c476c8eb429
+    - path: internal/webcodecs/decoder.go
+      input_hash: cfdbd252d458291b7321d1632beb3ea0f7fc1c17cda571625c8bd7cf9c2178ef
+    - path: internal/webcodecs/encoder.go
+      input_hash: 0ad808f93fb92691571f9ad6034f3b498bc003e5f051e2c2f13ecc1f68c5a3a7
+    - path: internal/webcodecs/jsutil.go
+      input_hash: d574ef87894dffd1b580b7c57b80c6f1f42da49b4f85cd91cacdcb4f6ade6342
+    - path: internal/webcodecs/names.go
+      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+    - path: internal/webcodecs/pixels.go
+      input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
+    - path: internal/webcodecs/paramsets.go
+      input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
+    - path: backends_js.go
+      input_hash: 88895814cb9e08abd68acd7212d2f22a51e293d5924f43639b201019fa8d0623
+  chrome-software:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh ./internal/webcodecs (TestSoftwareDecodeMatchesReference, TestSoftwareEncode,
+      TestDecoderRecoversFromError with hardwareAcceleration forced to prefer-software)
+    evidence:
+      path: internal/webcodecs/browser_js_test.go
+      note: 2026-10-12 - H.264 and AV1 software decode (I420 frames) bit-exact with ffmpeg, HEVC skips (no
+        software decoder), software H.264 encode 47 dB, a broken IDR slice reported as ErrInvalidData and
+        the next stream decoded bit-exactly
+    basis:
+    - path: internal/webcodecs/browser_js_test.go
+      input_hash: 7db0b507b2adc9174a63bebb4421942488fd03e91ddf056b37490438348b8b69
+    - path: internal/webcodecs/decoder.go
+      input_hash: cfdbd252d458291b7321d1632beb3ea0f7fc1c17cda571625c8bd7cf9c2178ef
+    - path: internal/webcodecs/encoder.go
+      input_hash: 0ad808f93fb92691571f9ad6034f3b498bc003e5f051e2c2f13ecc1f68c5a3a7
+  unit-tests:
+    state: passed
+    method: unit
+    authority: observed
+    test: go test ./internal/webcodecs/ (any host; also under Node.js with GOOS=js)
+    evidence:
+      path: internal/webcodecs/names_test.go
+      note: codec strings (H.264 and AV1 against the strings ffmpeg's DASH muxer writes, HEVC against the
+        ISO/IEC 14496-15 examples), level tables, I420 to NV12 with padded layouts, plane bounds, packed
+        RGB rows, frame validation, avcC/hvcC records built by mp4ff
+    basis:
+    - path: internal/webcodecs/names_test.go
+      input_hash: c5c2518a8b4ed822f70ce8604fdf9db6bd8c8f7c85354930c733ffc490db7fac
+    - path: internal/webcodecs/pixels_test.go
+      input_hash: 79826810db871437a14be56dfde165b44532cdeabf6b1499a9dc3d51e288ebfc
+    - path: internal/webcodecs/paramsets_test.go
+      input_hash: ad210b8917498b84eb62c5f129fd4f180914bf6e0a174a7c40cdc3e3f024dfc9
+    - path: internal/webcodecs/names.go
+      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+    - path: internal/webcodecs/pixels.go
+      input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
+    - path: internal/webcodecs/paramsets.go
+      input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
+  other-browsers:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      platform: js
+    test: HWMEDIACODEC_BROWSER=<firefox binary> scripts/browser_test.sh . ./internal/webcodecs ; HWMEDIACODEC_BROWSER=open
+      HWMEDIACODEC_BROWSER_ARGS="-a Safari" for Safari; the same script on Windows, Linux and Android Chrome
+    evidence:
+      path: internal/browserexec/main.go
+      note: headless Firefox 146 did not load the page from the development sandbox (its content processes
+        failed to start there); Safari has no headless mode and was left to the author

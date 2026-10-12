@@ -3,7 +3,6 @@ package testutil
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +13,7 @@ import (
 // HasDecoder reports whether the installed ffmpeg offers the named decoder.
 func HasDecoder(t testing.TB, name string) bool {
 	t.Helper()
-	out, err := exec.Command(RequireFFmpeg(t), "-hide_banner", "-decoders").Output()
+	out, err := Command(RequireFFmpeg(t), "-hide_banner", "-decoders").Output()
 	if err != nil {
 		return false
 	}
@@ -39,14 +38,14 @@ func GenerateAV1(t testing.TB, width, height, frames int, extra ...string) strin
 	if !HasEncoder(t, "libsvtav1") {
 		t.Skip("ffmpeg has no libsvtav1 encoder")
 	}
-	path := filepath.Join(t.TempDir(), fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
+	path := filepath.Join(TempDir(t), fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
 	args := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p",
 		"-c:v", "libsvtav1", "-preset", "10", "-g", "25", "-svtav1-params", "film-grain=0"}
 	args = append(args, extra...)
 	args = append(args, "-f", "ivf", path)
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := Command(ffmpeg, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -65,13 +64,13 @@ func GenerateAV1With(t testing.TB, encoder string, width, height, frames int, ar
 	if !HasEncoder(t, encoder) {
 		t.Skipf("ffmpeg has no %s encoder", encoder)
 	}
-	path := filepath.Join(t.TempDir(), fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
+	path := filepath.Join(TempDir(t), fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
 	cmdArgs := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", "-c:v", encoder}
 	cmdArgs = append(cmdArgs, args...)
 	cmdArgs = append(cmdArgs, "-f", "ivf", path)
-	cmd := exec.Command(ffmpeg, cmdArgs...)
+	cmd := Command(ffmpeg, cmdArgs...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -88,13 +87,13 @@ func GenerateAV1With(t testing.TB, encoder string, width, height, frames int, ar
 func GenerateAV1Aomenc(t testing.TB, width, height, frames int, args ...string) string {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	aomenc, err := exec.LookPath("aomenc")
+	aomenc, err := LookPath("aomenc")
 	if err != nil {
 		t.Skip("aomenc not found in PATH")
 	}
-	dir := t.TempDir()
+	dir := TempDir(t)
 	y4m := filepath.Join(dir, "source.y4m")
-	if out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+	if out, err := Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", y4m).CombinedOutput(); err != nil {
 		t.Fatalf("ffmpeg generate failed: %v\n%s", err, out)
@@ -102,7 +101,7 @@ func GenerateAV1Aomenc(t testing.TB, width, height, frames int, args ...string) 
 	path := filepath.Join(dir, fmt.Sprintf("test_%dx%d_%d.ivf", width, height, frames))
 	cmdArgs := append([]string{"--ivf", "--passes=1", "--quiet"}, args...)
 	cmdArgs = append(cmdArgs, "-o", path, y4m)
-	if out, err := exec.Command(aomenc, cmdArgs...).CombinedOutput(); err != nil {
+	if out, err := Command(aomenc, cmdArgs...).CombinedOutput(); err != nil {
 		t.Fatalf("aomenc failed: %v\n%s", err, out)
 	}
 	return path

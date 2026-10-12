@@ -135,9 +135,21 @@ facts:
     - macOS-only CFString keys are bound as optional and skipped when absent instead of platform branches.
     - purego.NewCallback for the VideoToolbox output callbacks works on ios/arm64 with cgo enabled (Simulator
       run, 2026-10-12).
+  evidence_from_browser:
+    date: '2026-10-12'
+    summary: The browser target has nothing to load - the "foreign" side is the page's JavaScript API, and
+      syscall/js is the standard library's binding for it. No purego, no cgo, no JavaScript source; the
+      decision's intent (no C toolchain, plain go build) holds unchanged on GOOS=js GOARCH=wasm.
+    notes:
+    - JavaScript exceptions arrive as panics of js.Error and are recovered into errors at every call site
+      that can throw.
+    - Callbacks (js.FuncOf) share the one thread with the Go program and must not block; see backend:webcodecs
+      facts.threading.
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
+- relation: tested_by
+  to: milestone:browser-webcodecs
 - relation: tested_by
   to: milestone:windows-media-foundation
 - relation: informed_by

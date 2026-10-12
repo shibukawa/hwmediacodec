@@ -169,10 +169,13 @@ func TestDecodeAV1InvalidData(t *testing.T) {
 // result is compared with ffmpeg's own 10-to-8-bit conversion by PSNR,
 // since the two round differently (53.5 dB measured on an M3; 45 dB is the
 // bar, a wrong plane layout or an unconverted frame scores far below).
+// A browser converts 10-bit pictures to packed RGB only: NV12 is refused
+// there and BGRA works.
 func TestDecodeAV1TenBit(t *testing.T) {
 	requireHardwareDecode(t, hwmediacodec.AV1)
-	if b := decodeBackend(t, hwmediacodec.AV1); b != "videotoolbox" {
-		t.Skipf("the %s backend decodes 8-bit AV1 only and reports ErrUnsupported for 10-bit streams", b)
+	backend := decodeBackend(t, hwmediacodec.AV1)
+	if backend != "videotoolbox" && backend != "webcodecs" {
+		t.Skipf("the %s backend decodes 8-bit AV1 only and reports ErrUnsupported for 10-bit streams", backend)
 	}
 	const minPSNR = 45.0
 	path := testutil.GenerateAV1(t, 320, 240, 30, "-pix_fmt", "yuv420p10le")
@@ -181,22 +184,29 @@ func TestDecodeAV1TenBit(t *testing.T) {
 
 	dec := newDecoderOrSkip(t, hwmediacodec.AV1)
 	defer dec.Close()
-	got := decodeFrames(t, dec, hwmediacodec.AV1, stream, hwmediacodec.NV12)
-	if len(got) != len(want) {
-		t.Fatalf("frame count: got %d want %d", len(got), len(want))
-	}
-	worst := math.Inf(1)
-	for i := range got {
-		if len(got[i].pix) != len(want[i]) {
-			t.Fatalf("frame %d has %d bytes, want %d", i, len(got[i].pix), len(want[i]))
+	if backend == "webcodecs" {
+		units := splitStream(t, hwmediacodec.AV1, stream)
+		if err := dec.Send(context.Background(), hwmediacodec.Packet{Data: units[0]}); !errors.Is(err, hwmediacodec.ErrUnsupported) {
+			t.Fatalf("10-bit stream to NV12: got %v, want ErrUnsupported", err)
 		}
-		if psnr := testutil.PSNR(got[i].pix, want[i]); psnr < worst {
-			worst = psnr
+	} else {
+		got := decodeFrames(t, dec, hwmediacodec.AV1, stream, hwmediacodec.NV12)
+		if len(got) != len(want) {
+			t.Fatalf("frame count: got %d want %d", len(got), len(want))
 		}
-	}
-	t.Logf("worst PSNR of VideoToolbox's 10-to-8-bit NV12 against ffmpeg's: %.2f dB", worst)
-	if worst < minPSNR {
-		t.Fatalf("worst PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+		worst := math.Inf(1)
+		for i := range got {
+			if len(got[i].pix) != len(want[i]) {
+				t.Fatalf("frame %d has %d bytes, want %d", i, len(got[i].pix), len(want[i]))
+			}
+			if psnr := testutil.PSNR(got[i].pix, want[i]); psnr < worst {
+				worst = psnr
+			}
+		}
+		t.Logf("worst PSNR of VideoToolbox's 10-to-8-bit NV12 against ffmpeg's: %.2f dB", worst)
+		if worst < minPSNR {
+			t.Fatalf("worst PSNR %.2f dB is below %.0f dB", worst, minPSNR)
+		}
 	}
 
 	bgra := newDecoderOrSkip(t, hwmediacodec.AV1, hwmediacodec.WithOutputFormat(hwmediacodec.BGRA))

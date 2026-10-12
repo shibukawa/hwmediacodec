@@ -31,6 +31,13 @@ go run github.com/shibukawa/hwmediacodec/examples/imgconv@latest -quality 0.8 pi
 Inside a clone, `cd examples` and then `go run ./player` (and so on) runs the
 same programs from the working tree.
 
+`player` and `texture` also run in a browser, where the frames come from
+WebCodecs: inside a clone,
+`cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player`
+builds the program for `GOOS=js GOARCH=wasm` and serves it on
+`http://localhost:8080/` (a page has no files, so they play the bundled
+clip there).
+
 Without arguments, `player` and `texture` play the bundled clip in
 `assets/`. The library-only directories (`assets`, `internal/fireworks`)
 have no program of their own.

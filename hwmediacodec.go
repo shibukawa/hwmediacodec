@@ -10,6 +10,14 @@
 // Probe result and ErrUnsupported from NewDecoder and NewEncoder; it never
 // fails at link time.
 //
+// In a browser (GOOS=js GOARCH=wasm, the target Ebitengine builds for the
+// web) the engine is the WebCodecs API, with the platform's codecs behind
+// it. Its results arrive on the page's event loop, which a WebAssembly
+// program shares: Send blocks while the browser's codec is saturated and
+// Flush until everything is delivered, and that is when the frames and
+// packets Receive returns come in. A loop that only polls Receive, without
+// ever blocking, starves the browser; the loops below do not.
+//
 // # Status
 //
 // H.264 and HEVC decoding and encoding are implemented on macOS (Apple
@@ -19,21 +27,24 @@
 // VPL (a VPL or Media SDK runtime), on Linux through VA-API (AMD Mesa and
 // Intel drivers), and on Windows (amd64 and arm64) through Media Foundation
 // (decoding with the Microsoft decoder transforms accelerated by Direct3D 11,
-// encoding with the vendor's hardware encoder transforms). Where the NVIDIA
+// encoding with the vendor's hardware encoder transforms), and in browsers
+// through WebCodecs (the codecs the browser reports as hardware ones; RGBA
+// and BGRA output converted by the browser). Where the NVIDIA
 // driver is installed its backend is tried first. Raw frames are NV12, RGBA
 // or BGRA in CPU memory. VideoToolbox converts to and from the RGB formats
 // itself and NVENC takes them as input; everywhere else the library converts
 // in Go, so both formats work for decoding and encoding on every backend.
 // Decoded frames are returned in display order (see NewDecoder and
-// WithDecodeOrder; the Media Foundation and Intel VPL decoders reorder
-// natively, so WithDecodeOrder has no effect on those backends).
+// WithDecodeOrder; the Media Foundation and Intel VPL decoders and the
+// browsers' reorder natively, so WithDecodeOrder has no effect there).
 // AV1 decoding is available where the GPU has an AV1 decoder: on macOS with
 // an Apple M3 or newer and on iOS from the A17 Pro on (8-bit and 10-bit
 // Main profile), and on Linux and
 // Windows through every backend (8-bit Main profile; NVIDIA RTX 30 series,
 // Intel Tiger Lake, AMD RX 6000 series and newer; Media Foundation needs the
-// "AV1 Video Extension" package), and on Android where the SoC has an AV1
-// decoder. A Packet is then one temporal unit (an IVF
+// "AV1 Video Extension" package), on Android where the SoC has an AV1
+// decoder, and in a browser that reports a hardware AV1 decoder. A Packet
+// is then one temporal unit (an IVF
 // frame or ISOBMFF sample; see package mediacontainer/ivf), each yielding one frame in
 // presentation order. No backend encodes AV1 yet.
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
@@ -47,7 +58,7 @@
 //
 // When several backends can serve a request the first registered one wins
 // (on Linux: nvidia, vpl, vaapi; on Windows: nvidia, mediafoundation; one
-// backend each on macOS, iOS and Android); set
+// backend each on macOS, iOS, Android and in the browser); set
 // HWMEDIACODEC_BACKENDS to a comma-separated list of backend names, for
 // example "vaapi" or "vaapi,vpl", to restrict and reorder them.
 //

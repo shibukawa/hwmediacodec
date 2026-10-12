@@ -141,9 +141,9 @@ verification:
     - path: internal/av1/oracle_test.go
       input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
     - path: internal/testutil/av1.go
-      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
     - path: internal/testutil/h264.go
-      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
     - path: internal/vaapi/testdata/fakedriver/Dockerfile
       input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
   fake-vaapi-av1-test:
@@ -189,7 +189,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: internal/testutil/av1.go
-      input_hash: 16a7d689f12db5b48ac5b73fd358b273affcab6f6e48d5817644ed7f01721320
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
     - path: scripts/vaapi_fake_driver_test.sh
       input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
   fake-vaapi-av1-short-signaling-test:

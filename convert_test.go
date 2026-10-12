@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -378,10 +376,8 @@ func TestEncodeConvertedRGB(t *testing.T) {
 					t.Fatalf("got %d packets for %d frames", packets, len(src))
 				}
 
-				path := filepath.Join(t.TempDir(), "converted."+c.String())
-				if err := os.WriteFile(path, stream.Bytes(), 0o644); err != nil {
-					t.Fatal(err)
-				}
+				path := filepath.Join(testutil.TempDir(t), "converted."+c.String())
+				testutil.WriteFile(t, path, stream.Bytes())
 				if cs := testutil.ProbeStreamField(t, path, c, "color_space"); cs != "bt709" {
 					t.Errorf("stream declares colour matrix %q, want bt709", cs)
 				}
@@ -420,8 +416,8 @@ func taggedStream(t *testing.T, c Codec, width, height, frames int, matrix strin
 	if matrix != "" {
 		params += ":colormatrix=" + matrix
 	}
-	path := filepath.Join(t.TempDir(), "tagged."+format)
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+	path := filepath.Join(testutil.TempDir(t), "tagged."+format)
+	cmd := testutil.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", "-c:v", enc, "-preset", "veryfast", key, params, "-f", format, path)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -560,10 +556,8 @@ func TestDecodeConvertedRGB(t *testing.T) {
 				if !tc.ffmpeg {
 					return
 				}
-				path := filepath.Join(t.TempDir(), "stream."+c.String())
-				if err := os.WriteFile(path, stream, 0o644); err != nil {
-					t.Fatal(err)
-				}
+				path := filepath.Join(testutil.TempDir(t), "stream."+c.String())
+				testutil.WriteFile(t, path, stream)
 				want := testutil.ReferenceFrames(t, path, c, RGBA, tc.width, tc.height)
 				if len(want) != frames {
 					t.Fatalf("ffmpeg decoded %d frames, want %d", len(want), frames)

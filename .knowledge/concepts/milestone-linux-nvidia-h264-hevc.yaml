@@ -174,7 +174,7 @@ verification:
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/nvidia/device.go
@@ -202,7 +202,7 @@ verification:
     - path: internal/nvidia/device.go
       input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
   hardware-encode:
     state: not_run
     method: integration
@@ -224,7 +224,7 @@ verification:
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
   cross-build-check:
     state: passed
     method: static
@@ -238,11 +238,11 @@ verification:
         GOOS=linux
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
-      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   host-suite:
     state: passed
     method: integration
@@ -256,11 +256,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 50b18ca13c72dd6916088cf9aa67663dffbf27f14b77b679210e782a5f365b09
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: e8bf38167400ba8680dd22b891706afbc7e76908395fc82e8c10d5aa14ccc963
 facts:
   steps:
   - internal/nvidia/sys - constants, GUIDs and struct mirrors of the SDK 11.1 headers with the struct

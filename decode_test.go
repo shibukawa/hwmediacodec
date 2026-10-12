@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -294,6 +293,8 @@ func TestDecodeOrderOption(t *testing.T) {
 		t.Skip("the Media Foundation decoders reorder natively; WithDecodeOrder has no effect on that backend")
 	case "vpl":
 		t.Skip("the Intel VPL decoder reorders natively; WithDecodeOrder has no effect on that backend")
+	case "webcodecs":
+		t.Skip("a WebCodecs decoder emits presentation order; WithDecodeOrder returns the browser's order")
 	}
 	s := testutil.GenerateStreamBFrames(t, hwmediacodec.H264, 320, 240, 60, 3)
 	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
@@ -618,10 +619,8 @@ func TestDecodeHEVCOpenGOP(t *testing.T) {
 	if tail == nil {
 		t.Skip("the encoder produced no CRA picture after the start")
 	}
-	cut := filepath.Join(t.TempDir(), "tail.hevc")
-	if err := os.WriteFile(cut, tail, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cut := filepath.Join(testutil.TempDir(t), "tail.hevc")
+	testutil.WriteFile(t, cut, tail)
 	want := testutil.ReferenceNV12(t, cut, hwmediacodec.HEVC, w, h)
 	dec = newDecoderOrSkip(t, hwmediacodec.HEVC)
 	defer dec.Close()
