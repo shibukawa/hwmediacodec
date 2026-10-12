@@ -1,4 +1,4 @@
-//go:build linux || (windows && amd64)
+//go:build (linux && !android) || (windows && amd64)
 
 package sys
 

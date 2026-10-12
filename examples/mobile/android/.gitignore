@@ -1,0 +1,10 @@
+# Built by `ebitenmobile bind` (see ../README.md) and by Gradle; not checked in.
+/app/libs/mobile.aar
+/app/libs/mobile-sources.jar
+/build/
+/app/build/
+/.gradle/
+/.idea/
+/local.properties
+/app/build-apk/
+/app/debug.keystore

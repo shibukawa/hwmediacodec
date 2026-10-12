@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !android
 
 // Package vaapi implements the Linux backend on top of VA-API (libva),
 // loaded at run time with purego. VA-API is a slice-level interface: the

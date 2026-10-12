@@ -1,0 +1,277 @@
+id: milestone:ios-videotoolbox
+type: milestone
+title: iOS (iPhone, iPad) through the VideoToolbox backend
+summary: 'Mobile slice, requested on 2026-10-11 ("android, iphone対応には何が必要か？", then "iPhone実機、
+  Androidタブレット実機はあります"): the macOS VideoToolbox backend made to run on iOS. The darwin
+  build constraint already covers ios; what changed is that the hardware-only specification keys
+  (iOS 17 / 17.4) are bound as optional and left out when absent, that a session iOS invalidates
+  behind the application''s back (background) is reopened at the next keyframe by both the decoder
+  and the encoder, that the Linux backends are excluded from GOOS=android builds (android satisfies
+  the linux tag), and that the build itself needs CGO_ENABLED=1 because purego has no cgo-free mode
+  on iOS. Verified in the iOS 26 Simulator with the CLI (decode bit-identical to the Mac, encode
+  decodable by ffmpeg); examples/mobile is the Ebitengine mobile game plus Xcode project for the
+  iPhone run, which is pending. Android (NDK MediaCodec) is the next slice.'
+lifecycle: active
+authority: authored
+aliases:
+- iOS support
+- iPhone対応
+- ios/arm64
+- ebitenmobile
+- kVTInvalidSessionErr
+scope:
+  platform:
+  - ios
+  - darwin
+  gpu: apple-silicon
+  milestone: ios-videotoolbox
+constraints:
+- iOS builds use CGO_ENABLED=1 with Xcode's clang (purego's is_ios.go rejects CGO_ENABLED=0; purego
+  Tier 1 lists iOS and Android as cgo-only). The library has no cgo source; the desktop targets stay
+  CGO_ENABLED=0 (scripts/crossbuild.sh unchanged, scripts/mobilebuild.sh added for ios and android).
+- Every VideoToolbox symbol the backend binds must exist on iOS 11, or be optional. Optional on iOS
+  (checked in the iOS 27.0 SDK headers on 2026-10-11) are kVTVideoDecoderSpecification_{Require,Enable}HardwareAcceleratedVideoDecoder
+  (iOS 17.0), kVTVideoEncoderSpecification_{Require,Enable}HardwareAcceleratedVideoEncoder (iOS 17.4),
+  kVTVideoEncoderSpecification_EnableLowLatencyRateControl (iOS 14.5), kVTCompressionPropertyKey_ConstantBitRate
+  (iOS 16.0) and VTRegisterSupplementalVideoDecoderIfAvailable (iOS 26.2). When a hardware key is
+  absent the specification dictionary stays empty, which is correct because every iOS codec is hardware.
+- kVTInvalidSessionErr (-12903) from VTDecompressionSessionDecodeFrame, VTCompressionSessionEncodeFrame,
+  VTCompressionSessionCompleteFrames or an output callback is recovered inside the backend, never
+  reported from Send or Flush. Decoder - new session on the same format description, frames in flight
+  lost, resume at the next keyframe (the triggering packet itself when it is one). Encoder - new session
+  with the same properties, next frame forced to a keyframe; Flush on a dead session just reopens it.
+- 'GOOS=android compiles only the backend-independent packages: vaapi, vpl and nvidia carry the
+  constraint "linux && !android", files picked by the _linux suffix carry "!android", and backends_other.go
+  covers android. Probe is empty there until the MediaCodec backend exists.'
+- The public API, the ebitenvideo and playback packages and the examples are unchanged in behaviour;
+  the Ebitengine mobile sample exports only a Dummy function because gobind cannot bind ebiten.Game
+  method signatures.
+non_goals:
+- The Android backend (NDK MediaCodec through libmediandk.so) - the next slice; see the plan in
+  requirement:hwmediacodec history.
+- Running on an iPhone from this session (the author has the device; examples/mobile/ios is the app
+  to run). Hardware verification state is recorded as not_run.
+- Metal or IOSurface zero-copy output into Ebitengine; frames still go through CPU memory as on macOS.
+- tvOS and visionOS (the same frameworks exist; nothing was checked).
+acceptance:
+  ios-builds:
+    text: The module builds for ios/arm64 (device), ios/arm64 and ios/amd64 (Simulator) with CGO_ENABLED=1
+      through scripts/mobilebuild.sh, and go vet passes on the videotoolbox packages for ios/arm64.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - mobilebuild-script
+  android-excludes-linux-backends:
+    text: GOOS=android go list -deps of the root package lists no vaapi, vpl or nvidia package; the
+      only remaining Android build error is purego's own cgo requirement.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - android-deps-check
+  simulator-probe-decode-encode:
+    text: The hwmediacodec CLI built for the Simulator, run with xcrun simctl spawn, lists h264 and
+      hevc encode (hardware) and no decoder; decodes a 30-frame B-frame H.264 stream with -software
+      to NV12 and RGBA with per-frame SHA-256 and display order identical to the Mac's hardware decode;
+      encodes 10 NV12 frames to H.264 (ffprobe reads 10 frames, luma PSNR about 49.6 dB) and HEVC
+      (10 frames); transcodes the H.264 stream to HEVC (30 frames).
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - simulator-cli-run
+  session-invalidation-recovery:
+    text: With the live session invalidated by hand after 30 of 60 packets, Send keeps returning nil,
+      frames 0-29 and 50-59 match ffmpeg's and frames 30-49 are skipped; invalidated right before a
+      keyframe, all 30 frames come out; an encoder invalidated after 20 of 40 frames emits every frame,
+      the frame that hit the error as a keyframe, and ffmpeg decodes the resulting stream in full.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - invalidation-tests
+  mobile-sample:
+    text: examples/mobile binds with ebitenmobile into Mobile.xcframework (device and Simulator slices),
+      the Xcode project builds for the Simulator with xcodebuild, installs and launches there showing
+      the clip, and go test ./mobile opens the bundled clip on the Mac.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - mobile-sample-build
+  iphone-run:
+    text: On an iPhone the app's top line reads ios/arm64 videotoolbox with h264/hevc decode and encode
+      (av1 decode from the A17 Pro on), the clip plays in hardware, and it keeps playing after the app
+      is sent to the background and brought back.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - iphone-run
+  existing-suites:
+    text: go test ./... (whole workspace), CGO_ENABLED=0 go test . and scripts/crossbuild.sh pass on the
+      Mac after the change.
+    scope:
+      milestone: ios-videotoolbox
+    verified_by:
+    - existing-suites
+verification:
+  mobilebuild-script:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+    test: scripts/mobilebuild.sh; CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go vet . ./internal/videotoolbox/...
+    evidence:
+      path: scripts/mobilebuild.sh
+      note: 2026-10-12, Xcode 27.0 SDKs (iPhoneOS27.0, iPhoneSimulator27.0), go1.27.0 darwin/arm64, purego
+        v0.11.1; ios/arm64 device, ios/arm64 and ios/amd64 Simulator all ok; android skipped (no NDK on
+        the Mac)
+    basis:
+    - path: scripts/mobilebuild.sh
+      input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+  android-deps-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+    test: GOOS=android GOARCH=arm64 go list -deps .
+    evidence:
+      path: backends_other.go
+      note: 2026-10-12; deps are codec, bitstream, annexb, av1, h264, hevc, pixconv, reorder and the root
+        package only
+    basis:
+    - path: backends_other.go
+      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+    - path: backends_linux.go
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+    - path: internal/nvidia/backend.go
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
+    - path: internal/vaapi/backend.go
+      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+    - path: internal/vpl/backend.go
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+  simulator-cli-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform: ios
+    test: cmd/hwmediacodec built with GOOS=ios GOARCH=arm64 CGO_ENABLED=1 against the iPhoneSimulator SDK,
+      run with xcrun simctl spawn booted on an iPhone 17 Pro (iOS 26.0) Simulator
+    evidence:
+      path: cmd/hwmediacodec/main.go
+      note: '2026-10-12 on an Apple M3: probe = videotoolbox h264 encode hardware, hevc encode hardware;
+        decode -software of a libx264 320x240 30-frame bf=2 stream = 30 frames, SHA-256 per frame and order
+        identical to the host''s hardware decode (NV12), RGBA 30 frames; encode h264 10 frames 34040 bytes
+        2 keyframes, ffprobe 10 frames, PSNR y 49.59 dB; encode hevc 10 frames; transcode h264->hevc 30
+        frames'
+    basis:
+    - path: cmd/hwmediacodec/main.go
+      input_hash: 51e06cd0a0c1d0c4efbd26c029ca3ca6104b77866fbcf575c04da762fa7ebd7d
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: internal/videotoolbox/decoder.go
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+  invalidation-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecoderRecoversFromInvalidatedSession, TestDecoderRecoversAtKeyframe, TestEncoderRecoversFromInvalidatedSession
+    evidence:
+      path: internal/videotoolbox/invalidation_test.go
+      note: 2026-10-12 on an Apple M3; 40 of 60 frames across the decoder invalidation, 30 of 30 at the
+        keyframe, 40 of 40 encoded and decoded by ffmpeg
+    basis:
+    - path: internal/videotoolbox/invalidation_test.go
+      input_hash: 98f95adb52ec398e148afa66cd9961a8ef050c8b65bb5e228a4b1de7dfdb6616
+    - path: internal/videotoolbox/invalidation.go
+      input_hash: a6aafa8abe0b8ef33da8e92680b1dbf5284170a7fbe97469465af6d8e7f88a7c
+    - path: internal/videotoolbox/decoder.go
+      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+  mobile-sample-build:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+    test: go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile bind -target ios -iosversion 15.0 -o mobile/ios/Mobile.xcframework
+      github.com/shibukawa/hwmediacodec/examples/mobile; xcodebuild -scheme HWMediaCodecPlayer -destination
+      'platform=iOS Simulator,name=iPhone 17 Pro' build; xcrun simctl install/launch; go test ./mobile
+    evidence:
+      path: examples/mobile/ios/HWMediaCodecPlayer.xcodeproj/project.pbxproj
+      note: 2026-10-12; bind takes about 30 s on an M3 and writes an 89 MB xcframework (ios-arm64 and
+        ios-arm64_x86_64-simulator, static archives); the app shows the clip through the software decoder
+        in the Simulator
+    basis:
+    - path: examples/mobile/mobile.go
+      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
+    - path: examples/mobile/init_mobile.go
+      input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
+    - path: examples/mobile/mobile_test.go
+      input_hash: d4207ce7b338e8125e74764c53e30530d5931ae86f51536631eec028698b6474
+    - path: examples/mobile/ios/HWMediaCodecPlayer/AppDelegate.swift
+      input_hash: 5a3eaef81f83770031d1db2d122728ca343fc44cc7df1d8f1cf9ea461d34e81c
+    - path: examples/mobile/ios/HWMediaCodecPlayer/Info.plist
+      input_hash: 3e351822d0303f9e8215b579f1afd24f569bbcad28ce090e6378a9eb8f9034f7
+    - path: examples/mobile/ios/HWMediaCodecPlayer.xcodeproj/project.pbxproj
+      input_hash: 7109f4a6de1e4c398946128e43bdf86677f05e9496bb6466096e2b93cb8bb413
+  iphone-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: ios-videotoolbox
+      platform: ios
+    test: Build examples/mobile/ios in Xcode with a signing team and run on the author's iPhone; check the
+      top line, playback, and background/foreground
+    evidence:
+      path: examples/mobile/README.md
+      note: the author has the device; not run from the development session
+  existing-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+    test: go test ./... ; CGO_ENABLED=0 go test . ; scripts/crossbuild.sh
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-12 on an Apple M3, macOS 27, go1.27.0; all workspace modules
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+    - path: hwmediacodec.go
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: extends
+  to: backend:videotoolbox
+- relation: follows
+  to: milestone:darwin-av1-decode
+- relation: constrained_by
+  to: decision:ffi-strategy
+- relation: ranked_by
+  to: policy:support-tiers
+history:
+  planned-2026-10-11:
+    summary: Assessment for the author - iPhone needs the optional keys, background recovery and a cgo-enabled
+      build; Android needs a new NDK MediaCodec backend (AImageReader output, synchronous dequeue, getName
+      for the software check, API 28). The author confirmed an iPhone and an Android tablet are available.
+  ios-implemented-2026-10-12:
+    summary: Optional hardware keys, session invalidation recovery with tests, Android build-tag exclusion,
+      mobilebuild.sh, examples/mobile with the Xcode project; Simulator CLI run and app launch verified;
+      iPhone run pending.

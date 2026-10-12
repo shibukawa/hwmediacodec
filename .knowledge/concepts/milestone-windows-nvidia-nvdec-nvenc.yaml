@@ -173,17 +173,17 @@ verification:
         and "hwmediacodec probe" prints that no backend is available (2026-10-09)
     basis:
     - path: internal/nvidia/sys/cuda.go
-      input_hash: de0897945e323debd3913aded02c2f55d8c311b1e02460967bdf855e1f776e6f
+      input_hash: 332494f3b15c712f02d48ca3513ff6347d312ef110ea37df79d8b486a7836174
     - path: internal/nvidia/sys/cuvid.go
-      input_hash: 472eb8c814a8f33b9d926ce95598927be5c4e88b5984e6896f227674b88ef8e3
+      input_hash: 1c7d98f4771d146732a74c512c658961d2ca0072a5c6566d4759b066f46e7d33
     - path: internal/nvidia/sys/nvenc.go
-      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+      input_hash: 28e4e07e2c7f4ac6ffa47b4c88299aa94db45019ebf3ef3b056cc8f5988ac3ba
     - path: internal/nvidia/sys/lib_linux.go
-      input_hash: 98b1ee6c6dc34406993d9973bbb97981a5bceb896a08dcf37d8b84993e8d8a8f
+      input_hash: 74d2a074311d3469180945f6c394c14b48d4d62e3fbe1a05a92dc13acd903798
     - path: internal/nvidia/sys/ulong_lp64.go
       input_hash: bbbe8d0fe27245f05aa2808caacc4d656422e146db40db4adae4c7689a93890d
     - path: internal/nvidia/sys/sys_test.go
-      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
+      input_hash: 3399eb849d4a7fa97aeb93411e081aae50b8afe3f6627b0672b00febe40636d8
   host-suite:
     state: passed
     method: integration
@@ -196,11 +196,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
+      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
     - path: decode_test.go
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - path: hwmediacodec.go
-      input_hash: 5687004a05e87c4ee346b90c647538d216feaf78c70049ba717dee1cff377ccf
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
   windows-loader-run:
     state: not_run
     method: integration
@@ -220,7 +220,7 @@ verification:
     - path: internal/nvidia/sys/lib_windows.go
       input_hash: e53e8265065a3184c2b1d55ae0f8c704ebeb4c6a5edafe443a4ed642c8ad5b40
     - path: internal/nvidia/sys/sys_test.go
-      input_hash: df77678dd112379161d7d2736f64a9084760a950a615fb6881b52235fd09217d
+      input_hash: 3399eb849d4a7fa97aeb93411e081aae50b8afe3f6627b0672b00febe40636d8
     - path: backends_windows.go
       input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
   hardware-decode-windows:
@@ -239,9 +239,9 @@ verification:
         runs on the Go thread''s system stack (2 MB reserve in a non-cgo Windows binary).'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: dea0efbd5a3df5faef510e100927cfe4beaeba05decb9efedde1dbdcb3af6244
+      input_hash: 02dba1cc13f221737ce10a0e340020b9740bd104e812103bcec37739afbb7c79
     - path: internal/nvidia/device.go
-      input_hash: 60b1688bacfba2d13876c32a1f9be39724182e0424c01a386190519d0acaf13e
+      input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
@@ -262,9 +262,9 @@ verification:
         not Direct3D.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: a0147b17863a22fd6e956ef51bc570c273b55aaf0c138bfe5aa7ba38ac16b9ec
+      input_hash: 48d4560639dc60d02a4003bb1c43d2d1c8da0cebbbd2233c94d9be0d2be2736b
     - path: internal/nvidia/sys/nvenc.go
-      input_hash: 82edd9ce3c4753b66b08347ba63b3b23e4a04f8dea27f91e4c0faca4e01b06c8
+      input_hash: 28e4e07e2c7f4ac6ffa47b4c88299aa94db45019ebf3ef3b056cc8f5988ac3ba
     - path: encode_test.go
       input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
 open_questions:

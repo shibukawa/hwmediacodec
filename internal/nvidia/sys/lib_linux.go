@@ -1,3 +1,5 @@
+//go:build !android
+
 package sys
 
 import "github.com/ebitengine/purego"

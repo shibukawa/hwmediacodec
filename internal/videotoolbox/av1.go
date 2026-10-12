@@ -53,7 +53,13 @@ func (d *decoder) sendAV1(p codec.Packet) error {
 		}
 		d.waitKeyframe = false
 	}
-	return d.decodePacket(av1SampleData(p.Data, tu), inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)})
+	data := av1SampleData(p.Data, tu)
+	in := inflightFrame{pts: p.PTS, order: codec.PacketOrder(p)}
+	err = d.decodePacket(data, in)
+	if err == errSessionInvalid {
+		return d.recoverSession(tu.Keyframe, func() error { return d.decodePacket(data, in) })
+	}
+	return err
 }
 
 // av1SampleData returns the bytes placed in the sample buffer for a
