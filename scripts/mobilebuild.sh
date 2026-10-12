@@ -31,6 +31,11 @@ else
   echo "ios: skipped (no Xcode)"
 fi
 
+# The Android backend's own Go code is type-checked on any host with the
+# mediacodec_typecheck tag (it needs no NDK; nothing runs).
+printf '%-22s ' "android (typecheck)"
+go vet -tags mediacodec_typecheck ./internal/mediacodec/... && echo ok
+
 if [ -n "${ANDROID_NDK_HOME:-}" ]; then
   HOST=$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64
   BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST/bin"

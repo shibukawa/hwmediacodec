@@ -1,15 +1,13 @@
-# mobile: the player on an iPhone or iPad
+# mobile: the player on an iPhone, iPad or Android device
 
 This directory is the video player as an Ebitengine *mobile* game: a Go
 package without a `main`, which `ebitenmobile bind` compiles into a native
-library that a normal Xcode project embeds. The game plays the bundled
-waterfall clip ([`../assets`](../assets)) in a loop through VideoToolbox
-on the device, shows what `hwmediacodec.Probe` found at the top of the
-screen, and pauses and resumes on a tap. `ios/` is the Xcode project.
-
-The same Go package will serve the Android project once the Android backend
-(NDK MediaCodec) exists; until then an Android build plays nothing, since
-`Probe` reports no backend there.
+library that a normal Xcode or Android Studio project embeds. The game
+plays the bundled waterfall clip ([`../assets`](../assets)) in a loop
+through the device's hardware decoder (VideoToolbox on iOS, MediaCodec on
+Android), shows what `hwmediacodec.Probe` found at the top of the screen,
+and pauses and resumes on a tap. `ios/` is the Xcode project, `android/`
+the Android Studio project; both embed the same Go code.
 
 ## Build and run on an iPhone
 
@@ -54,3 +52,48 @@ xcrun simctl launch booted jp.shibu.hwmediacodec.player
 The Go side is tested on the Mac (`go test ./mobile` in `examples` opens the
 clip the way the first frame does); the iOS build itself is covered by
 `scripts/mobilebuild.sh` in the repository root.
+
+## Build and run on an Android device
+
+Requirements: Android Studio with the SDK (API 35) and the NDK installed,
+`ANDROID_HOME` and `ANDROID_NDK_HOME` set, Go 1.27 or later, and a device
+running Android 14 or later with USB debugging on. From the `examples`
+module:
+
+```sh
+cd examples
+go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile bind -target android/arm64,android/amd64 \
+    -androidapi 34 -javapkg jp.shibu.hwmediacodec \
+    -o mobile/android/app/libs/mobile.aar github.com/shibukawa/hwmediacodec/examples/mobile
+```
+
+Then open `mobile/android` in Android Studio (it adds the Gradle wrapper on
+first open) and run the `app` configuration on the device, or from the
+command line:
+
+```sh
+cd mobile/android
+gradle wrapper && ./gradlew installDebug
+adb shell am start -n jp.shibu.hwmediacodec.player/.MainActivity
+```
+
+`ebitenmobile bind` compiles the Go code with the NDK's clang (purego needs
+the cgo runtime on Android; the library itself has no cgo code) into
+`mobile.aar`, which the app module references but which is not checked in.
+The activity is one `EbitenView` from the aar
+([`android/app/src/main/java/.../MainActivity.kt`](android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.kt)).
+
+What to expect on a device:
+
+- The top line reads `android/arm64  mediacodec: h264 decode, h264 encode,
+  hevc decode, hevc encode` (plus `av1 decode` on SoCs with an AV1
+  decoder) and the clip decodes through the vendor's codec. On an emulator
+  only software codecs exist, so the line says `(software decoder)`.
+- `adb logcat -s hwmediacodec Go` shows what the Go side logs. A codec whose
+  output layout the backend does not understand ends with an error on screen
+  that quotes the MediaCodec output format; please report it.
+
+The Android project has not been built or run here (no Android SDK on the
+development machine); the Go backend behind it is type-checked and
+unit-tested on the Mac only. See the Android notes in the repository
+README.

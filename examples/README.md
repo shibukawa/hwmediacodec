@@ -47,7 +47,7 @@ have no program of their own.
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
-| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox on the device); see its README |
+| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec); see its README |
 
 ## convert
 

@@ -41,6 +41,14 @@ func TestProbe(t *testing.T) {
 				t.Errorf("expected videotoolbox hardware %s for %s on Apple Silicon", k.dir, k.codec)
 			}
 		}
+	case runtime.GOOS == "android":
+		// Every entry comes from MediaCodec and names a hardware codec;
+		// an emulator (software codecs only) lists nothing.
+		for _, c := range caps {
+			if c.Backend != "mediacodec" || !c.Hardware {
+				t.Errorf("unexpected capability on android: %+v", c)
+			}
+		}
 	case runtime.GOOS == "linux":
 		// With no GPU, no libva, no libvpl and no NVIDIA driver the list
 		// is empty; with one, every entry comes from a Linux backend.

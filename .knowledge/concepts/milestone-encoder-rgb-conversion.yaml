@@ -113,7 +113,7 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
     - path: convert_test.go
       input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
   videotoolbox-roundtrip-test:

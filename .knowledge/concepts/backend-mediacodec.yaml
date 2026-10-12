@@ -1,0 +1,195 @@
+id: backend:mediacodec
+type: backend
+title: Android MediaCodec (NDK libmediandk.so)
+summary: Android's one codec API. AMediaCodec is a full decoder/encoder (display-order output with the
+  input timestamps attached, parameter sets in a codec-config buffer) behind which the vendor's
+  hardware codecs sit; the NDK C API is driven synchronously through purego in internal/mediacodec.
+lifecycle: proposed
+authority: inferred
+aliases:
+- MediaCodec
+- AMediaCodec
+- libmediandk
+- NDK MediaCodec
+- Android backend
+scope:
+  platform: android
+capabilities:
+  decode/h264:
+    state: implemented
+    about: capability:hwmediacodec/decode-h264
+    authority: inferred
+    scope:
+      platform: android
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/mediacodec/decoder.go
+      note: written and type-checked on macOS (mediacodec_typecheck tag); never run on a device
+    verified_by:
+    - typecheck
+    - layout-unit-tests
+  decode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/decode-hevc
+    authority: inferred
+    scope:
+      platform: android
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/mediacodec/decoder.go
+    verified_by:
+    - typecheck
+  decode/av1:
+    state: implemented
+    about: capability:hwmediacodec/decode-av1
+    authority: inferred
+    scope:
+      platform: android
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/mediacodec/decoder.go
+      note: video/av01; hardware only on SoCs with an AV1 engine, the framework's c2.android.av1.decoder
+        counts as software
+    verified_by:
+    - typecheck
+  encode/h264:
+    state: implemented
+    about: capability:hwmediacodec/encode-h264
+    authority: inferred
+    scope:
+      platform: android
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/mediacodec/encoder.go
+    verified_by:
+    - typecheck
+  encode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/encode-hevc
+    authority: inferred
+    scope:
+      platform: android
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/mediacodec/encoder.go
+    verified_by:
+    - typecheck
+  encode/av1:
+    state: absent
+    about: capability:hwmediacodec/encode-av1
+    authority: authored
+    scope:
+      platform: android
+    evidence:
+      path: internal/mediacodec/backend.go
+      note: NewEncoder(AV1) reports ErrUnsupported; AV1 encoding is a separate slice on every backend
+facts:
+  library: libmediandk.so (dlopen; part of every Android system image, public NDK API)
+  api_model: full decoder/encoder; synchronous dequeue/queue with timeouts, no AMediaCodec_setAsyncNotifyCallback
+  minimum: Android 14 (API 34) documented; every symbol used exists from API 28 (AMediaCodec_getName,
+    AMediaCodec_getInputFormat, AMediaFormat_getRect are the newest); Load fails below and the backend
+    is absent
+  key_calls:
+    common:
+    - AMediaCodec_createDecoderByType / createEncoderByType (video/avc, video/hevc, video/av01)
+    - AMediaCodec_getName (hardware vs software by name), AMediaCodec_configure, start, stop, flush, delete
+    - AMediaCodec_dequeueInputBuffer, getInputBuffer, queueInputBuffer
+    - AMediaCodec_dequeueOutputBuffer, getOutputBuffer, releaseOutputBuffer, getOutputFormat
+    decode:
+    - csd-0/csd-1 from the Go parameter-set store; width/height from the SPS or AV1 sequence header
+      parsed in Go
+    - 'output: COLOR_FormatYUV420Flexible byte buffers; layout from "image-data" (MediaImage2) or
+      color-format 19/21 + stride + slice-height; crop from "crop" or crop-left/top/right/bottom'
+    encode:
+    - color-format 21 (NV12) then 19 (I420); layout from AMediaCodec_getInputFormat
+    - bitrate, bitrate-mode (VBR 1, CBR 2, CQ 0 + quality), frame-rate, i-frame-interval, profile +
+      level, latency/low-latency, max-bframes, color-standard/range/transfer, prepend-sps-pps-to-idr-frames
+    - AMediaCodec_setParameters request-sync for forced keyframes
+  software_names: c2.android.*, OMX.google.*, anything containing ".sw." (MediaCodecInfo.isSoftwareOnly
+    logic); refused unless WithSoftwareFallback; emulators have nothing else
+  display_order: native (OutputsDisplayOrder true), timestamps carried through presentationTimeUs in
+    microseconds, kept unique per in-flight frame
+  ffi_notes:
+  - purego on Android needs CGO_ENABLED=1 (dlfcn_android.go uses internal/cgo); the NDK clang is the
+    C compiler; ebitenmobile bind sets this up.
+  - No callbacks are used, so purego.NewCallback is not exercised by this backend.
+  - string parameters are passed as Go strings (purego converts), AMediaCodecBufferInfo as a 24-byte
+    struct by pointer; layouts asserted in sys/types_test.go.
+  - The backend compiles on any host with the mediacodec_typecheck build tag for go vet; the pure-Go
+    layout code (layout.go, paramsets.go, names.go) carries no tag and is unit-tested everywhere.
+  risks_until_a_device_run:
+  - Whether the NDK output format carries "image-data" (it is the native AMessage Java's getOutputImage
+    reads, so it should); the colour-format fallback covers 19 and 21.
+  - Whether plane offsets in MediaImage2 are relative to the buffer start or to BufferInfo.offset
+    (assumed relative to offset, which is normally 0).
+  - Whether MediaImage2 describes the cropped picture or the whole buffer; the crop rectangle is
+    applied only when it fits inside the layout and is clamped to the stream's own size.
+  - Whether configure needs "level" alongside "profile" on every vendor; both are set.
+  - AV1 csd: none is set; the sequence header travels in-band and is re-inserted at key temporal units.
+  alternative_if_needed: AImageReader (YUV_420_888 with AImage plane accessors) as the decoder's output
+    surface, when a vendor codec's ByteBuffer layout turns out unreadable.
+  support_tier: proposed (policy:support-tiers mobile_proposed)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers
+verification:
+  typecheck:
+    state: passed
+    method: static
+    authority: observed
+    test: go vet -tags mediacodec_typecheck ./internal/mediacodec/... (macOS host, 2026-10-12)
+    evidence:
+      path: scripts/mobilebuild.sh
+    basis:
+    - path: internal/mediacodec/backend.go
+      input_hash: 9d34e03aa492bbc9c9785274841e5c147586d578a151678651420781eb185deb
+    - path: internal/mediacodec/decoder.go
+      input_hash: ed1a74330d20e6ddbd108adf603634ec5c27ce5e0653190a1fdc5eee61e53c1e
+    - path: internal/mediacodec/encoder.go
+      input_hash: 4f08d02c5e458c6b17ff244a02f7d1762c496662099e6e690ec510fa85cd11b9
+    - path: internal/mediacodec/common.go
+      input_hash: 676765d2e770e27ccc44d9a5eff1666dfcdaedc68fba654b2bb35e3760466f21
+    - path: internal/mediacodec/sys/sys.go
+      input_hash: b8fe1267da557caeaacf13a1b8e1c60734d04db5222777b466170288f2dc53ac
+  layout-unit-tests:
+    state: passed
+    method: unit
+    authority: observed
+    test: TestLayoutRoundTrip, TestPackNV12Crop, TestParseMediaImage2, TestLayoutFromColorFormat, TestIsSoftwareCodec,
+      TestProfileLevel, sys.TestLayouts
+    evidence:
+      path: internal/mediacodec/layout_test.go
+    basis:
+    - path: internal/mediacodec/layout.go
+      input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
+    - path: internal/mediacodec/layout_test.go
+      input_hash: a8ab39b84586177f89567372f41cae2e11d20fb1bbfe9c33b759b2ca6c7a8d5a
+    - path: internal/mediacodec/names.go
+      input_hash: 32847ce94c7520bc0c31fc2131f1bb036c4957a9cd1f379023d4fb28288d8409
+    - path: internal/mediacodec/names_test.go
+      input_hash: fecb9d27534a0d795918223fb1037c33653fc7bbecd2625a3a964e82e42cf1ea
+    - path: internal/mediacodec/sys/types.go
+      input_hash: 8a4c1e8bc725160658e7a95dc7d6533e3aabd85f9bbe497af69c77cb962da47d
+    - path: internal/mediacodec/sys/types_test.go
+      input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
+  device-run:
+    state: not_run
+    method: manual
+    authority: authored
+    test: examples/mobile/android on the author's Android tablet, then go test ./... on a device (needs
+      ffmpeg; or the CLI with pre-made streams via adb)
+    evidence:
+      path: examples/mobile/README.md
+      note: no Android SDK/NDK on the development Mac; the user will run the device tests together with
+        the iPhone ones
+history:
+  implemented-2026-10-12:
+    summary: Backend written as the Android half of the mobile request (milestone:android-mediacodec);
+      type-checked and layout-tested on macOS, never run on Android.

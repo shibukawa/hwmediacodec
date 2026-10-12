@@ -8,10 +8,11 @@ NVDEC/NVENC and Media Foundation on Windows)
 through [purego](https://github.com/ebitengine/purego) and, for Media
 Foundation, `golang.org/x/sys/windows` plus raw COM vtable calls, so
 `CGO_ENABLED=0 go build` works and the module cross-compiles from one machine.
-The same VideoToolbox backend serves iOS; there purego needs the cgo
-runtime, so iOS builds set `CGO_ENABLED=1` with Xcode's clang (which
+The same VideoToolbox backend serves iOS, and Android has a backend on
+the NDK MediaCodec API; on both purego needs the cgo runtime, so mobile
+builds set `CGO_ENABLED=1` with the platform's clang (which
 `ebitenmobile bind` does by itself) while the library still contains no cgo
-code. See [iOS notes](#ios-notes).
+code. See [iOS notes](#ios-notes) and [Android notes](#android-notes).
 
 ## Packages
 
@@ -40,6 +41,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
+| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order from the codec; NV12 in CPU memory, RGBA or BGRA converted in Go; **never run on a device: type-checked and unit-tested on the Mac only** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **never run on a device** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -241,9 +243,67 @@ public API behaves as on macOS. What differs:
   produces streams ffmpeg decodes (about 48 dB luma PSNR against the input);
   H.264 to HEVC transcoding works. **No run on an iPhone yet**; the
   `examples/mobile` app is the way to do it.
-- **Android** has no backend yet (`Probe` returns nothing and the Linux
-  backends are excluded from `GOOS=android` builds). The NDK MediaCodec
-  backend is the next slice.
+### Android notes
+
+The Android backend (`internal/mediacodec`) drives the NDK MediaCodec C API
+in `libmediandk.so` through purego: `AMediaCodec_createDecoderByType` and
+`createEncoderByType` for `video/avc`, `video/hevc` and `video/av01`,
+synchronous `dequeueInputBuffer` / `queueInputBuffer` /
+`dequeueOutputBuffer` with short timeouts and no callbacks, and frames in
+CPU memory through MediaCodec's byte buffers. It is the one codec API an
+Android application has; the vendor's hardware codecs (Qualcomm, Exynos,
+MediaTek, Tensor) sit behind it.
+
+- **Build.** `GOOS=android` needs `CGO_ENABLED=1` and the NDK's clang
+  (purego's Android `Dlopen` goes through the cgo runtime), which
+  `ebitenmobile bind -target android` sets up; `scripts/mobilebuild.sh`
+  builds with `ANDROID_NDK_HOME`. On any host
+  `go vet -tags mediacodec_typecheck ./internal/mediacodec/...` type-checks
+  the backend, which is how it was checked here. The Linux backends are
+  excluded from Android builds (`android` satisfies the `linux` constraint).
+- **Minimum version.** Android 14 (API 34) is the documented minimum; the
+  NDK symbols used all exist from API 28, and `Probe` lists nothing on
+  older systems. The sample app sets `minSdk 34`.
+- **Hardware or software.** The NDK cannot enumerate codecs, so the backend
+  creates the default codec for the MIME type and reads its name
+  (`AMediaCodec_getName`): `c2.android.*`, `OMX.google.*` and names
+  containing `.sw.` are the framework's software codecs, which `Probe` leaves
+  out and `NewDecoder`/`NewEncoder` refuse unless `WithSoftwareFallback` is
+  given (on an emulator everything is software). AV1 in particular falls
+  back to the software `c2.android.av1.decoder` on SoCs without an AV1
+  engine.
+- **Decoding.** MediaCodec needs the picture size before it is configured,
+  so the SPS (H.264, HEVC) or sequence header (AV1) is parsed in Go and the
+  decoder is configured when it arrives, with the parameter sets as `csd-0`
+  and `csd-1` as well as in-band; a size change runs the codec to its end of
+  stream and reconfigures it. Output is requested as
+  `COLOR_FormatYUV420Flexible` into byte buffers; the plane layout comes from
+  the output format's `image-data` (a `MediaImage2`, what `getOutputImage`
+  uses in Java) or, without it, from `color-format` 19 or 21 with `stride`
+  and `slice-height`, and the crop rectangle from `crop`. Every layout is
+  packed into NV12 in Go (interleaved CbCr rows are copied, planar or
+  swapped ones interleaved); a layout the backend does not understand is
+  reported as `ErrUnsupported` quoting the format. Frames come out in display
+  order with the input timestamps attached, so `WithDecodeOrder` has no
+  effect, as on Windows.
+- **Encoding.** The encoder is configured with `bitrate` and
+  `bitrate-mode` (VBR, CBR, or CQ with `quality` for `WithQuality`),
+  `frame-rate`, `i-frame-interval` (a hint; keyframes are forced from Go at
+  the exact interval with `request-sync`), `profile` and `level` for
+  `WithProfile`, `latency`/`low-latency` for low-latency mode, `max-bframes`
+  1 or 0, and the BT.709 colour keys for RGB input. Input is asked for as
+  NV12 (`COLOR_FormatYUV420SemiPlanar`) and, when the encoder refuses that,
+  I420 (planar), with the layout from the input format; the caller's NV12
+  frame is copied (and de-interleaved for I420) into the input buffer. The
+  parameter sets arrive in a codec-config buffer and are prepended to every
+  keyframe that lacks them. With B-frames the DTS of a packet is the PTS of
+  the frame given to the encoder at the same position minus one frame.
+- **Status.** Nothing of this has run on a device: there is no Android SDK
+  or NDK on the development Mac, and the emulator has software codecs only.
+  The Go side is type-checked and the buffer-layout code (MediaImage2
+  parsing, NV12/NV21/I420/YV12 packing with strides and crops) is
+  unit-tested on the Mac. `examples/mobile/android` is the app to run on a
+  device; the author's Android tablet is the first target.
 
 ### AV1 on Linux and Windows
 
@@ -1007,7 +1067,7 @@ invalidating the session by hand.
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
-./scripts/mobilebuild.sh      # cgo builds for ios/arm64 (device, Simulator) and, with the NDK, android
+./scripts/mobilebuild.sh      # cgo builds for ios/arm64 (device, Simulator), the Android backend type-check and, with the NDK, android
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)

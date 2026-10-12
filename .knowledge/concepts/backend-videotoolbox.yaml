@@ -40,7 +40,7 @@ capabilities:
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - &id005
       path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
   decode/hevc:
     state: implemented
     about: capability:hwmediacodec/decode-hevc
@@ -88,7 +88,7 @@ capabilities:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
   encode/h264:
     state: implemented
     about: capability:hwmediacodec/encode-h264
@@ -112,7 +112,7 @@ capabilities:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
   encode/hevc:
     state: implemented
     about: capability:hwmediacodec/encode-hevc
@@ -136,7 +136,7 @@ capabilities:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
   encode/av1:
     state: absent
     about: capability:hwmediacodec/encode-av1
@@ -354,7 +354,7 @@ verification:
       input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
     - &id007
       path: probe_test.go
-      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
+      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
     - &id008
       path: internal/testutil/ffmpeg.go
       input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
@@ -393,7 +393,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go
@@ -419,7 +419,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
     - path: internal/codec/codec.go
       input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
     - path: encode_test.go

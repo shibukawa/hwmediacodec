@@ -186,7 +186,7 @@ verification:
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: probe_test.go
-      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
+      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
   hardware-conformance:
     state: not_run
     method: integration
@@ -258,7 +258,7 @@ verification:
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
-      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
+      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
 facts:
   steps:
   - internal/bitstream - lazy emulation-prevention removal (slice headers no longer copy the slice) and

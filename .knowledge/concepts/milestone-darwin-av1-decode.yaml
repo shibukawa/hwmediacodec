@@ -154,7 +154,7 @@ verification:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
     - path: decode_av1_test.go
       input_hash: 7990047dc314967aafb9bd308b26a61743e40934fc1955d496ed84b9dbeffbc3
     - path: decode_test.go
@@ -262,7 +262,7 @@ verification:
       note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
     basis:
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
     - path: internal/videotoolbox/decoder.go
       input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
     - path: decode_av1_test.go
@@ -375,7 +375,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: probe_test.go
-      input_hash: 03ffd0e2b64ebe38dd7c7f4cea9c143719984d7e56a150d6754b3b7ae25c5680
+      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
   build-check:
     state: passed
     method: static

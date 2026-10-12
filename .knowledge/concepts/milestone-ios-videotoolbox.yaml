@@ -125,7 +125,7 @@ verification:
         the Mac)
     basis:
     - path: scripts/mobilebuild.sh
-      input_hash: 47b8217f4327b05ed301aa04fc5e4be7d5e3b19a8581f01442f708e48d8cf6f2
+      input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: internal/videotoolbox/sys/sys_encode.go
@@ -143,7 +143,7 @@ verification:
         package only
     basis:
     - path: backends_other.go
-      input_hash: 9bc67c6d8541fb9985052715214913a2fd221cda6cb14bb7c9cd6cb6e6cff483
+      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: internal/nvidia/backend.go
@@ -254,7 +254,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
     - path: hwmediacodec.go
-      input_hash: a5b689f82822338b96781362c7839af478d16899a94519e05de0ab5cca935ca6
+      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
 relations:
 - relation: implements
   to: requirement:hwmediacodec
