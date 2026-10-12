@@ -207,6 +207,15 @@ facts:
     mode gave 592 kbit/s for a 1 Mbit/s target at 320x240.
   - isConfigSupported answers yes for every codec under prefer-hardware, no-preference and prefer-software
     alike, so the hint does not select anything there.
+  - 'AV1: in a page where isConfigSupported says yes, the AV1 decode tests pass bit-exact with libdav1d (video-range
+    NV12, labelled smpte170m/bt470bg) and VideoEncoder really encodes AV1 (8 of 8 chunks in a throwaway probe).
+    But the answer is settled per page process and differs between page loads: of the loads observed on 2026-10-13
+    several answered no for all three acceleration preferences from the first call on, before any codec had been
+    used, and configure then fails with "NotSupportedError: Codec is not supported"; others answered yes throughout.
+    Ruled out as triggers with throwaway probes: the number of decoders created, decoder errors, decoders left
+    open, elapsed time, encoders, VideoFrame construction, allocationSize/copyTo with a format. Cause unknown
+    (inside Safari). 10-bit AV1 has no path there: NV12 is refused and copyTo does not convert to RGB, so
+    TestDecodeAV1TenBit fails in Safari.'
   - Timers of a tab that is not visible are suspended (a 400 s test timeout and the 30 s stall timeouts
     never fired in a background tab), so every time limit in the backend only holds while the page is
     visible, and the tests need the Safari window in view.
@@ -241,6 +250,12 @@ facts:
     pixel_formats: Chrome builds VideoFrames in every format tried (I420, I422, I444, their 10/12-bit forms, NV12,
       RGBA/RGBX/BGRA/BGRX); Firefox and Safari only I420, I420A, NV12 and the four RGB ones. A frame keeps the
       colorSpace it is given in all three.
+    real_encodes: 'A second throwaway probe encoded 8 frames per codec and latency mode. Chrome - every codec and mode
+      delivers (H.264, HEVC, AV1, VP9, VP8). Firefox - H.264 in quality only (realtime fails configure with EncodingError),
+      no HEVC, AV1/VP9/VP8 in both modes. Safari - H.264 Baseline in both modes, H.264 High in realtime only (quality
+      gives 0 chunks and a flush that never settles), HEVC, VP9 and VP8 in both, AV1 in both when the page has AV1
+      at all. So the Safari stall is specific to High profile H.264 in quality mode; avc/hevc chunks came with
+      a description (no annexb format was asked for in the probe).'
     hdr: mediaCapabilities reports HEVC Main 10 with rec2020 + pq/hlg as supported and power efficient in all three;
       10-bit AV1 with pq/hlg in Firefox and Safari but not in Chrome on this Mac. WebCodecs itself has no query
       for it beyond the codec string.

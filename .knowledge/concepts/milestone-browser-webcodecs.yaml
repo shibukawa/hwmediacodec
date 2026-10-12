@@ -415,7 +415,9 @@ facts:
   - A floating-point test value that rounded differently on arm64 (fused multiply-add) and wasm was replaced
     (quantizer(0.9)).
   next_candidates:
-  - Run scripts/browser_test.sh on the author's Windows machine; AV1 in Safari.
+  - Run scripts/browser_test.sh on the author's Windows machine.
+  - AV1 encoding through WebCodecs - all three browsers really encode it (software in Chrome and Firefox), so the
+    browser backend could be the first with an AV1 encoder when that slice comes.
   - Conformance tests that compare by PSNR where a browser cannot be bit-exact (Safari), so that its run
     is a regression signal.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB

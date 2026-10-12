@@ -449,6 +449,14 @@ Foundation, VA-API or MediaCodec behind it.
     right, the range is not the one asked for.
   - Like Firefox it writes no colour description, with the same effect on
     RGB input at SD sizes.
+  - AV1 decodes there, bit-exact with ffmpeg, when Safari offers it, but
+    Safari does not offer it to every page: whether `isConfigSupported`
+    says yes for AV1 is settled per page process and came out as no in
+    about half of the page loads on the same machine, before the page had
+    used any codec. The library reports what the browser says at that
+    moment, so `Probe` may or may not list `av1 decode` in Safari. 10-bit
+    AV1 has no output there (no NV12 form, and no RGB conversion in
+    `copyTo`).
   - It suspends the timers of a tab that is not visible, and with them
     every timeout of the Go program: run the tests with the Safari window
     in view (`HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a
@@ -484,8 +492,9 @@ pass; every NV12 decode test skips, and four tests fail for the colour
 and quality reasons above. In Safari the same script decodes H.264 and
 HEVC in the right order with the right frame counts (the bit-exact
 comparisons fail, see above), passes the RGBA / BGRA, flush, keyframe,
-profile and low-latency tests and encodes H.264 at 48.7 dB; AV1 was not
-exercised (its Probe did not list it during the run). Chrome on Windows,
+profile and low-latency tests and encodes H.264 at 48.7 dB; the AV1
+decode tests pass bit-exact in a page where Safari offers AV1 and skip
+where it does not. Chrome on Windows,
 Linux and Android has not been run.
 
 ### AV1 on Linux and Windows
