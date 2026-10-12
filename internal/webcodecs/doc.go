@@ -72,5 +72,10 @@
 // Chrome on macOS passes the conformance tests. Firefox on macOS runs
 // with limits that are its own (RGB frames only, the colour description of
 // a configuration ignored for H.264 and not written by its encoder, no
-// constant-quality mode, no HEVC); the README's browser notes list them.
+// constant-quality mode, no HEVC), and so does Safari (full-range frames,
+// which are brought back to the stream's range, an H.264 encoder that
+// works in the "realtime" latency mode only, full-range HEVC output); the
+// README's browser notes list them. Which latency mode an encoder works in
+// is found out with a trial of a few frames the first time a page opens
+// one.
 package webcodecs

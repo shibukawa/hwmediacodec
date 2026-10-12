@@ -3,6 +3,7 @@ package webcodecs
 import (
 	"bytes"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
@@ -157,6 +158,31 @@ func TestCheckAndPackNV12(t *testing.T) {
 	for i, b := range bad {
 		if err := checkNV12(b, w, h); !errors.Is(err, codec.ErrInvalidData) {
 			t.Errorf("bad frame %d: got %v, want ErrInvalidData", i, err)
+		}
+	}
+}
+
+// TestNarrowRange widens every video-range sample the way a browser does
+// (rounding to the nearest full-range value) and checks that narrowRange
+// brings it back.
+func TestNarrowRange(t *testing.T) {
+	widen := func(v float64) byte { return byte(min(max(math.Round(v), 0), 255)) }
+	var luma, chroma []byte
+	for v := 16; v <= 235; v++ {
+		luma = append(luma, widen(float64(v-16)*255/219))
+	}
+	for v := 16; v <= 240; v++ {
+		chroma = append(chroma, widen(float64(v-128)*255/224+128))
+	}
+	narrowRange([][]byte{luma, chroma})
+	for i, v := range luma {
+		if int(v) != 16+i {
+			t.Fatalf("luma %d came back as %d", 16+i, v)
+		}
+	}
+	for i, v := range chroma {
+		if int(v) != 16+i {
+			t.Fatalf("chroma %d came back as %d", 16+i, v)
 		}
 	}
 }

@@ -14,6 +14,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"image/color"
@@ -22,6 +23,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
 	"github.com/shibukawa/hwmediacodec/examples/assets"
+	"github.com/shibukawa/hwmediacodec/examples/internal/fatal"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -136,8 +139,15 @@ func main() {
 		opts = append(opts, ebitenvideo.WithSoftwareFallback())
 	}
 	player, closer, name, vw, vh, err := open(flag.Arg(0), *codecName, *fps, opts)
+	if errors.Is(err, hwmediacodec.ErrUnsupported) && runtime.GOOS == "js" && !*software {
+		// A page has no command line to say -software on; the browser's
+		// software decoder is better than no picture.
+		player, closer, name, vw, vh, err = open(flag.Arg(0), *codecName, *fps, append(opts, ebitenvideo.WithSoftwareFallback()))
+	}
 	if err != nil {
-		log.Fatal(err)
+		// In a browser the message goes into the page.
+		fatal.Exit(err)
+		return
 	}
 	defer closer.Close()
 	defer player.Close()

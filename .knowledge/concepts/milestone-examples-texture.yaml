@@ -107,7 +107,7 @@ verification:
         lit faces) and 10 s (shader) inspected
     basis:
     - path: examples/texture/main.go
-      input_hash: ffc3a2444239f4b2960d589ac9d49c2feaa938291997495c72a9068ea77b061b
+      input_hash: f18a64c839aa12cef68871a8f714bb69ae84aa4c8c7a96b49949ae0b3b454162
     - path: examples/texture/shader.go
       input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
     - path: examples/texture/mesh.go

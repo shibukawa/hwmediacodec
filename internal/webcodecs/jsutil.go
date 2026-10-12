@@ -78,11 +78,18 @@ func backendErr(op, message string) error {
 	return &codec.BackendError{Backend: Name, Op: op, Message: message}
 }
 
-// stallError reports a wait that hit stallTimeout.
-type stallError struct{ op string }
+// stallError reports a wait that hit its limit (stallTimeout unless set).
+type stallError struct {
+	op    string
+	limit time.Duration
+}
 
 func (e *stallError) Error() string {
-	return fmt.Sprintf("hwmediacodec: %s: %s: the browser made no progress within %s", Name, e.op, stallTimeout)
+	limit := e.limit
+	if limit == 0 {
+		limit = stallTimeout
+	}
+	return fmt.Sprintf("hwmediacodec: %s: %s: the browser made no progress within %s", Name, e.op, limit)
 }
 
 // try runs fn and turns the JavaScript exception it throws, if any, into
@@ -133,6 +140,11 @@ func then(promise js.Value, ok, fail func(js.Value)) {
 // value, or the rejection as an error. The page's event loop runs
 // meanwhile. It must not be called from a callback.
 func await(ctx context.Context, op string, promise js.Value) (js.Value, error) {
+	return awaitWithin(ctx, op, promise, stallTimeout)
+}
+
+// awaitWithin is await with a limit of its own.
+func awaitWithin(ctx context.Context, op string, promise js.Value, limit time.Duration) (js.Value, error) {
 	type result struct {
 		value js.Value
 		err   error
@@ -141,7 +153,7 @@ func await(ctx context.Context, op string, promise js.Value) (js.Value, error) {
 	then(promise,
 		func(v js.Value) { ch <- result{value: v} },
 		func(v js.Value) { ch <- result{err: jsError(op, v)} })
-	timer := time.NewTimer(stallTimeout)
+	timer := time.NewTimer(limit)
 	defer timer.Stop()
 	select {
 	case r := <-ch:
@@ -149,7 +161,7 @@ func await(ctx context.Context, op string, promise js.Value) (js.Value, error) {
 	case <-ctx.Done():
 		return js.Undefined(), ctx.Err()
 	case <-timer.C:
-		return js.Undefined(), &stallError{op: op}
+		return js.Undefined(), &stallError{op: op, limit: limit}
 	}
 }
 

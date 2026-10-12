@@ -45,7 +45,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
 | Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on the Android 14 emulator (its decoders), a device run is pending** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Android 14 emulator (software encoders), a device run is pending** |
-| Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only (see the notes); Safari and other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox on macOS with the limits in the notes; Safari and other operating systems not run yet** |
+| Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only and Safari's NV12 is not bit-exact (see the notes); other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox and H.264 / HEVC in Safari on macOS with the limits in the notes; other operating systems not run yet** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -416,6 +416,30 @@ Foundation, VA-API or MediaCodec behind it.
     notices (it waits for the configuration to take) and configures
     without it.
   - No HEVC.
+- **Safari** (macOS, measured 2026-10-13) works for playback and differs
+  in these ways:
+  - Decoded frames are full-range NV12 whatever the stream says. The
+    backend brings them back to the stream's range: luma comes back
+    exactly, chroma only as close as Safari's own resampling allows, so
+    NV12 output is not bit-exact with ffmpeg there (RGBA and BGRA output
+    score 38 dB against ffmpeg's).
+  - Its H.264 encoder stops returning chunks from the fifth frame on in
+    `latencyMode: "quality"`, flush included. The first encoder a page
+    opens therefore proves its latency mode with eight frames, and the
+    backend uses `"realtime"` where `"quality"` does not work (and the
+    other way round, which covers Firefox); the result is remembered for
+    the page. In that mode constant bitrate undershoots (592 kbit/s for a
+    1 Mbit/s target at 320x240) and `WithQuality` is `ErrUnsupported`.
+  - NV12 input without a colour space is taken for full-range samples, so
+    every input frame now says video range. Its HEVC encoder still writes
+    a full-range stream (it converts the samples itself); the picture is
+    right, the range is not the one asked for.
+  - Like Firefox it writes no colour description, with the same effect on
+    RGB input at SD sizes.
+  - It suspends the timers of a tab that is not visible, and with them
+    every timeout of the Go program: run the tests with the Safari window
+    in view (`HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a
+    Safari"`).
 - **Not done.** Frames always go through CPU memory; handing the
   `VideoFrame` to WebGL as a texture without the copy is future work (it
   needs a way into the renderer that Ebitengine does not offer yet). No
@@ -444,8 +468,12 @@ decode to RGBA and BGRA (AV1 at 41 dB against ffmpeg, a 10-bit AV1 stream
 included), H.264 encoding with the bitrate modes, keyframe controls,
 profiles and low-latency fallback (45 dB), and the software H.264 encoder
 pass; every NV12 decode test skips, and four tests fail for the colour
-and quality reasons above. Safari, and Chrome on Windows, Linux and
-Android have not been run.
+and quality reasons above. In Safari the same script decodes H.264 and
+HEVC in the right order with the right frame counts (the bit-exact
+comparisons fail, see above), passes the RGBA / BGRA, flush, keyframe,
+profile and low-latency tests and encodes H.264 at 48.7 dB; AV1 was not
+exercised (its Probe did not list it during the run). Chrome on Windows,
+Linux and Android has not been run.
 
 ### AV1 on Linux and Windows
 

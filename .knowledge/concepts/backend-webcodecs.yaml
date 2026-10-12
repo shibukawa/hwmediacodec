@@ -185,15 +185,36 @@ facts:
     failed for plugin-container.app: Operation not permitted"), in the agent sandbox and in a plain terminal
     alike; started through LaunchServices (open -n -W -g -a Firefox.app --args ...) it works, which is what
     internal/browserexec does on macOS, stopping it by its profile path.'
+  safari_macos_2026-10-13:
+  - 'Decoded VideoFrames are NV12 with colorSpace bt709 / iec61966-2-1 / fullRange true for a video-range
+    stream. Narrowing in Go (narrowRange) restores the luma exactly (PSNR infinite against ffmpeg) and
+    the chroma to about 37 dB - Safari resamples the chroma, so NV12 is not bit-exact there. A stream that
+    is itself full range is left alone.'
+  - 'H.264 encoder, latencyMode quality: takes four frames, never emits a chunk, the fifth encode stays in
+    encodeQueueSize and flush() never settles; one frame plus flush works. realtime works. Hence the trial
+    of trialFrames (8) frames in encoder.open, with the proven/broken mode remembered per page, codec and
+    acceleration; the stream then gets a fresh encoder.'
+  - A VideoFrame built from NV12 bytes without colorSpace is taken as full range (stream marked pc, 28.6
+    dB); with colorSpace fullRange false the H.264 stream is video range. The HEVC encoder converts the
+    samples to full range and marks the stream pc either way (widening the input ourselves made it 21.8
+    dB, so the conversion is Safari's and the stream is consistent).
+  - No colour description written (ffprobe color_space unknown), as in Firefox. bitrateMode quantizer is
+    not supported for H.264 (isConfigSupported false, WithQuality reports ErrUnsupported). CBR in realtime
+    mode gave 592 kbit/s for a 1 Mbit/s target at 320x240.
+  - isConfigSupported answers yes for every codec under prefer-hardware, no-preference and prefer-software
+    alike, so the hint does not select anything there.
+  - Timers of a tab that is not visible are suspended (a 400 s test timeout and the 30 s stall timeouts
+    never fired in a background tab), so every time limit in the backend only holds while the page is
+    visible, and the tests need the Safari window in view.
   not_run:
-  - Safari (no headless mode), Chrome on Windows, Linux and Android
+  - Chrome on Windows, Linux and Android
   - TinyGo (-target wasm shares GOOS=js and syscall/js) and GopherJS, neither tried; WASI targets have
     no access to the page's API and are out of scope
   future:
   - Zero-copy display - hand the VideoFrame to WebGL (texImage2D) instead of copyTo; needs a hook into
     the renderer that Ebitengine does not expose; Frame.Native() is reserved for it
   - AV1 encoding ("av01.0.xxM.08"), with the AV1 slice of the other backends
-  - Running the conformance tests in Safari and on Windows/Linux/Android Chrome
+  - Running the conformance tests on Windows/Linux/Android Chrome; AV1 in Safari
   - 'Firefox colours: write the colour description into the SPS/VPS VUI of encoder output ourselves when
     the browser did not (internal/h264 and internal/hevc have the writers), and give untagged H.264 input
     a tagged SPS for RGB output'
@@ -221,15 +242,15 @@ verification:
     - path: internal/webcodecs/backend.go
       input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
     - path: internal/webcodecs/jsutil.go
-      input_hash: d574ef87894dffd1b580b7c57b80c6f1f42da49b4f85cd91cacdcb4f6ade6342
+      input_hash: 116abe5c1d52eada7f9bd0e19781e2c6c7e6eaad5006e3e8c38c29497572f081
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
-      input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
+      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
     - path: backends_js.go
@@ -249,11 +270,11 @@ verification:
         the next stream decoded bit-exactly
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 57ecb8f24b588b373a679ae915ec0986eda4130df22ef915d5dfb26991a090b9
+      input_hash: 8dc8ab2297874572672958b209aa426c197c016f9d462a52e4bab0b66c9a60db
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
   unit-tests:
     state: passed
     method: unit
@@ -268,13 +289,13 @@ verification:
     - path: internal/webcodecs/names_test.go
       input_hash: c5c2518a8b4ed822f70ce8604fdf9db6bd8c8f7c85354930c733ffc490db7fac
     - path: internal/webcodecs/pixels_test.go
-      input_hash: 79826810db871437a14be56dfde165b44532cdeabf6b1499a9dc3d51e288ebfc
+      input_hash: 6aeb1def3aa781fd5b6c1b514d93e8f83043ee07c7cf155d2974e0209f9a5663
     - path: internal/webcodecs/paramsets_test.go
       input_hash: ad210b8917498b84eb62c5f129fd4f180914bf6e0a174a7c40cdc3e3f024dfc9
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
-      input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
+      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
   firefox-macos:
@@ -297,19 +318,41 @@ verification:
         0.5 and 0.9).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
     - path: internal/browserexec/main.go
-      input_hash: 2647853b1546eaea66f505224d766f6a9e34d20843d2096a1a2f8d9bfc9aff55
+      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
+  safari-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh -p 1 -v . ./internal/webcodecs
+      (Safari 27.0.1 on the M3, the author's running Safari, window in view)
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: '2026-10-13: runs to the end in about 30 s. Pass - RGBA/BGRA decode (38 dB), flush and keyframe
+        resume, the converted-RGB decode cases, H.264 encode (48.7 dB), keyframe interval, forced keyframes,
+        profiles, low latency (43.9 dB), flush and reuse, pipelines. Fail - every bit-exact NV12 comparison
+        (H.264 and HEVC; frame counts and order are right), HEVC encode compared sample by sample (full-range
+        stream, 28.6 dB), RGB input (no colour description, 27.6 dB at 320x240), CBR accuracy (592 kbit/s
+        for 1 Mbit/s). Skip - AV1 (Probe did not list it in this run), WithQuality (ErrUnsupported).'
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+    - path: internal/webcodecs/encoder.go
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
+    - path: internal/webcodecs/pixels.go
+      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
   other-browsers:
     state: not_run
     method: integration
     authority: authored
     scope:
       platform: js
-    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh . ./internal/webcodecs
-      for Safari; the same script on Windows, Linux and Android Chrome
+    test: scripts/browser_test.sh . ./internal/webcodecs on Windows, Linux and Android Chrome
     evidence:
       path: internal/browserexec/main.go
-      note: Safari has no headless mode and was left to the author; no Windows, Linux or Android machine here
+      note: no Windows, Linux or Android machine in this session

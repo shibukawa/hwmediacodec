@@ -2,6 +2,7 @@ package webcodecs
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
@@ -90,6 +91,35 @@ func packedRGB(buf []byte, layout []planeLayout, width, height int) ([]byte, err
 		copy(buf[r*width*4:(r+1)*width*4], buf[l.offset+r*l.stride:])
 	}
 	return buf[:width*4*height], nil
+}
+
+// narrowLuma and narrowChroma map full-range samples (0..255) to video
+// range (Y 16..235, CbCr 16..240).
+var narrowLuma, narrowChroma [256]byte
+
+func init() {
+	for v := range narrowLuma {
+		narrowLuma[v] = byte(math.Round(float64(v)*219/255) + 16)
+		narrowChroma[v] = byte(math.Round(float64(v-128)*224/255) + 128)
+	}
+}
+
+// narrowRange brings the planes of an NV12 picture from full range to
+// video range in place. Safari decodes video-range streams into full-range
+// frames; the frames of this library keep the range of the stream. The
+// luma mapping undoes the browser's expansion exactly (every video-range
+// value comes back), the chroma one to within the browser's own
+// resampling.
+func narrowRange(planes [][]byte) {
+	for i, p := range planes {
+		table := &narrowLuma
+		if i > 0 {
+			table = &narrowChroma
+		}
+		for j, v := range p {
+			p[j] = table[v]
+		}
+	}
 }
 
 // checkNV12 validates a frame given to an encoder of the given size.

@@ -63,6 +63,10 @@ type decoder struct {
 	copying  int   // slots whose copy is still running
 	failure  error // from the error callback, until a method reports it
 
+	// fullRange is the sample range of the configured stream; a frame the
+	// browser widened to full range is brought back to video range.
+	fullRange bool
+
 	waitKeyframe bool
 	flushed      bool
 	closed       bool
@@ -194,6 +198,8 @@ type streamConfig struct {
 	// 4:2:0 (or monochrome) pictures: what an NV12 frame can hold.
 	depth      int
 	subsampled bool
+	// fullRange reports a stream whose samples use the full range.
+	fullRange bool
 }
 
 func (c streamConfig) key() string {
@@ -232,20 +238,12 @@ func (d *decoder) h26xConfig() (streamConfig, error) {
 		return streamConfig{
 			names: []string{h264StreamCodecString(s)}, width: s.CodedWidth(), height: s.CodedHeight(),
 			depth: int(max(s.BitDepthLuma, s.BitDepthChroma)), subsampled: s.ChromaFormatIDC <= 1,
-			color: d.undeclaredColor(signal && s.VUI.ColourDescriptionPresent, s.VUI.MatrixCoefficients, signal && s.VUI.VideoFullRange, s.Width(), s.Height()),
+			fullRange: signal && s.VUI.VideoFullRange,
+			color:     d.undeclaredColor(signal && s.VUI.ColourDescriptionPresent, s.VUI.MatrixCoefficients, signal && s.VUI.VideoFullRange, s.Width(), s.Height()),
 		}, nil
 	default:
-		if d.cfg.OutputFormat == codec.NV12 {
-			s, err := hevc.ParseSPSHead(d.ps.lastSPS)
-			if err != nil {
-				return streamConfig{}, err
-			}
-			return streamConfig{
-				names: hevcCodecStrings(&s.PTL), width: s.Width, height: s.Height,
-				depth: int(max(s.BitDepthLuma, s.BitDepthChroma)), subsampled: s.ChromaFormatIDC <= 1,
-			}, nil
-		}
-		// The colour description is in the VUI, at the end of the SPS.
+		// The colour description and the range are in the VUI, at the end
+		// of the SPS.
 		s, err := hevc.ParseSPS(d.ps.lastSPS)
 		if err != nil {
 			return streamConfig{}, err
@@ -255,7 +253,8 @@ func (d *decoder) h26xConfig() (streamConfig, error) {
 		return streamConfig{
 			names: hevcCodecStrings(&s.PTL), width: s.Width, height: s.Height,
 			depth: int(max(s.BitDepthLuma, s.BitDepthChroma)), subsampled: s.ChromaFormatIDC <= 1,
-			color: d.undeclaredColor(signal && s.VUI.ColourDescriptionPresent, s.VUI.MatrixCoeffs, signal && s.VUI.VideoFullRange, w, h),
+			fullRange: signal && s.VUI.VideoFullRange,
+			color:     d.undeclaredColor(signal && s.VUI.ColourDescriptionPresent, s.VUI.MatrixCoeffs, signal && s.VUI.VideoFullRange, w, h),
 		}, nil
 	}
 }
@@ -311,6 +310,7 @@ func (d *decoder) configure(ctx context.Context, want streamConfig) error {
 		return err
 	}
 	d.configKey = key
+	d.fullRange = want.fullRange
 	return nil
 }
 
@@ -360,7 +360,8 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 			want = streamConfig{
 				names: []string{av1CodecString(sh)}, width: sh.MaxFrameWidth, height: sh.MaxFrameHeight,
 				depth: sh.BitDepth, subsampled: sh.MonoChrome || (sh.SubsamplingX == 1 && sh.SubsamplingY == 1),
-				color: d.undeclaredColor(sh.ColorDescriptionPresent, sh.MatrixCoefficients, sh.FullRange, sh.MaxFrameWidth, sh.MaxFrameHeight),
+				fullRange: sh.FullRange,
+				color:     d.undeclaredColor(sh.ColorDescriptionPresent, sh.MatrixCoefficients, sh.FullRange, sh.MaxFrameWidth, sh.MaxFrameHeight),
 			}
 		}
 	} else {
@@ -471,9 +472,14 @@ func (d *decoder) output(vf js.Value) {
 		format string
 		size   int
 		opts   js.Value
+		// widened: the frame is full range and the stream is not.
+		widened bool
 	)
 	err := try("VideoFrame", func() {
 		ts = int64(vf.Get("timestamp").Float())
+		if cs := vf.Get("colorSpace"); cs.Type() == js.TypeObject {
+			widened = cs.Get("fullRange").Type() == js.TypeBoolean && cs.Get("fullRange").Bool() && !d.fullRange
+		}
 		rect := vf.Get("visibleRect")
 		w, h = rect.Get("width").Int(), rect.Get("height").Int()
 		if v := vf.Get("format"); v.Type() == js.TypeString {
@@ -533,6 +539,9 @@ func (d *decoder) output(vf js.Value) {
 		)
 		if err := try("VideoFrame.copyTo", func() { f, ferr = d.frame(buf, size, layout, format, w, h, in) }); err != nil {
 			ferr = err
+		}
+		if ferr == nil && widened && f.Format == codec.NV12 {
+			narrowRange(f.Planes)
 		}
 		d.jsBufs.put(buf)
 		finish(f, ferr)

@@ -92,7 +92,7 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: examples/player/main.go
-      input_hash: c50ac7f824fbf8ed7133e29ed6c8c50abd36de47451ea80ae48e01d6a6857b8e
+      input_hash: 820ab7f7021446c536cd0363f98ada7af7d9d7fdd0d1ca71809367a01d4b0d9e
     - path: examples/player/main_test.go
       input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
   mesh-test:
@@ -125,7 +125,7 @@ verification:
       note: 2026-10-09 on the M3 - 765 frames recorded, 0 dropped
     basis:
     - path: examples/texture/main.go
-      input_hash: ffc3a2444239f4b2960d589ac9d49c2feaa938291997495c72a9068ea77b061b
+      input_hash: f18a64c839aa12cef68871a8f714bb69ae84aa4c8c7a96b49949ae0b3b454162
     - path: examples/texture/shader.go
       input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
 facts:

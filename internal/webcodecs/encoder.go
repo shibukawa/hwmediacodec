@@ -137,6 +137,11 @@ type encoder struct {
 	flushed    bool
 	closed     bool
 
+	// trying is set while open proves the latency mode with frames of
+	// its own, whose chunks are counted in trialChunks and dropped.
+	trying      bool
+	trialChunks int
+
 	input   js.Value // one frame of NV12 on the JavaScript side
 	scratch []byte
 	out     js.Value // a chunk on its way to Go
@@ -186,56 +191,149 @@ func newEncoder(ctx context.Context, cfg codec.EncoderConfig, cls js.Value, conf
 	return e, nil
 }
 
-// open creates and configures the VideoEncoder if there is none, and
-// waits until the browser has taken the configuration: a browser may
-// answer isConfigSupported with yes and still fail configure, which it
-// reports later, through the error callback (Firefox on macOS does for
-// latencyMode "realtime"). The empty flush behind configure settles when
-// configure has been dealt with. WithLowLatency asks for the low-latency
-// mode where the backend has one, so a configuration that fails with it is
-// tried again without.
+// Whether a latency mode works in this browser is only known once an
+// encoder has been tried in it: isConfigSupported says yes to modes that
+// then fail configure (Firefox on macOS, "realtime": an EncodingError
+// through the error callback) or that take frames and never return a
+// chunk, not even for a flush (Safari on macOS, "quality"). The first
+// encoder opened with a mode therefore proves it with one frame, and the
+// result is remembered for the page: latencyProven and latencyBroken are
+// keyed by codec, acceleration and mode.
+var (
+	latencyProven = map[string]bool{}
+	latencyBroken = map[string]bool{}
+)
+
+const (
+	// trialFrames is the number of frames that prove a latency mode. One
+	// is not enough: Safari's "quality" encoder returns the chunk of a
+	// single frame at the flush and stalls for good from the fifth frame
+	// of a stream on.
+	trialFrames = 8
+	// trialTimeout is how long the trial may take when another mode is
+	// left to try; the last candidate gets stallTimeout.
+	trialTimeout = 3 * time.Second
+)
+
+func (e *encoder) latencyKey(mode string) string {
+	return codecMember(e.cfg.Codec) + " " + acceleration(e.cfg.AllowSoftware) + " " + mode
+}
+
+// open creates and configures the VideoEncoder if there is none, in the
+// latency mode the options ask for or, when that one does not work in
+// this browser, in the other one: WithLowLatency asks for the low-latency
+// mode "where the backend has one", and an encoder that works in that
+// mode only is still an encoder.
 func (e *encoder) open(ctx context.Context) error {
 	if e.opened {
 		return nil
 	}
-	for {
-		var promise js.Value
+	wanted := "quality"
+	if e.cfg.LowLatency {
+		wanted = "realtime"
+	}
+	other := map[string]string{"quality": "realtime", "realtime": "quality"}[wanted]
+	candidates := []string{wanted, other}
+	if latencyBroken[e.latencyKey(wanted)] && !latencyBroken[e.latencyKey(other)] {
+		candidates = []string{other}
+	}
+	var last error
+	for i, mode := range candidates {
+		e.config["latencyMode"] = mode
 		err := try("new VideoEncoder", func() {
 			e.enc = e.class.New(map[string]any{"output": e.onOutput, "error": e.onError})
 			e.enc.Call("addEventListener", "dequeue", e.onDequeue)
 			e.enc.Call("configure", e.config)
-			promise = e.enc.Call("flush")
 		})
 		if err != nil {
 			return err
 		}
 		e.opened = true
-		_, err = await(ctx, "VideoEncoder.configure", promise)
-		if failure := e.takeFailure(); failure != nil {
-			err = failure
-		}
-		if err == nil {
+		if latencyProven[e.latencyKey(mode)] {
 			e.forceNext = true
 			return nil
+		}
+		limit := trialTimeout
+		if i == len(candidates)-1 {
+			limit = stallTimeout
+		}
+		if last = e.trial(ctx, limit); last == nil {
+			// The stream gets an encoder of its own, one that has not
+			// seen the trial frame and its timestamp.
+			latencyProven[e.latencyKey(mode)] = true
+			e.abandon()
+			return e.open(ctx)
 		}
 		e.abandon()
 		e.failure = nil
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		var stalled *stallError
-		if errors.As(err, &stalled) {
-			return err
-		}
-		if e.config["latencyMode"] == "realtime" {
-			e.config["latencyMode"] = "quality"
-			continue
-		}
-		if errors.Is(err, codec.ErrUnsupported) {
-			return err
-		}
-		return unsupported(e.cfg.Codec, codec.Encode, fmt.Sprintf("the browser rejected the configuration for %s: %v", describe(&e.cfg), err))
+		latencyBroken[e.latencyKey(mode)] = true
 	}
+	if errors.Is(last, codec.ErrUnsupported) {
+		return last
+	}
+	return unsupported(e.cfg.Codec, codec.Encode, fmt.Sprintf("the browser's encoder does not work for %s: %v", describe(&e.cfg), last))
+}
+
+// trial encodes a few frames and flushes: the encoder works when their
+// chunks come back and the flush settles within the limit. The chunks are
+// dropped.
+func (e *encoder) trial(ctx context.Context, limit time.Duration) error {
+	e.trying, e.trialChunks = true, 0
+	defer func() { e.trying = false }()
+	var promise js.Value
+	err := try("VideoEncoder.encode", func() {
+		// e.input holds zeroes or the previous picture; either will do.
+		dur := max(e.frameDur, 1000)
+		for i := 0; i < trialFrames; i++ {
+			frame := e.frameClass.New(e.input, e.frameInit(int64(i)*dur))
+			opts := map[string]any{"keyFrame": i == 0}
+			if e.qp > 0 {
+				opts[codecMember(e.cfg.Codec)] = map[string]any{"quantizer": e.qp}
+			}
+			e.enc.Call("encode", frame, opts)
+			frame.Call("close")
+		}
+		promise = e.enc.Call("flush")
+	})
+	if err != nil {
+		return err
+	}
+	_, err = awaitWithin(ctx, "VideoEncoder.flush", promise, limit)
+	if failure := e.takeFailure(); failure != nil {
+		return failure
+	}
+	if err != nil {
+		return err
+	}
+	if e.trialChunks < trialFrames {
+		return backendErr("VideoEncoder.flush", fmt.Sprintf("the encoder returned %d chunks for %d frames", e.trialChunks, trialFrames))
+	}
+	return nil
+}
+
+// frameInit is the VideoFrameBufferInit of an input frame. The colour
+// space always says video range: left out, Safari takes NV12 samples for
+// full-range ones and marks an H.264 stream so. (Its HEVC encoder turns
+// the samples into full-range ones itself and marks the stream
+// accordingly, which is a correct stream of another range.)
+func (e *encoder) frameInit(timestamp int64) map[string]any {
+	init := map[string]any{
+		"format":      "NV12",
+		"codedWidth":  e.cfg.Width,
+		"codedHeight": e.cfg.Height,
+		"timestamp":   timestamp,
+		"colorSpace":  map[string]any{"fullRange": false},
+	}
+	if e.frameDur > 0 {
+		init["duration"] = e.frameDur
+	}
+	if e.cfg.BT709 {
+		init["colorSpace"] = map[string]any{"primaries": "bt709", "transfer": "bt709", "matrix": "bt709", "fullRange": false}
+	}
+	return init
 }
 
 // abandon drops what is in flight and the VideoEncoder itself.
@@ -308,20 +406,8 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	err := try("VideoEncoder.encode", func() {
 		n := packNV12(e.scratch, f)
 		js.CopyBytesToJS(e.input, e.scratch[:n])
-		init := map[string]any{
-			"format":      "NV12",
-			"codedWidth":  e.cfg.Width,
-			"codedHeight": e.cfg.Height,
-			"timestamp":   ts,
-		}
-		if e.frameDur > 0 {
-			init["duration"] = e.frameDur
-		}
-		if e.cfg.BT709 {
-			init["colorSpace"] = map[string]any{"primaries": "bt709", "transfer": "bt709", "matrix": "bt709", "fullRange": false}
-		}
 		// The VideoFrame copies the bytes, so the buffer is free again.
-		frame := e.frameClass.New(e.input, init)
+		frame := e.frameClass.New(e.input, e.frameInit(ts))
 		defer frame.Call("close")
 		opts := map[string]any{"keyFrame": key}
 		if e.qp > 0 {
@@ -405,6 +491,10 @@ func (e *encoder) output(chunk, meta js.Value) {
 		key := chunk.Get("type").String() == "key" || info.keyframe
 		if key && !e.ps.covers(info.kinds) {
 			data = append(e.ps.annexB(), data...)
+		}
+		if e.trying {
+			e.trialChunks++
+			return
 		}
 		ts := int64(chunk.Get("timestamp").Float())
 		pts, ok := e.inflight[ts]

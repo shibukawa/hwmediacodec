@@ -41,7 +41,7 @@ non_goals:
 - Zero-copy display (VideoFrame to a WebGL texture); frames cross into Go memory like on every backend.
 - AV1 encoding (a separate slice on every backend).
 - GopherJS, TinyGo and WASI support.
-- Running Safari, or Chrome on other operating systems, from this session.
+- Running Chrome on other operating systems from this session.
 - Working around Firefox's own gaps (no YUV frames, colour description ignored and not written, no constant
   quality); they are recorded, and the two colour ones have a possible fix in facts.next_candidates.
 acceptance:
@@ -90,9 +90,14 @@ acceptance:
       milestone: browser-webcodecs
     verified_by:
     - firefox-macos
+  safari:
+    text: The same script passes (or skips for stated reasons) in Safari.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - safari-macos
   other-browsers:
-    text: The same script passes (or skips for stated reasons) in Safari and in Chrome on Windows, Linux and
-      Android.
+    text: The same script passes (or skips for stated reasons) in Chrome on Windows, Linux and Android.
     scope:
       milestone: browser-webcodecs
     verified_by:
@@ -158,15 +163,15 @@ verification:
     - path: scripts/browser_test.sh
       input_hash: 801c7e184214edee774b0b5e3553bfd0069f52d4b71c5485abe7fa0f987c6e25
     - path: internal/browserexec/main.go
-      input_hash: 2647853b1546eaea66f505224d766f6a9e34d20843d2096a1a2f8d9bfc9aff55
+      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
     - path: internal/testutil/host.go
       input_hash: 27be1d9f3c40f579bcf45ac6b6338a7118deb7bccbfe6322ac7d5e07d61a1a5f
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
     - path: internal/webcodecs/backend.go
       input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: decode_test.go
@@ -191,11 +196,11 @@ verification:
         after "EncodingError - Error during flush" reported as ErrInvalidData
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 57ecb8f24b588b373a679ae915ec0986eda4130df22ef915d5dfb26991a090b9
+      input_hash: 8dc8ab2297874572672958b209aa426c197c016f9d462a52e4bab0b66c9a60db
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/pixels.go
-      input_hash: 5e3a056b3e217fc4ed6b06b0290fe3fb61cf64a0ccd7bde492c50b63cba4dcb0
+      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
   chrome-no-acceleration:
     state: passed
     method: integration
@@ -228,11 +233,11 @@ verification:
         No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: c50ac7f824fbf8ed7133e29ed6c8c50abd36de47451ea80ae48e01d6a6857b8e
+      input_hash: 820ab7f7021446c536cd0363f98ada7af7d9d7fdd0d1ca71809367a01d4b0d9e
     - path: playback/source.go
       input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
   firefox-macos:
     state: failed
     method: integration
@@ -250,13 +255,35 @@ verification:
         decoder output reported as ErrUnsupported, the encoder confirming configure and falling back from realtime.'
     basis:
     - path: internal/browserexec/main.go
-      input_hash: 2647853b1546eaea66f505224d766f6a9e34d20843d2096a1a2f8d9bfc9aff55
+      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
     - path: internal/webcodecs/decoder.go
-      input_hash: 1f5113fa089e78b8b3b6aa60fc31e5957b7c1e0dbc7bd42df48e823ab27b9d73
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 867b16f818dfe8e32f8dbcd2075c91d0372d0f9fd187f07c6045e94b7e005833
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
     - path: decode_test.go
       input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
+  safari-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh -p 1 -v . ./internal/webcodecs
+      (Safari 27.0.1 on the M3; the author said Safari was running)
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: '2026-10-13: the bit-exact NV12 comparisons, sample-wise HEVC encode checks, RGB-input colour checks
+        and the CBR accuracy check fail for reasons inside Safari; the rest passes; details in backend:webcodecs
+        facts.safari_macos_2026-10-13. The run led to the latency-mode trial, narrowRange and the explicit video
+        range on input frames. The first runs stalled for minutes because the tab was in the background.'
+    basis:
+    - path: internal/webcodecs/encoder.go
+      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
+    - path: internal/webcodecs/decoder.go
+      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+    - path: internal/webcodecs/pixels.go
+      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
   other-browsers:
     state: not_run
     method: integration
@@ -264,11 +291,10 @@ verification:
     scope:
       milestone: browser-webcodecs
       platform: js
-    test: scripts/browser_test.sh . ./internal/webcodecs in Safari (HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a
-      Safari") and in Chrome on Windows, Linux and Android
+    test: scripts/browser_test.sh . ./internal/webcodecs in Chrome on Windows, Linux and Android
     evidence:
       path: internal/browserexec/main.go
-      note: Safari has no headless mode and was left to the author; no other machine in this session
+      note: no other machine in this session
   existing-suites:
     state: passed
     method: integration
@@ -299,6 +325,13 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  safari-run-2026-10-13:
+    summary: 'The author pasted Firefox''s console (the HEVC clip cannot play there and the player exited silently)
+      and said Safari was running. examples/player and examples/texture now fall back to the browser''s software
+      decoder on js and show a fatal error in the page (examples/internal/fatal). The Safari run showed
+      full-range frames, an H.264 encoder that only works in realtime mode and full-range NV12 input, each
+      handled in the backend; diagnostic tests (TestSupportMatrix, TestEncoderBehaviour, TestDecoderBehaviour,
+      HWMEDIACODEC_TEST_DIAGNOSE=1) log what a browser does.'
   firefox-run-2026-10-13:
     summary: The author ran the script with Firefox, which hung; a Firefox started by its binary path cannot
       start content processes on macOS, so the wrapper now starts it through "open". The run that followed
@@ -339,7 +372,11 @@ facts:
   - A floating-point test value that rounded differently on arm64 (fused multiply-add) and wasm was replaced
     (quantizer(0.9)).
   next_candidates:
-  - Run scripts/browser_test.sh in Safari and on the author's Windows machine.
+  - Run scripts/browser_test.sh on the author's Windows machine; AV1 in Safari.
+  - An H.264 copy of the bundled clip (or a file picker) so that examples/player shows something in Firefox,
+    which has no HEVC decoder; the page now says so instead of going blank.
+  - Conformance tests that compare by PSNR where a browser cannot be bit-exact (Safari), so that its run
+    is a regression signal.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB
     output, with the header writers of internal/h264 and internal/hevc.
   - Zero-copy VideoFrame to WebGL for ebitenvideo, if Ebitengine gains a way in.

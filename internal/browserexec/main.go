@@ -95,6 +95,9 @@ const page = `<!doctype html>
   }
   await queue;
   await fetch("exit?code=" + code, {method: "POST"});
+  // A tab opened for this page alone may close itself; where a browser
+  // that was already running took the page (Safari), nothing else would.
+  window.close();
 })();
 </script>
 `

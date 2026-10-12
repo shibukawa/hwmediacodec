@@ -36,7 +36,8 @@ WebCodecs: inside a clone,
 `cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player`
 builds the program for `GOOS=js GOARCH=wasm` and serves it on
 `http://localhost:8080/` (a page has no files, so they play the bundled
-clip there).
+clip there). The clip is HEVC, which Chrome, Edge and Safari decode;
+Firefox has no HEVC decoder and the page says so instead of playing.
 
 Without arguments, `player` and `texture` play the bundled clip in
 `assets/`. The library-only directories (`assets`, `internal/fireworks`)
