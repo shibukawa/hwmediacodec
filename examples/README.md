@@ -36,8 +36,10 @@ WebCodecs: inside a clone,
 `cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player`
 builds the program for `GOOS=js GOARCH=wasm` and serves it on
 `http://localhost:8080/` (a page has no files, so they play the bundled
-clip there). The clip is HEVC, which Chrome, Edge and Safari decode;
-Firefox has no HEVC decoder and the page says so instead of playing.
+clip there). The clip comes in two encodings and the players take the
+first one the browser decodes: HEVC in Chrome, Edge and Safari, H.264 in
+Firefox, which does not decode HEVC through WebCodecs. When nothing
+decodes, the page says why instead of staying blank.
 
 Without arguments, `player` and `texture` play the bundled clip in
 `assets/`. The library-only directories (`assets`, `internal/fireworks`)
@@ -45,7 +47,7 @@ have no program of their own.
 
 | Directory | What it shows |
 | --- | --- |
-| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 HEVC with AAC), embedded so the players run from anywhere |
+| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 with AAC), embedded so the players run from anywhere: as HEVC (1.4 MB) and, for decoders without HEVC, as H.264 (2.5 MB); `assets.Clips()` lists them in the order to try |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |

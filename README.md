@@ -423,7 +423,8 @@ Foundation, VA-API or MediaCodec behind it.
     plays HEVC: `VideoDecoder` takes it only with the preference
     `dom.media.webcodecs.h265.enabled` switched on in `about:config`
     (measured in 157: with it, HEVC decodes, again to `BGRX`). There is no
-    HEVC encoder either way.
+    HEVC encoder either way. The samples therefore bundle their clip in
+    H.264 as well and fall back to it.
 - **Safari** (macOS, measured 2026-10-13) works for playback and differs
   in these ways:
   - Decoded frames are full-range NV12 whatever the stream says. The

@@ -77,6 +77,13 @@ acceptance:
       milestone: browser-webcodecs
     verified_by:
     - player-in-browser
+  clip-plays-without-hevc:
+    text: A browser without an HEVC decoder (Firefox) gets the bundled clip in H.264, chosen without any setting,
+      and automated tests cover the choice and both encodings.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - bundled-clip-fallback
   no-hardware-is-reported:
     text: With accelerated video switched off in Chrome, Probe lists nothing and NewDecoder reports ErrUnsupported
       instead of using the software decoder.
@@ -233,7 +240,7 @@ verification:
         No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: 820ab7f7021446c536cd0363f98ada7af7d9d7fdd0d1ca71809367a01d4b0d9e
+      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
     - path: playback/source.go
       input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
     - path: internal/webcodecs/decoder.go
@@ -284,6 +291,28 @@ verification:
       input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/pixels.go
       input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+  bundled-clip-fallback:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+    test: 'go test ./assets ./internal/bundled ./player ./texture (examples module, natively) ; scripts/browser_test.sh
+      -v ./examples/assets ./examples/internal/bundled in Chrome and with HWMEDIACODEC_BROWSER set to Firefox'
+    evidence:
+      path: examples/internal/bundled/bundled_test.go
+      note: '2026-10-13: Chrome decodes both encodings and Open takes the HEVC one; Firefox 157 skips the HEVC
+        one, decodes the H.264 one (30 frames RGBA in display order) and TestOpenFallsBackToH264 shows a frame;
+        TestChoose covers the order of attempts and the error returned. Not run in Safari.'
+    basis:
+    - path: examples/assets/assets.go
+      input_hash: 3e244ca1acab9f5c2a46d9dfea0f581277fa7be76eccd60ec7702804e0dd42c4
+    - path: examples/assets/assets_test.go
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
+    - path: examples/internal/bundled/bundled.go
+      input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
+    - path: examples/internal/bundled/bundled_test.go
+      input_hash: 387944f1b386560a8621922511896324dac305ab8e3b7cd111674d3183df9755
   other-browsers:
     state: not_run
     method: integration
@@ -325,6 +354,14 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  h264-clip-2026-10-13:
+    summary: 'The author chose the H.264 copy of the bundled clip (over a <video>-element player, whose drawbacks
+      were discussed: a player rather than a decoder, no frame-exact Send/Receive, its own clock) and asked for
+      automated tests. examples/assets now embeds waterfall-720p-h264.mp4 (High@3.1, 2 Mbit/s, 2.5 MB, same 293
+      frames and audio; the ffmpeg command is in assets.go) and lists both in assets.Clips; examples/internal/bundled
+      opens the first one that decodes (HEVC, then H.264; in a browser a second round with software decoders)
+      and is what player and texture use. The codec is never given by the caller for MP4 - the demuxer reads
+      it from the sample entry (avc1/avc3, hvc1/hev1, av01); only raw Annex-B streams need it stated.'
   survey-2026-10-13:
     summary: 'The author asked whether Safari could simply start in realtime mode, doubted that Firefox lacks HEVC,
       and asked for a throwaway survey of codecs and colour information without touching product code. The survey
@@ -379,8 +416,6 @@ facts:
     (quantizer(0.9)).
   next_candidates:
   - Run scripts/browser_test.sh on the author's Windows machine; AV1 in Safari.
-  - An H.264 copy of the bundled clip (or a file picker) so that examples/player shows something in Firefox,
-    which has no HEVC decoder; the page now says so instead of going blank.
   - Conformance tests that compare by PSNR where a browser cannot be bit-exact (Safari), so that its run
     is a regression signal.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB

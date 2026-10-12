@@ -14,7 +14,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"image/color"
@@ -23,7 +22,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -33,7 +31,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
-	"github.com/shibukawa/hwmediacodec/examples/assets"
+	"github.com/shibukawa/hwmediacodec/examples/internal/bundled"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fatal"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
@@ -139,11 +137,6 @@ func main() {
 		opts = append(opts, ebitenvideo.WithSoftwareFallback())
 	}
 	player, closer, name, vw, vh, err := open(flag.Arg(0), *codecName, *fps, opts)
-	if errors.Is(err, hwmediacodec.ErrUnsupported) && runtime.GOOS == "js" && !*software {
-		// A page has no command line to say -software on; the browser's
-		// software decoder is better than no picture.
-		player, closer, name, vw, vh, err = open(flag.Arg(0), *codecName, *fps, append(opts, ebitenvideo.WithSoftwareFallback()))
-	}
 	if err != nil {
 		// In a browser the message goes into the page.
 		fatal.Exit(err)
@@ -174,11 +167,12 @@ func open(path, codecName string, fps float64, opts []ebitenvideo.Option) (p *eb
 	var d *mp4.Demuxer
 	switch {
 	case path == "":
-		name = assets.WaterfallName
-		if d, err = mp4.NewDemuxer(assets.Waterfall()); err != nil {
+		// The bundled clip, in the encoding this machine decodes.
+		p, v, err := bundled.Open(opts...)
+		if err != nil {
 			return nil, nil, "", 0, 0, err
 		}
-		closer = io.NopCloser(nil)
+		return p, io.NopCloser(nil), v.Name, v.Width, v.Height, nil
 	case isMP4(path):
 		name = filepath.Base(path)
 		if d, err = mp4.Open(path); err != nil {

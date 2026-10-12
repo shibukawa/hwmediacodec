@@ -116,7 +116,7 @@ verification:
         clip upright and in its colours (mp4.PacketSource -> playback -> ebitenvideo -> capture -> mp4.VideoFile)
     basis:
     - path: examples/texture/main.go
-      input_hash: f18a64c839aa12cef68871a8f714bb69ae84aa4c8c7a96b49949ae0b3b454162
+      input_hash: 639aa06bec4fe658c7b79d1e1736a26fb044c5d913f42b1a8437b20aa355e8fa
 facts:
   api:
     playback: 'import github.com/shibukawa/hwmediacodec/playback; New(src PacketReader, opts...) / NewStream(r,

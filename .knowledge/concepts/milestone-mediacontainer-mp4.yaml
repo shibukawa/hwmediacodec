@@ -133,7 +133,7 @@ verification:
       note: 2026-10-10 - assets, convert, heif, hls, fireworks, player, texture, thumbnails and webrtc pass
     basis:
     - path: examples/assets/assets_test.go
-      input_hash: 30d532b0276338370eb71ad5e6c98ca69b4bee65674263c8ca1793bcb3163e75
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
 open_questions:
   next-candidates:
     text: Which other sample code should follow - the HLS playlist server (examples/hls/server.go, standard
