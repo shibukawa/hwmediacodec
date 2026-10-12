@@ -171,7 +171,7 @@ verification:
     - path: internal/webcodecs/decoder.go
       input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/backend.go
       input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: decode_test.go
@@ -259,7 +259,7 @@ verification:
     - path: internal/webcodecs/decoder.go
       input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/encoder.go
-      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: decode_test.go
       input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
   safari-macos:
@@ -279,7 +279,7 @@ verification:
         range on input frames. The first runs stalled for minutes because the tab was in the background.'
     basis:
     - path: internal/webcodecs/encoder.go
-      input_hash: 4f4af2739f841ef0c53cdf13cfd986831ae7b27c95cb7eb415698c5ceea1c775
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/decoder.go
       input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
     - path: internal/webcodecs/pixels.go
@@ -325,6 +325,12 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  survey-2026-10-13:
+    summary: 'The author asked whether Safari could simply start in realtime mode, doubted that Firefox lacks HEVC,
+      and asked for a throwaway survey of codecs and colour information without touching product code. The survey
+      (backend:webcodecs facts.survey_2026-10-13) showed Firefox''s WebCodecs HEVC behind a preference, the hardware
+      hint meaning something in Chrome only, and how each browser treats colour; the encoder now prefers realtime
+      for H.264 on WebKit while the trial keeps deciding.'
   safari-run-2026-10-13:
     summary: 'The author pasted Firefox''s console (the HEVC clip cannot play there and the player exited silently)
       and said Safari was running. examples/player and examples/texture now fall back to the browser''s software

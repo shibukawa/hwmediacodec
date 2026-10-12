@@ -234,8 +234,16 @@ func (e *encoder) open(ctx context.Context) error {
 	}
 	other := map[string]string{"quality": "realtime", "realtime": "quality"}[wanted]
 	candidates := []string{wanted, other}
-	if latencyBroken[e.latencyKey(wanted)] && !latencyBroken[e.latencyKey(other)] {
-		candidates = []string{other}
+	if wanted == "quality" && e.cfg.Codec == codec.H264 && webKit() {
+		// WebKit's H.264 encoder is known to stall in "quality" (see
+		// latencyProven; its HEVC encoder does not): begin with the mode
+		// that works instead of waiting trialTimeout to find out. The
+		// trial still decides, so a WebKit that mends the mode loses
+		// nothing but the preference.
+		candidates = []string{other, wanted}
+	}
+	if latencyBroken[e.latencyKey(candidates[0])] && !latencyBroken[e.latencyKey(candidates[1])] {
+		candidates = candidates[1:]
 	}
 	var last error
 	for i, mode := range candidates {

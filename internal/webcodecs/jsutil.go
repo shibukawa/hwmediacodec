@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"syscall/js"
 	"time"
 
@@ -220,6 +221,25 @@ func supported(ctx context.Context, cls js.Value, config map[string]any) (bool, 
 // configuration when set. The tests set it to "prefer-software" to reach
 // the browser's software codecs on a machine that has hardware ones.
 var accelerationOverride string
+
+// webKit reports whether the page runs in a WebKit browser (Safari, and
+// every browser on iOS), going by the user agent string: WebCodecs has no
+// way to ask an encoder how it behaves, and isConfigSupported answers yes
+// to everything there. It only ever orders alternatives that are then
+// tried; nothing is refused because of it.
+func webKit() bool {
+	nav := global.Get("navigator")
+	if nav.Type() != js.TypeObject {
+		return false
+	}
+	ua := nav.Get("userAgent")
+	if ua.Type() != js.TypeString {
+		return false
+	}
+	s := ua.String()
+	// Chromium browsers name AppleWebKit too, for compatibility.
+	return strings.Contains(s, "AppleWebKit") && !strings.Contains(s, "Chrome/") && !strings.Contains(s, "Chromium/") && !strings.Contains(s, "Edg/")
+}
 
 // acceleration is the hardwareAcceleration member of a configuration.
 func acceleration(allowSoftware bool) string {

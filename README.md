@@ -355,8 +355,10 @@ Foundation, VA-API or MediaCodec behind it.
   `hardwareAcceleration: "prefer-hardware"`. Chrome treats that as a
   requirement: with accelerated video decoding switched off it reports
   nothing as supported, `Probe` is empty and the hardware tests skip
-  (measured). The specification calls it a hint, so another browser may
-  answer for a software codec. `WithSoftwareFallback` asks for
+  (measured). The specification calls it a hint, and Firefox and Safari
+  take it as one: they answer the same for every preference (Firefox says
+  yes to "hardware" VP8, Safari to "software" HEVC), so
+  `Capability.Hardware` means something in Chromium browsers only. `WithSoftwareFallback` asks for
   `"no-preference"` and lets the browser's software codecs in (Chrome has
   them for H.264 and AV1 decoding and H.264 encoding, not for HEVC).
 - **One thread.** WebCodecs answers in callbacks on the page's event loop,
@@ -377,8 +379,10 @@ Foundation, VA-API or MediaCodec behind it.
   WebAssembly. For a stream that names no colour matrix the library puts
   its own rule (BT.709 above 704x576, BT.601 otherwise) into the decoder
   configuration, because browsers guess differently per codec (Chrome
-  showed an untagged 320x240 AV1 stream as BT.709). A browser whose
-  `copyTo` does not convert gets the Go conversion instead.
+  showed an untagged 320x240 AV1 stream as BT.709). Chrome follows that
+  configuration for AV1 and ignores it for H.264, where its own guess
+  (BT.601 below 720 lines) agrees with the rule at the usual sizes. A
+  browser whose `copyTo` does not convert gets the Go conversion instead.
 - **10-bit and other pictures without an NV12 form** (4:2:2, 4:4:4) decode
   to RGBA or BGRA only; with NV12 output the stream is refused with
   `ErrUnsupported`. Frames the browser exposes without a pixel format
@@ -396,8 +400,8 @@ Foundation, VA-API or MediaCodec behind it.
   ignores the request for Annex-B output and returns length-prefixed NAL
   units with an `avcC` / `hvcC` record gets them converted (that path has
   unit tests but no browser that takes it was run).
-- **Firefox** (146 on macOS, measured 2026-10-13) differs from Chrome in
-  what it gives the page:
+- **Firefox** (146 and 157 on macOS, measured 2026-10-13) differs from
+  Chrome in what it gives the page:
   - Its decoders hand over `BGRX` frames, not YUV. RGBA and BGRA output
     work; NV12 output is `ErrUnsupported` at `Receive`, because turning RGB
     back into YUV would need the matrix Firefox converted with. A
@@ -415,20 +419,28 @@ Foundation, VA-API or MediaCodec behind it.
     configure although `isConfigSupported` accepts it; the backend
     notices (it waits for the configuration to take) and configures
     without it.
-  - No HEVC.
+  - No HEVC through WebCodecs by default, although its `<video>` element
+    plays HEVC: `VideoDecoder` takes it only with the preference
+    `dom.media.webcodecs.h265.enabled` switched on in `about:config`
+    (measured in 157: with it, HEVC decodes, again to `BGRX`). There is no
+    HEVC encoder either way.
 - **Safari** (macOS, measured 2026-10-13) works for playback and differs
   in these ways:
   - Decoded frames are full-range NV12 whatever the stream says. The
     backend brings them back to the stream's range: luma comes back
     exactly, chroma only as close as Safari's own resampling allows, so
-    NV12 output is not bit-exact with ffmpeg there (RGBA and BGRA output
-    score 38 dB against ffmpeg's).
+    NV12 output is not bit-exact with ffmpeg there. Its `copyTo` does not
+    convert YUV frames to RGB (the option is ignored, which the backend
+    detects), so RGBA and BGRA output are converted in Go from those
+    frames (38 dB against ffmpeg's).
   - Its H.264 encoder stops returning chunks from the fifth frame on in
     `latencyMode: "quality"`, flush included. The first encoder a page
     opens therefore proves its latency mode with eight frames, and the
     backend uses `"realtime"` where `"quality"` does not work (and the
     other way round, which covers Firefox); the result is remembered for
-    the page. In that mode constant bitrate undershoots (592 kbit/s for a
+    the page. In a WebKit browser, recognised by its user agent string,
+    H.264 starts with `"realtime"` so that the proof does not have to wait
+    three seconds for the mode that stalls; the proof still decides. In that mode constant bitrate undershoots (592 kbit/s for a
     1 Mbit/s target at 320x240) and `WithQuality` is `ErrUnsupported`.
   - NV12 input without a colour space is taken for full-range samples, so
     every input frame now says video range. Its HEVC encoder still writes
