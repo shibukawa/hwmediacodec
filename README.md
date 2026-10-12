@@ -41,7 +41,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order from the codec; NV12 in CPU memory, RGBA or BGRA converted in Go; **never run on a device: type-checked and unit-tested on the Mac only** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **never run on a device** |
+| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order from the codec; NV12 in CPU memory, RGBA or BGRA converted in Go; **compiled with the NDK and unit-tested on the Mac, never run on a device** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **never run on a device** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -257,10 +257,15 @@ MediaTek, Tensor) sit behind it.
 - **Build.** `GOOS=android` needs `CGO_ENABLED=1` and the NDK's clang
   (purego's Android `Dlopen` goes through the cgo runtime), which
   `ebitenmobile bind -target android` sets up; `scripts/mobilebuild.sh`
-  builds with `ANDROID_NDK_HOME`. On any host
+  builds with `ANDROID_NDK_HOME`. On a host without the NDK
   `go vet -tags mediacodec_typecheck ./internal/mediacodec/...` type-checks
-  the backend, which is how it was checked here. The Linux backends are
-  excluded from Android builds (`android` satisfies the `linux` constraint).
+  the backend. The Linux backends are excluded from Android builds
+  (`android` satisfies the `linux` constraint). The SDK and NDK come from
+  Homebrew's `android-commandlinetools` cask, whose `android sdk install`
+  (the `android` CLI replaces the deprecated `sdkmanager`) fetches
+  `platforms;android-35`, `build-tools;35.0.0` and `ndk;<version>` under
+  `ANDROID_HOME`; `ebitenmobile` finds the NDK there by itself. See
+  `examples/mobile/README.md`.
 - **Minimum version.** Android 14 (API 34) is the documented minimum; the
   NDK symbols used all exist from API 28, and `Probe` lists nothing on
   older systems. The sample app sets `minSdk 34`.
@@ -298,12 +303,13 @@ MediaTek, Tensor) sit behind it.
   parameter sets arrive in a codec-config buffer and are prepended to every
   keyframe that lacks them. With B-frames the DTS of a packet is the PTS of
   the frame given to the encoder at the same position minus one frame.
-- **Status.** Nothing of this has run on a device: there is no Android SDK
-  or NDK on the development Mac, and the emulator has software codecs only.
-  The Go side is type-checked and the buffer-layout code (MediaImage2
-  parsing, NV12/NV21/I420/YV12 packing with strides and crops) is
-  unit-tested on the Mac. `examples/mobile/android` is the app to run on a
-  device; the author's Android tablet is the first target.
+- **Status.** Nothing of this has run on a device, and the emulator has
+  software codecs only. The module, its test binaries and the CLI compile
+  for `android/arm64` and `android/amd64` with NDK r27 and pass `go vet`
+  there; the buffer-layout code (MediaImage2 parsing, NV12/NV21/I420/YV12
+  packing with strides and crops) is unit-tested on the Mac.
+  `examples/mobile/android` is the app to run on a device; the author's
+  Android tablet is the first target.
 
 ### AV1 on Linux and Windows
 

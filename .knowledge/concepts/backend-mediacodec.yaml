@@ -147,6 +147,16 @@ verification:
     test: go vet -tags mediacodec_typecheck ./internal/mediacodec/... (macOS host, 2026-10-12)
     evidence:
       path: scripts/mobilebuild.sh
+  android-build:
+    state: passed
+    method: static
+    authority: observed
+    test: scripts/mobilebuild.sh with ANDROID_NDK_HOME (go build ./... for android/arm64 and android/amd64),
+      CGO_ENABLED=1 GOOS=android go vet, go test -c of the root and mediacodec packages, go build of cmd/hwmediacodec
+    evidence:
+      path: scripts/mobilebuild.sh
+      note: 2026-10-12 on the Mac with NDK 27.3.13750724 from the android-commandlinetools cask (android sdk
+        install); the first android build exposed ulong_lp64.go wrongly excluded from android, fixed
     basis:
     - path: internal/mediacodec/backend.go
       input_hash: 9d34e03aa492bbc9c9785274841e5c147586d578a151678651420781eb185deb

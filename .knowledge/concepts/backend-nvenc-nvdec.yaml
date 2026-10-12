@@ -244,7 +244,7 @@ verification:
         milestone:windows-nvidia-nvdec-nvenc for the Windows values
     basis:
     - path: internal/nvidia/sys/layout_lp64_test.go
-      input_hash: 1b9001eb82a5cc67419ba6f2690601782a1c7ec60745530ea14357e12c9b70ad
+      input_hash: 90f80807d6638afc04f460b2ce57311b5140526f09dcef6b3233b9244130645c
     - path: internal/nvidia/sys/layout_windows.go
       input_hash: 1120b8a0a817d74e6aada964f29b5df396f519ab3659e56853b8db57b1a3e870
     - path: internal/nvidia/sys/types_cuda.go

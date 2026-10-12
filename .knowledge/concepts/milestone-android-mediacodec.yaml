@@ -59,6 +59,12 @@ acceptance:
       milestone: android-mediacodec
     verified_by:
     - android-deps
+  aar-builds:
+    text: ebitenmobile bind produces mobile.aar for android/arm64 and android/amd64 from the examples/mobile package.
+    scope:
+      milestone: android-mediacodec
+    verified_by:
+    - aar-build
   device-probe-decode-encode:
     text: On an Android 14 device the examples/mobile app's top line names mediacodec with hardware h264
       and hevc decode and encode, the clip plays, and go test ./... (or the CLI with adb-pushed streams)
@@ -140,6 +146,27 @@ verification:
       input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
     - path: backends_other.go
       input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+  aar-build:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: android-mediacodec
+    test: go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile bind -target android/arm64,android/amd64 -androidapi
+      34 -javapkg jp.shibu.hwmediacodec -o mobile/android/app/libs/mobile.aar github.com/shibukawa/hwmediacodec/examples/mobile
+    evidence:
+      path: examples/mobile/README.md
+      note: 2026-10-12 on the Mac with the android-commandlinetools cask (NDK 27.3.13750724, platform 35, JDK 21);
+        the aar holds jni/arm64-v8a and jni/x86_64 libgojni.so; the Gradle app was not built (no Gradle)
+    basis:
+    - path: examples/mobile/mobile.go
+      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
+    - path: examples/mobile/init_mobile.go
+      input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
+    - path: examples/mobile/android/app/build.gradle.kts
+      input_hash: bd0e89cc9c768dd2d4e568c51424bf07d28dfe8bd5f4ed0f0e0ac14ec3ac786a
+    - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.kt
+      input_hash: e47c0ae7886330758bedfea44f87c8662b35a61e931b3c16b076a03a3aa1c759
   device-run:
     state: not_run
     method: manual
@@ -147,21 +174,22 @@ verification:
     scope:
       milestone: android-mediacodec
       platform: android
-    test: ebitenmobile bind -target android/arm64,android/amd64 -androidapi 34 -javapkg jp.shibu.hwmediacodec,
-      then examples/mobile/android on the author's tablet
+    test: examples/mobile/android (Android Studio or gradle wrapper + installDebug) on the author's tablet
     evidence:
       path: examples/mobile/README.md
-      note: no Android SDK or NDK on the development Mac
+      note: no device attached to the development Mac; the author will test with the iPhone run
   existing-suites:
     state: passed
     method: integration
     authority: observed
     scope:
       milestone: android-mediacodec
-    test: go test ./... ; CGO_ENABLED=0 go test . ; scripts/crossbuild.sh ; scripts/mobilebuild.sh
+    test: 'go test ./... ; CGO_ENABLED=0 go test . ; scripts/crossbuild.sh ; scripts/mobilebuild.sh (with the
+      NDK: android/arm64 and android/amd64 compile; vet, test binaries and the CLI compile for android/arm64)'
     evidence:
       path: scripts/mobilebuild.sh
-      note: 2026-10-12 on an Apple M3
+      note: 2026-10-12 on an Apple M3; NDK 27.3.13750724 installed through the android CLI (android sdk install),
+        which replaces the deprecated sdkmanager in cmdline-tools 15859902
     basis:
     - path: scripts/mobilebuild.sh
       input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee

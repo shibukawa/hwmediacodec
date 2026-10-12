@@ -55,10 +55,24 @@ clip the way the first frame does); the iOS build itself is covered by
 
 ## Build and run on an Android device
 
-Requirements: Android Studio with the SDK (API 35) and the NDK installed,
-`ANDROID_HOME` and `ANDROID_NDK_HOME` set, Go 1.27 or later, and a device
-running Android 14 or later with USB debugging on. From the `examples`
-module:
+Requirements: the Android SDK with platform 35, build-tools and an NDK,
+a JDK (17 or 21), Go 1.27 or later, and a device running Android 14 or
+later with USB debugging on. On a Mac without Android Studio, Homebrew's
+command-line tools are enough; the `android` CLI in them replaces the
+deprecated `sdkmanager`:
+
+```sh
+brew install --cask android-commandlinetools temurin@21
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export PATH="$ANDROID_HOME/platform-tools:$PATH"
+android sdk install platform-tools "platforms;android-35" "build-tools;35.0.0" "ndk;27.3.13750724"
+android sdk list 'ndk*'     # the versions on offer
+```
+
+`ebitenmobile bind` finds the newest NDK under `$ANDROID_HOME/ndk` by
+itself; `ANDROID_NDK_HOME` is only needed by `scripts/mobilebuild.sh`.
+From the `examples` module:
 
 ```sh
 cd examples
@@ -93,7 +107,8 @@ What to expect on a device:
   output layout the backend does not understand ends with an error on screen
   that quotes the MediaCodec output format; please report it.
 
-The Android project has not been built or run here (no Android SDK on the
-development machine); the Go backend behind it is type-checked and
-unit-tested on the Mac only. See the Android notes in the repository
+`mobile.aar` builds on the Mac with the command above (NDK r27, API 34,
+about a minute); the Gradle app around it has not been built or run here
+(no Gradle or Android Studio on the development machine), and the Go
+backend has not run on a device. See the Android notes in the repository
 README.

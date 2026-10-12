@@ -181,7 +181,7 @@ verification:
     - path: internal/nvidia/sys/lib_linux.go
       input_hash: 74d2a074311d3469180945f6c394c14b48d4d62e3fbe1a05a92dc13acd903798
     - path: internal/nvidia/sys/ulong_lp64.go
-      input_hash: a0c5f04610bf4de27b1ae040b71b8dccc7fd717337e0bfdc338e415476b3c3cc
+      input_hash: bbbe8d0fe27245f05aa2808caacc4d656422e146db40db4adae4c7689a93890d
     - path: internal/nvidia/sys/sys_test.go
       input_hash: 3399eb849d4a7fa97aeb93411e081aae50b8afe3f6627b0672b00febe40636d8
   host-suite:
