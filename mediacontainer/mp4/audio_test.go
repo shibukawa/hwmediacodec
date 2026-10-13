@@ -219,6 +219,34 @@ func TestMuxAudioWithVideo(t *testing.T) {
 			if vs.FrameCount() != v.SampleCount() || math.Abs(as.Seconds()-wantDur) > 0.002 {
 				t.Errorf("%d pictures and %.4f s of sound; want %d and %.4f s", vs.FrameCount(), as.Seconds(), v.SampleCount(), wantDur)
 			}
+			// The demuxer reads the offset back: both packet sources
+			// count from the start of the presentation.
+			out, err := mp4.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer out.Close()
+			vsrc, asrc := out.Video().PacketSource(), out.Audio().PacketSource()
+			firstV := time.Duration(math.MaxInt64)
+			for {
+				p, err := vsrc.ReadPacket()
+				if err != nil {
+					break
+				}
+				firstV = min(firstV, time.Duration(p.PTS)*time.Second/time.Duration(vsrc.TimeScale()))
+			}
+			ap, err := asrc.ReadPacket()
+			if err != nil {
+				t.Fatal(err)
+			}
+			firstA := time.Duration(ap.PTS+int64(asrc.Format().Delay)) * time.Second / sampleRate
+			if d := firstA - firstV - c.lead; d < -2*time.Millisecond || d > 2*time.Millisecond {
+				t.Errorf("read back: pictures from %v, sound from %v; want the sound %v after the pictures", firstV, firstA, c.lead)
+			}
+			if min(firstV, firstA) < 0 || min(firstV, firstA) > 2*time.Millisecond {
+				t.Errorf("read back: pictures from %v, sound from %v; one of them should start the presentation", firstV, firstA)
+			}
+
 			// The sound itself is untouched by the offset.
 			heard := testutil.DecodeAudio(t, path, false, "")
 			extra := len(heard) - len(pcm)

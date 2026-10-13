@@ -84,15 +84,21 @@ open_questions:
     text: The MP4 demuxer ignores an empty edit at the start of a track, so a track that starts later
       than the other reads as starting at 0. Where is the offset applied (Track.MediaTimeOffset or
       a new field)?
-    state: deferred
-    resolution: Deferred to the playback milestone, which lines audio and video up; the muxer already
-      writes such edits.
+    state: answered
+    resolution: Answered 2026-10-14 in milestone:playback-sound - the wait of the empty edits is taken
+      off Track.MediaTimeOffset (which may now be negative), so "PTS minus MediaTimeOffset" stays the
+      presentation time everywhere; the raw media time of the first edit is kept privately for the
+      audio delay.
 relations:
 - relation: constrains
   to: requirement:hwmediacodec
 - relation: extends
   to: decision:ffi-strategy
 history:
+  playback-2026-10-14:
+    summary: 'The playback slice was delivered as milestone:playback-sound ("同期再生と発音の実装をお願いします"),
+      as laid out under facts.layering and facts.sync; the clock follows the device''s reported position
+      directly (Ebitengine already interpolates it per tick), so no smoothing of its own was needed.'
   browser-2026-10-13:
     summary: 'After the browser video backend was merged the author asked for audio in the browser too
       ("音声側もブラウザ対応をお願いします"); delivered as milestone:audio-webcodecs on the same day.'

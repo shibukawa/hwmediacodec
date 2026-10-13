@@ -53,7 +53,7 @@ have no program of their own.
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
 | [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (`mp4.Segmenter` + `hls.Playlist` from the core module); opens the player page |
-| [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream in a window of the video's aspect ratio, with pause, seeking and a progress bar |
+| [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream with its sound in a window of the video's aspect ratio, with pause, seeking, volume and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
@@ -197,6 +197,7 @@ cd examples
 go run ./player                       # the bundled waterfall clip, looping
 go run ./player movie.mp4
 go run ./player -once -codec hevc -fps 30 stream.hevc
+go run ./player -mute                 # without sound
 ```
 
 The plain video player: `ebitenvideo.NewPlayerFromSource` over
@@ -204,9 +205,15 @@ The plain video player: `ebitenvideo.NewPlayerFromSource` over
 the sync-sample table for seeking, the length), `ebitenvideo.NewPlayer`
 for raw streams. The window takes the video's aspect ratio; space pauses,
 the arrow keys seek five seconds, Home restarts; a progress bar runs along
-the bottom. Audio tracks are ignored (Ebitengine has no AAC decoder). With
-no argument it plays `assets/waterfall-720p-hevc.mp4`, which is embedded
-into the binary.
+the bottom. The audio track of an MP4 file (AAC or Opus) is played with
+`ebitenvideo.WithAudio`: decoded by the system's codec, played through
+Ebitengine's audio, with the pictures following the sound; M mutes and
+the up and down arrow keys change the volume. On a platform without an
+audio backend (Linux, Windows and Android so far) the film plays silently
+and the reason is logged. In a browser the sound starts with the first
+click or key press, as browsers demand; until then the film plays without
+it. With no argument it plays `assets/waterfall-720p-hevc.mp4`, which is
+embedded into the binary.
 
 ## texture
 

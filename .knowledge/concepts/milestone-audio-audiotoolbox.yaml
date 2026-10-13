@@ -266,15 +266,15 @@ verification:
         and ffmpeg plays up to 192 padding samples)'
     basis:
     - path: mediacontainer/mp4/audio_test.go
-      input_hash: b73c85310211174442bafacf727d1f9698b6fb3a96da7af282cf3a030385cbca
+      input_hash: 834f86811e56d84337a6e553eec850d499da86887be2544726c45229259ab02b
     - path: audio_mp4_test.go
       input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
     - path: mediacontainer/mp4/audio.go
-      input_hash: 57c8fb1e0e6ebac54e3917e98253af37ddff4c17ce90ecbcba8c0e86edf30653
+      input_hash: 8b892885119a0a0b441ccbdc9f0bab34b2bc55348a76349788efeabb70ac26e5
     - path: mediacontainer/mp4/mux.go
       input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: internal/audiotoolbox/decoder.go
       input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
     - path: internal/audiotoolbox/encoder.go

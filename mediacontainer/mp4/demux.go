@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/hevc"
@@ -49,17 +50,23 @@ type Track struct {
 	ID        uint32
 	Handler   string // "vide", "soun", "subt", ...
 	TimeScale uint32
-	// MediaTimeOffset is the media time at which presentation starts
-	// according to the track's edit list (0 without one). Encoders with
-	// B-frames give the first picture a PTS above its DTS, and muxers hide
-	// that delay with an edit list, so sample PTS minus this offset is the
-	// time a player shows the sample at.
+	// MediaTimeOffset is the media time that lies at the start of the
+	// presentation according to the track's edit list (0 without one):
+	// sample PTS minus this offset is the time a player shows the sample
+	// at. Encoders with B-frames give the first picture a PTS above its
+	// DTS, and muxers hide that delay with an edit list; an audio track
+	// starts behind its encoder's delay. A track that starts later than
+	// the presentation (an empty edit in front) has the wait taken off, so
+	// the offset can be negative.
 	MediaTimeOffset int64
 	// Trak is the underlying box tree, exposed for passthrough copying.
 	Trak *mp4ff.TrakBox
 
 	d       *Demuxer
 	samples []sampleInfo
+	// editStart is the media time of the first edit that plays media,
+	// without the wait of an empty edit in front of it.
+	editStart int64
 }
 
 // VideoTrack is the decodable video track of a file.
@@ -76,8 +83,12 @@ type VideoTrack struct {
 	paramSets [][]byte
 }
 
-// Demuxer is an open MP4 file.
+// Demuxer is an open MP4 file. Its tracks may be read from different
+// goroutines (a player decodes pictures and sound side by side); the
+// reads of the file itself take turns.
 type Demuxer struct {
+	// mu guards rs: reading a sample seeks and reads.
+	mu     sync.Mutex
 	rs     io.ReadSeeker
 	closer io.Closer
 	file   *mp4ff.File
@@ -180,11 +191,19 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 	}
 	if trak.Edts != nil {
 		for _, elst := range trak.Edts.Elst {
+			// Empty edits in front make the track start later; the first
+			// edit with media says where in the media it starts.
+			var wait uint64
 			for _, e := range elst.Entries {
 				if e.MediaTime >= 0 {
-					t.MediaTimeOffset = e.MediaTime
+					t.editStart = e.MediaTime
 					break
 				}
+				wait += e.SegmentDuration
+			}
+			t.MediaTimeOffset = t.editStart
+			if mvhd := d.file.Moov.Mvhd; wait > 0 && mvhd != nil && mvhd.Timescale > 0 {
+				t.MediaTimeOffset -= int64(wait * uint64(t.TimeScale) / uint64(mvhd.Timescale))
 			}
 			break
 		}
@@ -345,7 +364,9 @@ func (t *Track) Sample(i int) (Sample, error) {
 		return Sample{}, fmt.Errorf("mp4: sample %d out of range [0, %d)", i, len(t.samples))
 	}
 	s := t.samples[i]
+	t.d.mu.Lock()
 	data, err := t.d.file.Mdat.ReadData(int64(s.offset), int64(s.size), t.d.rs)
+	t.d.mu.Unlock()
 	if err != nil {
 		return Sample{}, fmt.Errorf("mp4: read sample %d: %w", i, err)
 	}
