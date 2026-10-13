@@ -31,10 +31,10 @@ func (f PacketWriterFunc) WritePacket(p Packet) error { return f(p) }
 func (f PacketWriterFunc) Close() error { return nil }
 
 // PacketReader hands out the access units of a stream in decode order: a
-// demuxed track, a raw elementary stream. It is what decoders are fed from
-// (see DecodeReader).
+// demuxed video or audio track, a raw elementary stream. It is what
+// decoders are fed from (see DecodeReader).
 type PacketReader interface {
-	// Codec of the pictures.
+	// Codec of the stream.
 	Codec() Codec
 	// TimeScale is the number of units per second of the packets' PTS and
 	// DTS. Open the decoder with WithTimeScale(TimeScale()) so that the
@@ -62,7 +62,8 @@ type PacketSeeker interface {
 // HasHardware reports whether Probe lists a hardware engine for codec c in
 // the given direction on this machine, that is, whether NewDecoder or
 // NewEncoder can succeed without WithSoftwareFallback. Use it to choose
-// another path (a software codec, another format) before trying.
+// another path (a software codec, another format) before trying. It is
+// false for the audio codecs, which never run in hardware.
 func HasHardware(ctx context.Context, c Codec, dir Direction) bool {
 	caps, err := Probe(ctx)
 	if err != nil {

@@ -1,5 +1,5 @@
 // Package hwmediacodec drives the operating system's hardware video decode and
-// encode engines from Go without cgo.
+// encode engines, and its audio codecs, from Go without cgo.
 //
 // Native libraries are loaded at run time (dlopen on macOS, iOS, Linux and
 // Android, LoadLibrary on Windows), so CGO_ENABLED=0 builds and
@@ -51,6 +51,12 @@
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
 //
+// AAC and Opus audio is decoded and encoded on macOS and iOS through
+// AudioToolbox (see NewAudioDecoder and NewAudioEncoder); the other
+// platforms report ErrUnsupported for audio so far. The audio codecs are
+// the operating system's own and run in software; the library contains no
+// codec and bundles none.
+//
 // On Linux the VA-API backend opens the first usable DRM render node and the
 // Intel VPL backend the first Intel one; set HWMEDIACODEC_VAAPI_DEVICE or
 // HWMEDIACODEC_VPL_DEVICE to a /dev/dri/renderD* path to choose a GPU.
@@ -98,6 +104,19 @@
 //	}
 //	enc.Flush(ctx)
 //	// Receive until io.EOF, then Close.
+//
+// # Audio
+//
+//	dec, err := hwmediacodec.NewAudioDecoder(ctx, track.Format()) // *mp4.AudioTrack
+//	...
+//	if err := dec.Send(ctx, packet); err != nil { ... }
+//	f, err := dec.Receive(ctx) // interleaved samples in f.Data, see f.Int16s
+//
+//	enc, err := hwmediacodec.NewAudioEncoder(ctx, hwmediacodec.AAC, 48000, 2,
+//		hwmediacodec.WithBitrate(128_000))
+//	...
+//	if err := enc.Send(ctx, hwmediacodec.S16Frame(samples, 48000, 2, pts)); err != nil { ... }
+//	p, err := enc.Receive(ctx) // one raw AAC access unit; enc.Format() describes the stream
 package hwmediacodec
 
 import (
@@ -206,8 +225,10 @@ func selectBackends(all []codec.Backend, list string) []codec.Backend {
 }
 
 // Probe reports every codec/direction pair the registered backends can serve
-// on this machine. It returns an empty (non-nil) slice, not an error, when no
-// hardware engine is present.
+// on this machine: the hardware video engines first, then the audio codecs
+// of the operating system (Capability.Hardware is false for those; test
+// Codec.IsAudio to tell the two apart). It returns an empty (non-nil)
+// slice, not an error, when nothing is present.
 func Probe(ctx context.Context) ([]Capability, error) {
 	out := []Capability{}
 	for _, b := range backends() {
@@ -217,7 +238,8 @@ func Probe(ctx context.Context) ([]Capability, error) {
 		}
 		out = append(out, caps...)
 	}
-	return out, nil
+	audio, err := probeAudio(ctx)
+	return append(out, audio...), err
 }
 
 // NewDecoder opens a hardware decoder for c on the first backend that
@@ -233,6 +255,9 @@ func NewDecoder(ctx context.Context, c Codec, opts ...DecoderOption) (Decoder, e
 	cfg := codec.DecoderConfig{Codec: c, OutputFormat: NV12, TimeScale: DefaultTimeScale, DisplayOrder: true}
 	for _, o := range opts {
 		o.ApplyDecoder(&cfg)
+	}
+	if c.IsAudio() {
+		return nil, &UnsupportedError{Codec: c, Direction: Decode, Reason: "an audio codec; use NewAudioDecoder"}
 	}
 	if cfg.TimeScale <= 0 {
 		return nil, fmt.Errorf("hwmediacodec: time scale must be positive, got %d", cfg.TimeScale)
@@ -300,6 +325,8 @@ func NewEncoder(ctx context.Context, c Codec, width, height int, opts ...Encoder
 		o.ApplyEncoder(&cfg)
 	}
 	switch {
+	case c.IsAudio():
+		return nil, &UnsupportedError{Codec: c, Direction: Encode, Reason: "an audio codec; use NewAudioEncoder"}
 	case width <= 0 || height <= 0:
 		return nil, fmt.Errorf("hwmediacodec: picture size must be positive, got %dx%d", width, height)
 	case cfg.TimeScale <= 0:
@@ -359,18 +386,29 @@ type encoderOption func(*codec.EncoderConfig)
 
 func (f encoderOption) ApplyEncoder(c *codec.EncoderConfig) { f(c) }
 
+// sharedOption is an option every constructor accepts. The audio halves
+// are nil where the option means nothing for audio.
 type sharedOption struct {
-	dec func(*codec.DecoderConfig)
-	enc func(*codec.EncoderConfig)
+	dec      func(*codec.DecoderConfig)
+	enc      func(*codec.EncoderConfig)
+	audioEnc func(*codec.AudioEncoderConfig)
 }
 
 func (o sharedOption) ApplyDecoder(c *codec.DecoderConfig) { o.dec(c) }
 func (o sharedOption) ApplyEncoder(c *codec.EncoderConfig) { o.enc(c) }
 
+func (o sharedOption) ApplyAudioDecoder(*codec.AudioDecoderConfig) {}
+func (o sharedOption) ApplyAudioEncoder(c *codec.AudioEncoderConfig) {
+	if o.audioEnc != nil {
+		o.audioEnc(c)
+	}
+}
+
 // WithSoftwareFallback lets a backend use the operating system's software
 // codec when no hardware engine exists for the codec. By default the request
-// is rejected with ErrUnsupported instead. It applies to decoders and
-// encoders.
+// is rejected with ErrUnsupported instead. It applies to the video decoders
+// and encoders; the audio codecs run in software everywhere and take the
+// option without needing it.
 func WithSoftwareFallback() Option {
 	return sharedOption{
 		dec: func(c *codec.DecoderConfig) { c.AllowSoftware = true },
@@ -378,12 +416,15 @@ func WithSoftwareFallback() Option {
 	}
 }
 
-// WithTimeScale sets the number of PTS units per second (default 90000). It
-// applies to decoders and encoders.
+// WithTimeScale sets the number of PTS units per second. The default is
+// 90000 for video and the sample rate for an audio encoder, so that audio
+// timestamps count samples. An audio decoder hands the PTS of each packet
+// on unchanged, whatever its unit, and takes the option without effect.
 func WithTimeScale(unitsPerSecond int32) Option {
 	return sharedOption{
-		dec: func(c *codec.DecoderConfig) { c.TimeScale = unitsPerSecond },
-		enc: func(c *codec.EncoderConfig) { c.TimeScale = unitsPerSecond },
+		dec:      func(c *codec.DecoderConfig) { c.TimeScale = unitsPerSecond },
+		enc:      func(c *codec.EncoderConfig) { c.TimeScale = unitsPerSecond },
+		audioEnc: func(c *codec.AudioEncoderConfig) { c.TimeScale = unitsPerSecond },
 	}
 }
 
@@ -422,16 +463,24 @@ func WithFrameRate(fps float64) EncoderOption {
 	return encoderOption(func(c *codec.EncoderConfig) { c.FrameRate = fps })
 }
 
-// WithBitrate sets the target bitrate in bits per second. The rate control
-// mode is VBR unless WithRateControl(CBR) is also given.
-func WithBitrate(bitsPerSecond int) EncoderOption {
-	return encoderOption(func(c *codec.EncoderConfig) { c.Bitrate = bitsPerSecond })
+// WithBitrate sets the target bitrate in bits per second, for a video or an
+// audio encoder. The rate control mode is VBR unless WithRateControl(CBR)
+// is also given.
+func WithBitrate(bitsPerSecond int) SharedEncoderOption {
+	return sharedEncoderOption{
+		video: func(c *codec.EncoderConfig) { c.Bitrate = bitsPerSecond },
+		audio: func(c *codec.AudioEncoderConfig) { c.Bitrate = bitsPerSecond },
+	}
 }
 
 // WithRateControl selects VBR (default) or CBR for the bitrate given with
-// WithBitrate. Backends that cannot do CBR report ErrUnsupported.
-func WithRateControl(rc RateControl) EncoderOption {
-	return encoderOption(func(c *codec.EncoderConfig) { c.RateControl = rc })
+// WithBitrate, for a video or an audio encoder. Backends that cannot do CBR
+// report ErrUnsupported.
+func WithRateControl(rc RateControl) SharedEncoderOption {
+	return sharedEncoderOption{
+		video: func(c *codec.EncoderConfig) { c.RateControl = rc },
+		audio: func(c *codec.AudioEncoderConfig) { c.RateControl = rc },
+	}
 }
 
 // WithQuality requests constant-quality coding with q in (0, 1] (higher is

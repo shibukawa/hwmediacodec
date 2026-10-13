@@ -402,7 +402,7 @@ verification:
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
     - path: backends_darwin.go
-      input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
+      input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
   bframe-set-test:
     state: passed
     method: integration
@@ -778,6 +778,11 @@ history:
       NDK MediaCodec through purego, synchronous, byte-buffer output packed to NV12 from the MediaImage2
       or colour-format layout, software codecs refused by name, Android 14 minimum chosen by the author
       ("14が下限", endoflife.date). Type-checked on macOS only; examples/mobile/android is the device app.'
+  audio-codecs-2026-10-13:
+    summary: 'Audio added to the scope at the author''s request: AAC and Opus through the operating system''s
+      codecs, the library stopping at PCM (decision:audio-codecs). First slice delivered on macOS and
+      iOS through AudioToolbox with MP4 audio tracks (milestone:audio-audiotoolbox); synchronised playback
+      with sound and the other platforms follow.'
 facts:
   motivation: The author wants to call hardware video decode/encode engines from Go without shelling out
     to ffmpeg, and wants the same code to work on macOS, Linux and Windows.

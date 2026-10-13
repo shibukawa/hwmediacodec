@@ -1,0 +1,99 @@
+id: decision:audio-codecs
+type: decision
+title: Audio codecs come from the operating system; the library stops at PCM
+summary: 'Agreed with the author on 2026-10-13 ("音声側のエンコード、デコード機能とかも作れるか？", "aacはハードウェアの
+  コーデックを使わないとライセンス問題がクリアにならないと思っているがどうか？", "音声の扱いはどうするのが良いか？",
+  then "それでお願いします"): AAC and Opus are decoded and encoded through the codec the operating system ships,
+  called without cgo like the video engines; the library contains and bundles no audio codec; the core
+  and the playback package stop at PCM and open no audio device; sound output belongs to ebitenvideo,
+  which already depends on Ebitengine''s audio; audio is the master clock of playback.'
+lifecycle: accepted
+authority: authored
+aliases:
+- audio scope
+- AAC licensing
+- AACライセンス
+- 音声対応方針
+- audio master clock
+scope:
+  platform:
+  - darwin
+  - ios
+  - android
+  - windows
+  - linux
+  - browser
+facts:
+  licensing:
+    position: What decides whether an AAC patent licence is needed is who ships the codec implementation,
+      not whether it runs in hardware. The pool (Via LA) charges per unit for products that contain
+      an encoder or decoder; content is free. An application that calls the codec of the operating system
+      ships none, and the operating system's AAC codecs are software on every platform (AudioToolbox,
+      Media Foundation's AAC MFTs, Android's C2 software codec). This mirrors how the library uses the
+      system's H.264 and HEVC engines and how Firefox handles AAC.
+    consequence:
+    - No AAC implementation in Go and no bundled codec library, ever; no pure Go fallback for AAC (unlike
+      the RGB conversion).
+    - 'Linux has no system codec: an AAC backend there may only dlopen a library the user or the distribution
+      installed (libavcodec, libfdk-aac) and reports ErrUnsupported without one.'
+    - Opus is royalty-free and is offered next to AAC on every platform as the safe choice.
+    - The README states this position and that it is not legal advice.
+    caveat: The author's starting assumption was that only hardware codecs clear the licence question;
+      the answer given is the common understanding of the pool's terms and of industry practice, not
+      a legal opinion.
+  layering:
+    core: 'hwmediacodec: audio packets to PCM and back (NewAudioDecoder, NewAudioEncoder), timestamps,
+      no device.'
+    container: 'mediacontainer/mp4: audio track as packets (AudioTrack, AudioPacketSource), AAC and
+      Opus tracks from encoder packets (AddAudioTrack); encoding/adts for .aac.'
+    playback: 'playback: PCM on the same timeline as the pictures as an io.Reader, with seek, loop and
+      pause handled together with the video; still no device (second audio milestone).'
+    ebitenvideo: 'Plays that PCM through Ebitengine''s audio and drives the video clock from the audio
+      player''s position instead of TPS or wall time (second audio milestone).'
+    reason: Device output is a field of its own (CoreAudio, WASAPI, ALSA/PipeWire, AAudio, WebAudio)
+      that Ebitengine's audio already covers, and playback already knows nothing about where pictures
+      go. Microphone capture is left out for the same reason; an encoder takes PCM from the caller.
+  sync:
+    rule: Audio is the master clock. A dropped or repeated picture goes unnoticed, a gap or a speed
+      change in sound does not; playback.Player.Advance(dt) is driven by the caller and already skips
+      late frames, so feeding it the audio device's position makes the picture follow the sound.
+    tolerance: One Ebitengine tick at 60 TPS (about 17 ms) against detection thresholds of roughly 45
+      ms (sound early) and 125 ms (sound late).
+    work_left_to_playback:
+    - Seek and loop restart both tracks from the same time; audio starts before the target (one AAC packet,
+      80 ms of Opus) and drops up to it.
+    - Samples before the presentation start (encoder delay) and after its end (padding) are dropped by
+      PTS.
+    - The clock is the device's reported position, not the number of samples read.
+    - When the audio track ends first the clock falls back to wall time; files without audio behave
+      as before.
+    - Ebitengine's audio context has one sample rate per process, so other rates are resampled in ebitenvideo.
+  platform_plan:
+    darwin_ios: AudioToolbox AudioConverter (delivered, milestone:audio-audiotoolbox)
+    android: NDK AMediaCodec, reusing internal/mediacodec (audio/mp4a-latm, audio/opus)
+    windows: Media Foundation MFTs (AAC decode and LC encode, Opus decode expected only)
+    linux: dlopen libopus for Opus; AAC only through an installed libavcodec or libfdk-aac
+    browser: WebCodecs AudioDecoder and AudioEncoder, once the wasm branch is merged
+open_questions:
+  linux-aac-library:
+    text: Which library does the Linux AAC backend open (libavcodec with its changing ABI, libfdk-aac
+      where installed, or both), and is it opt-in?
+    state: deferred
+    resolution: Deferred until the Linux audio slice starts.
+  demux-empty-edit:
+    text: The MP4 demuxer ignores an empty edit at the start of a track, so a track that starts later
+      than the other reads as starting at 0. Where is the offset applied (Track.MediaTimeOffset or
+      a new field)?
+    state: deferred
+    resolution: Deferred to the playback milestone, which lines audio and video up; the muxer already
+      writes such edits.
+relations:
+- relation: constrains
+  to: requirement:hwmediacodec
+- relation: extends
+  to: decision:ffi-strategy
+history:
+  agreed-2026-10-13:
+    summary: Feasibility, the licensing position and the layering proposed in three answers and accepted
+      by the author; two milestones follow (core audio on macOS and iOS with MP4 tracks, then synchronised
+      playback with sound in ebitenvideo).

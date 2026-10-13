@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os/exec"
 	"path/filepath"
@@ -123,6 +125,10 @@ type Stream struct {
 	Duration  string `json:"duration"`
 	TimeBase  string `json:"time_base"`
 	Tag       string `json:"codec_tag_string"`
+	// Audio streams.
+	SampleRate string `json:"sample_rate"`
+	Channels   int    `json:"channels"`
+	StartTime  string `json:"start_time"`
 }
 
 // PacketCount is nb_read_packets as an int.
@@ -130,6 +136,12 @@ func (s Stream) PacketCount() int { n, _ := strconv.Atoi(s.Packets); return n }
 
 // FrameCount is nb_read_frames as an int.
 func (s Stream) FrameCount() int { n, _ := strconv.Atoi(s.Frames); return n }
+
+// Start is the stream start time in seconds.
+func (s Stream) Start() float64 { f, _ := strconv.ParseFloat(s.StartTime, 64); return f }
+
+// Rate is the audio sample rate in Hz.
+func (s Stream) Rate() int { n, _ := strconv.Atoi(s.SampleRate); return n }
 
 // Seconds is the stream duration in seconds.
 func (s Stream) Seconds() float64 { f, _ := strconv.ParseFloat(s.Duration, 64); return f }
@@ -139,7 +151,7 @@ func (s Stream) Seconds() float64 { f, _ := strconv.ParseFloat(s.Duration, 64); 
 func Streams(t testing.TB, path string) []Stream {
 	t.Helper()
 	out, err := exec.Command("ffprobe", "-v", "error", "-count_packets", "-count_frames",
-		"-show_entries", "stream=index,codec_type,codec_name,width,height,nb_read_packets,nb_read_frames,has_b_frames,duration,time_base,codec_tag_string",
+		"-show_entries", "stream=index,codec_type,codec_name,width,height,nb_read_packets,nb_read_frames,has_b_frames,duration,time_base,codec_tag_string,sample_rate,channels,start_time",
 		"-of", "json", path).Output()
 	if err != nil {
 		t.Fatalf("ffprobe %s: %v", path, err)
@@ -264,4 +276,111 @@ func ExtractFrame(t testing.TB, path string, n int, dir string) string {
 		t.Fatalf("ffmpeg extract frame %d: %v\n%s", n, err, o)
 	}
 	return out
+}
+
+// AudioStream returns the first audio stream of path.
+func AudioStream(t testing.TB, path string) Stream {
+	t.Helper()
+	for _, s := range Streams(t, path) {
+		if s.CodecType == "audio" {
+			return s
+		}
+	}
+	t.Fatalf("%s has no audio stream", path)
+	return Stream{}
+}
+
+// DecodeAudio runs the Send/Receive loop of dec over every packet of src
+// and returns the frames in order.
+func DecodeAudio(t testing.TB, dec hwmediacodec.AudioDecoder, src hwmediacodec.PacketReader) []*hwmediacodec.AudioFrame {
+	t.Helper()
+	ctx := context.Background()
+	var frames []*hwmediacodec.AudioFrame
+	drain := func() {
+		for {
+			f, err := dec.Receive(ctx)
+			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+				return
+			}
+			if err != nil {
+				t.Fatalf("Receive: %v", err)
+			}
+			frames = append(frames, f)
+		}
+	}
+	for n := 0; ; n++ {
+		p, err := src.ReadPacket()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("ReadPacket %d: %v", n, err)
+		}
+		for {
+			err := dec.Send(ctx, p)
+			if errors.Is(err, hwmediacodec.ErrAgain) {
+				drain()
+				continue
+			}
+			if err != nil {
+				t.Fatalf("Send packet %d: %v", n, err)
+			}
+			break
+		}
+		drain()
+	}
+	if err := dec.Flush(ctx); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	drain()
+	return frames
+}
+
+// EncodeAudio feeds interleaved 16-bit samples to enc in frames of chunk
+// samples per channel, the first at PTS pts (counted in samples), and
+// writes every packet to w, the ones Flush brings out included. It returns
+// the number of packets.
+func EncodeAudio(t testing.TB, enc hwmediacodec.AudioEncoder, pcm []int16, chunk int, pts int64, w hwmediacodec.PacketWriter) int {
+	t.Helper()
+	ctx := context.Background()
+	format := enc.Format()
+	packets := 0
+	drain := func() {
+		for {
+			p, err := enc.Receive(ctx)
+			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
+				return
+			}
+			if err != nil {
+				t.Fatalf("Receive: %v", err)
+			}
+			if err := w.WritePacket(p); err != nil {
+				t.Fatalf("WritePacket: %v", err)
+			}
+			packets++
+		}
+	}
+	for len(pcm) > 0 {
+		n := min(chunk*format.Channels, len(pcm))
+		f := hwmediacodec.S16Frame(pcm[:n], format.SampleRate, format.Channels, pts)
+		for {
+			err := enc.Send(ctx, f)
+			if errors.Is(err, hwmediacodec.ErrAgain) {
+				drain()
+				continue
+			}
+			if err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			break
+		}
+		drain()
+		pcm = pcm[n:]
+		pts += int64(n / format.Channels)
+	}
+	if err := enc.Flush(ctx); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	drain()
+	return packets
 }

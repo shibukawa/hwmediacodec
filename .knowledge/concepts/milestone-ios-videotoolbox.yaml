@@ -170,7 +170,7 @@ verification:
         frames'
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 51e06cd0a0c1d0c4efbd26c029ca3ca6104b77866fbcf575c04da762fa7ebd7d
+      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: internal/videotoolbox/decoder.go
@@ -217,7 +217,7 @@ verification:
         in the Simulator
     basis:
     - path: examples/mobile/mobile.go
-      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
+      input_hash: b25996e323bc6cfe7e55b935853dce285d66440ff810bab2696b8669d862a607
     - path: examples/mobile/init_mobile.go
       input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
     - path: examples/mobile/mobile_test.go

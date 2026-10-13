@@ -172,7 +172,7 @@ verification:
         the aar holds jni/arm64-v8a and jni/x86_64 libgojni.so; the Gradle app was not built (no Gradle)
     basis:
     - path: examples/mobile/mobile.go
-      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
+      input_hash: b25996e323bc6cfe7e55b935853dce285d66440ff810bab2696b8669d862a607
     - path: examples/mobile/init_mobile.go
       input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
     - path: examples/mobile/android/app/build.gradle.kts
@@ -220,7 +220,7 @@ verification:
     - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java
       input_hash: 325cca59c4d5cf4e523e82a89ab5e047504d44a10cd19e1d9d3cda14fc36227e
     - path: examples/mobile/mobile.go
-      input_hash: 28f74bdacd5824c96c1eeff461c589b14b982d9e06ecdbc740c9522dee6213fd
+      input_hash: b25996e323bc6cfe7e55b935853dce285d66440ff810bab2696b8669d862a607
   device-run:
     state: not_run
     method: manual

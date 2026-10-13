@@ -76,9 +76,9 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: mediacontainer/mp4/mux.go
-      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/sample.go
       input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
     - path: mediacontainer/mp4/segmenter.go
@@ -100,7 +100,7 @@ verification:
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: internal/mediatest/ffmpeg.go
-      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
   build-check:
     state: passed
     method: manual
