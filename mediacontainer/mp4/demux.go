@@ -70,11 +70,14 @@ type Track struct {
 	ID        uint32
 	Handler   string // "vide", "soun", "subt", ...
 	TimeScale uint32
-	// MediaTimeOffset is the media time at which presentation starts
-	// according to the track's edit list (0 without one). Encoders with
-	// B-frames give the first picture a PTS above its DTS, and muxers hide
-	// that delay with an edit list, so sample PTS minus this offset is the
-	// time a player shows the sample at.
+	// MediaTimeOffset is the media time that lies at the start of the
+	// presentation according to the track's edit list (0 without one):
+	// sample PTS minus this offset is the time a player shows the sample
+	// at. Encoders with B-frames give the first picture a PTS above its
+	// DTS, and muxers hide that delay with an edit list; an audio track
+	// starts behind its encoder's delay. A track that starts later than
+	// the presentation (an empty edit in front) has the wait taken off, so
+	// the offset can be negative.
 	MediaTimeOffset int64
 	// Trak is the underlying box tree, exposed for passthrough copying.
 	Trak *mp4ff.TrakBox
@@ -94,6 +97,9 @@ type Track struct {
 	// movieTimeScale is the mvhd time scale of the source file (0 when
 	// unknown), the unit of the edit list's segment durations.
 	movieTimeScale uint32
+	// editStart is the media time of the first edit that plays media,
+	// without the wait of an empty edit in front of it.
+	editStart int64
 }
 
 // VideoTrack is the decodable video track of a file.
@@ -110,7 +116,9 @@ type VideoTrack struct {
 	paramSets [][]byte
 }
 
-// Demuxer is an open MP4 file.
+// Demuxer is an open MP4 file. Its tracks may be read from different
+// goroutines (a player decodes pictures and sound side by side); the
+// reads of the file itself take turns.
 type Demuxer struct {
 	rs     io.ReadSeeker
 	closer io.Closer
@@ -291,10 +299,21 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 	}
 	if trak.Edts != nil {
 		for _, elst := range trak.Edts.Elst {
+			// Empty edits in front make the track start later; the first
+			// edit with media says where in the media it starts.
+			var wait uint64
 			for _, e := range elst.Entries {
 				if e.MediaTime >= 0 {
-					t.MediaTimeOffset = e.MediaTime
+					t.editStart = e.MediaTime
 					break
+				}
+				wait += e.SegmentDuration
+			}
+			t.MediaTimeOffset = t.editStart
+			if wait > 0 && wait <= math.MaxInt64 && t.movieTimeScale > 0 {
+				w := codec.RescaleTrunc(int64(wait), int64(t.movieTimeScale), int64(t.TimeScale))
+				if t.MediaTimeOffset >= math.MinInt64+w {
+					t.MediaTimeOffset -= w
 				}
 			}
 			break

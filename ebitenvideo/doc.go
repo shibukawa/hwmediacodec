@@ -31,4 +31,22 @@
 // are skipped so that the picture stays in time. Seek restarts decoding at
 // the keyframe before the target and drops the frames up to it, so the
 // next picture shown is the one at the target.
+//
+// # Sound
+//
+// WithAudio adds the film's audio track, played through Ebitengine's
+// audio package:
+//
+//	d, _ := mp4.Open("movie.mp4")
+//	player, err := ebitenvideo.NewPlayerFromSource(d.Video().PacketSource(),
+//		ebitenvideo.WithAudio(d.Audio().PacketSource()))
+//
+// The sound is then the clock: every Update shows the picture for the
+// sample that is at the loudspeaker (the audio player's Position), so
+// the two stay together however the game loop runs, and Play, Pause and
+// Seek act on both. While Ebitengine's audio is not running (before the
+// game's first ticks; in a browser, before the user's first click) the
+// pictures play on the tick clock, and the sound joins them where they
+// are when it comes up. The player takes the game's audio context or
+// makes one at the track's sample rate.
 package ebitenvideo

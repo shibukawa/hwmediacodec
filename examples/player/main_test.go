@@ -13,7 +13,7 @@ import (
 // and drives the player through a seek with Update ticks.
 func TestPlaysBundledClip(t *testing.T) {
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
-	p, closer, name, w, h, err := open("", "h264", 30, []ebitenvideo.Option{ebitenvideo.WithLoop()})
+	p, closer, name, w, h, err := open("", "h264", 30, true, []ebitenvideo.Option{ebitenvideo.WithLoop()})
 	if err != nil {
 		t.Fatal(err)
 	}

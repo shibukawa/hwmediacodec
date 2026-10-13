@@ -547,6 +547,14 @@ tests give way to the fixture comparison, and the AV1 tests pass or skip
 with what Safari offers the page. Chrome on Windows, Linux and Android has
 not been run.
 
+**Playback with sound (2026-10-14).** The audio stream tests of package
+`playback` pass in Chrome through the same script. The bundled clip was
+played with its sound in a real Ebitengine loop in headless Chrome
+(WebCodecs for both tracks, WebAudio for the output, muted): before the
+page had its first input event the film ran on the tick clock, and from
+the event on the clock was the audio player's position, through a seek
+and the loop, with one skipped frame in nine seconds.
+
 ### AV1 on Linux and Windows
 
 A `Packet` is one temporal unit in the low-overhead OBU format, with or
@@ -886,7 +894,9 @@ m.Close()
   whatever the recording had) and the encoder takes what it is given
   (Opus: 48 kHz only). The library does not resample.
 - **No device.** The library neither plays nor records sound: it stops at
-  PCM, like the video side stops at pixels.
+  PCM, like the video side stops at pixels. `playback` lines the samples
+  up with the pictures for a device to play, and `ebitenvideo` plays them
+  through Ebitengine (see [Sound](#sound)).
 
 What the backend does on macOS and iOS:
 
@@ -963,6 +973,11 @@ What the package takes care of:
   muxer shifts every DTS back by the largest lag; durations are unchanged and
   the edit list absorbs the start delay. The tests check that ffprobe sees
   the same presentation times as in the source.
+- The demuxer applies an empty edit in front of a track the same way:
+  the wait is taken off `MediaTimeOffset`, so the times of every packet
+  source count from the start of the presentation and two tracks of a
+  file line up. The tracks of one `Demuxer` may be read from different
+  goroutines.
 - An audio track's edit list starts at the encoder's delay, so players
   begin at the first real sample, and the last sample is as short as the
   signal's end makes it. The tracks written from packets share a clock:
@@ -1219,7 +1234,7 @@ timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder on top
 of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
-player
+player with sound
 (`examples/player`), video as a texture on a box and in a Kage shader
 (`examples/texture`), a HEIC/AVIF converter (`examples/imgconv`) and the
 player as an Ebitengine mobile game with an Xcode project for the iPhone
@@ -1273,6 +1288,55 @@ if f != nil {
 - `WithOutputFormat(NV12)` hands out the decoder's native format instead,
   for renderers that convert in a shader.
 
+### Sound
+
+`WithAudio` gives the player the audio track that goes with the pictures.
+The package still opens no device: the sound comes out as a stream of
+samples for one to play, and the device tells the player how far it has
+got.
+
+```go
+p, err := playback.New(video.PacketSource(),           // *mp4.VideoTrack
+	playback.WithAudio(audio.PacketSource()),          // *mp4.AudioTrack
+	playback.WithAudioChannels(2))
+stream := p.Audio()                                    // nil: no decoder for the track, see p.AudioErr()
+dev := newDevice(stream, stream.SampleRate())          // yours: plays the stream, implements playback.AudioDevice
+p.AttachAudioDevice(dev)
+p.Play()
+// Advance(dt) as before: the frame returned is the one for the sample at the loudspeaker.
+```
+
+- **`AudioStream`** is an `io.ReadSeeker` of interleaved samples (float by
+  default, 16-bit with `WithAudioFormat`; the track's channels, or mono or
+  stereo with `WithAudioChannels`) laid out on the time line of the
+  pictures: the byte at offset n belongs to the time n / bytes per second.
+  The encoder's delay and padding are cut off, a track that starts later
+  or ends earlier than the pictures is silence there, and with `WithLoop`
+  the stream goes on with the next pass behind the end of the presentation
+  (one pass is as long as the longer track). It never ends and never
+  blocks for long: samples the decoder does not have in time are silence.
+- **`AudioDevice`** is five methods around whatever plays the stream:
+  `Ready`, `Position` (the time of the sample at the loudspeaker: bytes
+  read less bytes still buffered), `SetPosition` (drop the buffer, seek the
+  stream), `Play` and `Pause`.
+- **The sound is the clock.** With a device attached, `Advance` shows the
+  picture for the device's position and ignores its argument; a late
+  picture is skipped, the sound is never touched. `Play`, `Pause` and
+  `Seek` steer the device along. After a start or a jump the device waits
+  (up to half a second) until the first picture is in, so the two start
+  together.
+- **No device, no sound, still a film.** While the device is not ready (a
+  browser does not let a page make sound before the first click) the
+  player holds the first picture for half a second and then runs on the
+  clock of `Advance` as it does without sound; when the device comes up it
+  is placed where the pictures are and takes over. A platform without an
+  audio backend, or a decoder that gives up, leaves the pictures playing:
+  `Audio` is nil or silent and `AudioErr` says why.
+- The position a device reports usually leaves out the latency of the
+  operating system's output (some tens of milliseconds, more over
+  Bluetooth), so the sound trails the picture by that much, which is the
+  direction in which it is noticed least.
+
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
@@ -1297,7 +1361,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 `playback.New`; the options and the methods (`Seek`, `Position`, `Length`,
 `Skipped`, ...) are those of the playback package. One `Update` stands for
 1/TPS seconds, or for the wall-clock time since the previous one when the
-TPS is `SyncWithFPS`. A minimal example plays a raw stream in a window
+TPS is `SyncWithFPS`.
+
+With `ebitenvideo.WithAudio` the film has its sound, played through
+Ebitengine's audio, and the pictures follow it (see [Sound](#sound)):
+
+```go
+d, _ := mp4.Open("movie.mp4")
+player, err := ebitenvideo.NewPlayerFromSource(d.Video().PacketSource(),
+	ebitenvideo.WithAudio(d.Audio().PacketSource()), ebitenvideo.WithLoop())
+player.SetVolume(0.8)
+```
+
+The player uses the game's audio context (`audio.CurrentContext`) and
+creates one at the track's sample rate when the game has none; a track at
+another rate goes through Ebitengine's resampler, and the sound is mixed
+to stereo. `HasAudio`, `AudioErr`, `Volume` and `SetVolume` are the
+additions to the player. A minimal example plays a raw stream in a window
 (space pauses, the arrow keys seek); the MP4-capable player with a bundled
 clip is `examples/player`:
 
