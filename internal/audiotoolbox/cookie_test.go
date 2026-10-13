@@ -5,6 +5,8 @@ package audiotoolbox
 import (
 	"bytes"
 	"testing"
+
+	"github.com/shibukawa/hwmediacodec/internal/aac"
 )
 
 func TestCookie(t *testing.T) {
@@ -17,23 +19,23 @@ func TestCookie(t *testing.T) {
 		0x05, 0x80, 0x80, 0x80, 0x02, 0x11, 0x90,
 		0x06, 0x80, 0x80, 0x80, 0x01, 0x02,
 	}
-	if got := configFromCookie(fromEncoder); !bytes.Equal(got, asc) {
+	if got := aac.ConfigFromESDescriptor(fromEncoder); !bytes.Equal(got, asc) {
 		t.Errorf("config from the encoder's cookie: % x", got)
 	}
 	built := aacCookie(asc)
 	if len(built) != len(fromEncoder) || built[4] != fromEncoder[4] || built[12] != fromEncoder[12] {
 		t.Errorf("built cookie % x does not have the shape of the encoder's % x", built, fromEncoder)
 	}
-	if got := configFromCookie(built); !bytes.Equal(got, asc) {
+	if got := aac.ConfigFromESDescriptor(built); !bytes.Equal(got, asc) {
 		t.Errorf("config from the built cookie: % x", got)
 	}
 	// One-byte lengths and a bare DecoderConfigDescriptor are read too.
 	short := []byte{0x04, 0x11, 0x40, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x05, 0x02, 0x12, 0x08}
-	if got := configFromCookie(short); !bytes.Equal(got, []byte{0x12, 0x08}) {
+	if got := aac.ConfigFromESDescriptor(short); !bytes.Equal(got, []byte{0x12, 0x08}) {
 		t.Errorf("config from a short cookie: % x", got)
 	}
 	for _, bad := range [][]byte{nil, {0x03}, {0x03, 0x02, 0, 0}, {0x04, 0x03, 0x40, 0x15, 0}, {0x06, 0x01, 0x02}} {
-		if got := configFromCookie(bad); got != nil {
+		if got := aac.ConfigFromESDescriptor(bad); got != nil {
 			t.Errorf("config from % x: % x, want none", bad, got)
 		}
 	}

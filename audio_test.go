@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -50,16 +48,40 @@ func newAudioEncoderOrSkip(t *testing.T, c hwmediacodec.Codec, sampleRate, chann
 // frames in order.
 func decodeAudio(t *testing.T, dec hwmediacodec.AudioDecoder, packets []hwmediacodec.Packet) []*hwmediacodec.AudioFrame {
 	t.Helper()
+	frames, err := tryDecodeAudio(dec, packets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return frames
+}
+
+// decodeAudioOrSkip is decodeAudio for the streams not every browser
+// takes (HE-AAC, more than two channels): a browser's decoder may say yes
+// to a configuration and then refuse the packets, some way into the
+// stream (Firefox on macOS does), and the test is then skipped.
+func decodeAudioOrSkip(t *testing.T, dec hwmediacodec.AudioDecoder, packets []hwmediacodec.Packet) []*hwmediacodec.AudioFrame {
+	t.Helper()
+	frames, err := tryDecodeAudio(dec, packets)
+	if err != nil && runtime.GOOS == "js" && (errors.Is(err, hwmediacodec.ErrInvalidData) || errors.Is(err, hwmediacodec.ErrUnsupported)) {
+		t.Skipf("this browser's decoder does not take the stream: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return frames
+}
+
+func tryDecodeAudio(dec hwmediacodec.AudioDecoder, packets []hwmediacodec.Packet) ([]*hwmediacodec.AudioFrame, error) {
 	ctx := context.Background()
 	var frames []*hwmediacodec.AudioFrame
-	drain := func() {
+	drain := func() error {
 		for {
 			f, err := dec.Receive(ctx)
 			if errors.Is(err, hwmediacodec.ErrAgain) || err == io.EOF {
-				return
+				return nil
 			}
 			if err != nil {
-				t.Fatalf("Receive: %v", err)
+				return fmt.Errorf("Receive: %w", err)
 			}
 			frames = append(frames, f)
 		}
@@ -68,24 +90,30 @@ func decodeAudio(t *testing.T, dec hwmediacodec.AudioDecoder, packets []hwmediac
 		for {
 			err := dec.Send(ctx, p)
 			if errors.Is(err, hwmediacodec.ErrAgain) {
-				drain()
+				if err := drain(); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if err != nil {
-				t.Fatalf("Send packet %d: %v", i, err)
+				return nil, fmt.Errorf("Send packet %d: %w", i, err)
 			}
 			break
 		}
-		drain()
+		if err := drain(); err != nil {
+			return nil, err
+		}
 	}
 	if err := dec.Flush(ctx); err != nil {
-		t.Fatalf("Flush: %v", err)
+		return nil, fmt.Errorf("Flush: %w", err)
 	}
-	drain()
+	if err := drain(); err != nil {
+		return nil, err
+	}
 	if _, err := dec.Receive(ctx); err != io.EOF {
-		t.Fatalf("Receive after Flush: got %v, want io.EOF", err)
+		return nil, fmt.Errorf("Receive after Flush: got %v, want io.EOF", err)
 	}
-	return frames
+	return frames, nil
 }
 
 // encodeAudio feeds pcm to the encoder in pieces of chunk samples and
@@ -155,11 +183,7 @@ func packetBitrate(packets []hwmediacodec.Packet, format hwmediacodec.AudioForma
 // readADTS returns the stream format and every packet of an ADTS file.
 func readADTS(t *testing.T, path string) (hwmediacodec.AudioFormat, []hwmediacodec.Packet) {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := adts.NewReader(bytes.NewReader(data))
+	r, err := adts.NewReader(bytes.NewReader(testutil.ReadFile(t, path)))
 	if err != nil {
 		t.Fatalf("adts.NewReader: %v", err)
 	}
@@ -275,12 +299,8 @@ func TestAudioEncodeAAC(t *testing.T) {
 			}
 			t.Logf("%d packets, delay %d, %.0f bit/s", len(packets), format.Delay, packetBitrate(packets, format))
 
-			path := filepath.Join(t.TempDir(), "out.aac")
-			file, err := os.Create(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			w, err := adts.NewWriter(file, format)
+			var file bytes.Buffer
+			w, err := adts.NewWriter(&file, format)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -289,7 +309,8 @@ func TestAudioEncodeAAC(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			file.Close()
+			path := testutil.TempDir(t) + "/out.aac"
+			testutil.WriteFile(t, path, file.Bytes())
 
 			decoded := testutil.DecodeAudio(t, path, true, "aac")
 			if len(decoded) != len(packets)*format.FrameSamples*c.channels {
@@ -321,7 +342,9 @@ func TestAudioEncodeBitrate(t *testing.T) {
 					// CBR holds the rate; VBR treats it as a target for
 					// ordinary material and spends less on this one.
 					lo, hi := 0.6, 1.3
-					if rc == hwmediacodec.CBR {
+					if rc == hwmediacodec.CBR && !(runtime.GOOS == "js" && c == hwmediacodec.AAC) {
+						// (A browser takes the mode as a wish: Chrome's AAC
+						// encoder gives the same packets in both.)
 						lo, hi = 0.95, 1.05
 					}
 					if rate < lo*float64(bitrate) || rate > hi*float64(bitrate) {
@@ -342,34 +365,58 @@ func TestAudioEncodeBitrate(t *testing.T) {
 	}
 }
 
-// TestAudioDecodeAACSurround decodes a 5.1 stream: six channels in the
-// order of a WAV file (and of ffmpeg), not in the order the AAC bitstream
-// stores them. Every channel carries a tone of its own, so that swapped
-// channels cannot pass.
+// TestAudioDecodeAACSurround decodes streams with more than two channels:
+// they come out in the order of a WAV file (and of ffmpeg), not in the
+// order the AAC bitstream stores them. Every channel carries a tone of its
+// own, so that swapped channels cannot pass.
 func TestAudioDecodeAACSurround(t *testing.T) {
-	const sampleRate, channels = 48000, 6
-	pcm := testutil.AudioSignal(sampleRate, channels, sampleRate)
-	path := testutil.EncodeAudio(t, pcm, sampleRate, channels, "in.aac", "-c:a", "aac", "-b:a", "384k")
-	format, packets := readADTS(t, path)
-	if format.Channels != channels {
-		t.Fatalf("format has %d channels", format.Channels)
-	}
-	frames := decodeAudio(t, newAudioDecoderOrSkip(t, format), packets)
-	got, want := framesPCM(frames), testutil.DecodeAudio(t, path, true, "aac")
-	if len(got) != len(want) {
-		t.Fatalf("got %d samples, ffmpeg decodes %d", len(got)/channels, len(want)/channels)
-	}
-	// Channel by channel: a swap of two quiet channels would hide in an
-	// overall figure.
-	for c := range channels {
-		a, b := make([]int16, len(got)/channels), make([]int16, len(got)/channels)
-		for i := range a {
-			a[i], b[i] = want[i*channels+c], got[i*channels+c]
-		}
-		// (The LFE channel keeps little of its tone and compares worst.)
-		if snr := testutil.AudioSNR(a, b); snr < 30 {
-			t.Errorf("channel %d differs from ffmpeg's: SNR %.1f dB", c, snr)
-		}
+	const sampleRate = 48000
+	for _, c := range []struct {
+		layout   string
+		channels int
+	}{
+		{"3.0", 3},
+		{"4.0", 4},
+		{"5.0", 5},
+		{"5.1", 6},
+	} {
+		t.Run(c.layout, func(t *testing.T) {
+			channels := c.channels
+			pcm := testutil.AudioSignal(sampleRate, channels, sampleRate)
+			path := testutil.EncodeAudio(t, pcm, sampleRate, channels, "in.aac", "-af", "aformat=channel_layouts="+c.layout, "-c:a", "aac", "-b:a", fmt.Sprint(64000*channels))
+			format, packets := readADTS(t, path)
+			if format.Channels != channels {
+				t.Fatalf("format has %d channels", format.Channels)
+			}
+			frames := decodeAudioOrSkip(t, newAudioDecoderOrSkip(t, format), packets)
+			got, want := framesPCM(frames), testutil.DecodeAudio(t, path, true, "aac")
+			if len(got) != len(want) {
+				t.Fatalf("got %d samples, ffmpeg decodes %d", len(got)/channels, len(want)/channels)
+			}
+			// Channel by channel: a swap of two quiet channels would hide
+			// in an overall figure. (The LFE channel keeps little of its
+			// tone and compares worst.)
+			column := func(pcm []int16, ch int) []int16 {
+				out := make([]int16, len(pcm)/channels)
+				for i := range out {
+					out[i] = pcm[i*channels+ch]
+				}
+				return out
+			}
+			for ch := range channels {
+				ref := column(want, ch)
+				if snr := testutil.AudioSNR(ref, column(got, ch)); snr < 30 {
+					// Say where the channel went, if anywhere.
+					at := -1
+					for other := range channels {
+						if testutil.AudioSNR(ref, column(got, other)) >= 30 {
+							at = other
+						}
+					}
+					t.Errorf("channel %d differs from ffmpeg's (%.1f dB); it is channel %d of the output", ch, snr, at)
+				}
+			}
+		})
 	}
 }
 
@@ -451,7 +498,13 @@ func TestAudioRoundTrip(t *testing.T) {
 				out = out[format.Delay*channels:]
 				shift, snr := testutil.AudioAlignment(pcm, out, channels, 8)
 				t.Logf("%d packets, delay %d, %.1f dB at shift %d", len(packets), format.Delay, snr, shift)
-				if shift != 0 || snr < 25 {
+				if c == hwmediacodec.Opus && telephonyOpus() {
+					// The filter shifts the phase of the low tones, which
+					// reads as a few samples of lead and a lower figure.
+					if shift < -8 || shift > 0 || snr < 12 {
+						t.Errorf("round trip in the telephony mode: best SNR %.1f dB at a shift of %d samples", snr, shift)
+					}
+				} else if shift != 0 || snr < 25 {
 					t.Errorf("round trip: best SNR %.1f dB at a shift of %d samples", snr, shift)
 				}
 			})
@@ -539,6 +592,11 @@ func TestAudioErrors(t *testing.T) {
 			return hwmediacodec.NewAudioEncoder(ctx, hwmediacodec.AAC, 48000, 2, hwmediacodec.WithSampleFormat(99))
 		},
 	} {
+		if (name == "aac at 2 Mbit/s" || name == "aac at 12345 Hz") && runtime.GOOS == "js" {
+			// A browser may take a bitrate or a rate its encoder does not
+			// offer and encode at another; nothing in the API tells.
+			continue
+		}
 		e, err := open()
 		if !errors.Is(err, hwmediacodec.ErrUnsupported) {
 			t.Errorf("%s: got %v, want ErrUnsupported", name, err)
@@ -602,16 +660,19 @@ func TestAudioDecodeGarbage(t *testing.T) {
 	dec := newAudioDecoderOrSkip(t, enc.Format())
 	want := framesPCM(decodeAudio(t, dec, packets))
 
+	// The error may come from Send or, where the codec works on its own
+	// time (a browser), from a later call; Flush is the latest.
 	garbage := bytes.Repeat([]byte{0xFF, 0x00, 0xA5, 0x5A}, 60)
 	err := dec.Send(ctx, hwmediacodec.Packet{Data: garbage})
-	t.Logf("garbage: %v", err)
-	if err != nil && !errors.Is(err, hwmediacodec.ErrInvalidData) {
-		t.Errorf("Send of garbage: got %v, want ErrInvalidData or a decoded frame", err)
+	if err == nil {
+		err = dec.Flush(ctx)
 	}
-	for {
-		if _, err := dec.Receive(ctx); err != nil {
-			break
-		}
+	for err == nil {
+		_, err = dec.Receive(ctx)
+	}
+	t.Logf("garbage: %v", err)
+	if err != io.EOF && !errors.Is(err, hwmediacodec.ErrAgain) && !errors.Is(err, hwmediacodec.ErrInvalidData) {
+		t.Errorf("garbage: got %v, want ErrInvalidData or frames", err)
 	}
 	got := framesPCM(decodeAudio(t, dec, packets))
 	const settle = 4 * 1024 * channels

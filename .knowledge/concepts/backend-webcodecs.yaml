@@ -315,7 +315,7 @@ verification:
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/jsutil.go
-      input_hash: 1773322c816d2792faf0ef72ac770d26c5d8e0333192db94005c5f6bfd49328f
+      input_hash: 1936032ef5664f279d336f3fbfa7cad15023da56cb1b8c9386938b837d340a56
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
@@ -323,7 +323,7 @@ verification:
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
     - path: backends_js.go
-      input_hash: 88895814cb9e08abd68acd7212d2f22a51e293d5924f43639b201019fa8d0623
+      input_hash: 2cec5ee0cd89552bc2b5263453a9a4360899de1df3a90c4c2ef79868bd1b4978
   chrome-software:
     state: passed
     method: integration
@@ -391,7 +391,7 @@ verification:
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/browserexec/main.go
-      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+      input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
   safari-macos:
     state: failed
     method: integration
@@ -434,7 +434,7 @@ verification:
     - path: internal/webcodecs/browser_js_test.go
       input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/codec/codec.go
-      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
+      input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
     - path: native_test.go
       input_hash: a4cd0b7206d94e0cd85670e7ebeee6fec40e04950848c743afa5a31b9ec78bf1
   other-browsers:

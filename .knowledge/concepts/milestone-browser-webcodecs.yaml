@@ -133,7 +133,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_js.go
-      input_hash: 88895814cb9e08abd68acd7212d2f22a51e293d5924f43639b201019fa8d0623
+      input_hash: 2cec5ee0cd89552bc2b5263453a9a4360899de1df3a90c4c2ef79868bd1b4978
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   node-run:
@@ -152,7 +152,7 @@ verification:
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: probe_test.go
-      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
   chrome-conformance:
     state: passed
     method: integration
@@ -171,7 +171,7 @@ verification:
     - path: scripts/browser_test.sh
       input_hash: 801c7e184214edee774b0b5e3553bfd0069f52d4b71c5485abe7fa0f987c6e25
     - path: internal/browserexec/main.go
-      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+      input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
     - path: internal/testutil/host.go
       input_hash: 27be1d9f3c40f579bcf45ac6b6338a7118deb7bccbfe6322ac7d5e07d61a1a5f
     - path: internal/testutil/host_js.go
@@ -263,7 +263,7 @@ verification:
         decoder output reported as ErrUnsupported, the encoder confirming configure and falling back from realtime.'
     basis:
     - path: internal/browserexec/main.go
-      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+      input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
     - path: internal/webcodecs/decoder.go
       input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go

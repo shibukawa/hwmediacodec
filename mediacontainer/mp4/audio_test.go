@@ -1,10 +1,8 @@
 package mp4_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"path/filepath"
 	"testing"
@@ -16,8 +14,10 @@ import (
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
-// These tests decode and encode with the operating system's audio codecs
-// and use ffmpeg for the other half of every comparison.
+// These tests are about what the container does with an audio track:
+// seeking in it and placing it next to a video track. The tests of the
+// codecs through MP4 files are in the root package (audio_mp4_test.go),
+// where they also run in a browser.
 
 func audioDecoderOrSkip(t *testing.T, format hwmediacodec.AudioFormat) hwmediacodec.AudioDecoder {
 	t.Helper()
@@ -64,208 +64,6 @@ func presented(frames []*hwmediacodec.AudioFrame, timeScale int32, length time.D
 		out = append(out, s...)
 	}
 	return out
-}
-
-// TestAudioTrackDecode demuxes and decodes the audio of files made by
-// ffmpeg: every sample must match ffmpeg's own decoder, and the part the
-// edit list presents must be the signal that went in, in place.
-func TestAudioTrackDecode(t *testing.T) {
-	cases := []struct {
-		name                 string
-		codec                hwmediacodec.Codec
-		sampleRate, channels int
-		args                 []string
-		decoder              string
-		delay                int
-		frame                int
-		minSNR               float64 // against ffmpeg's decoder
-	}{
-		{"aac", hwmediacodec.AAC, 48000, 2, []string{"-c:a", "aac", "-b:a", "128k"}, "aac", 1024, 1024, 50},
-		{"aac_44100_mono", hwmediacodec.AAC, 44100, 1, []string{"-c:a", "aac", "-b:a", "96k"}, "aac", 1024, 1024, 50},
-		{"opus", hwmediacodec.Opus, 48000, 2, []string{"-c:a", "libopus", "-b:a", "96k"}, "libopus", 312, 960, 50},
-		{"opus_mono", hwmediacodec.Opus, 48000, 1, []string{"-c:a", "libopus", "-b:a", "48k"}, "libopus", 312, 960, 50},
-		{"opus_10ms", hwmediacodec.Opus, 48000, 2, []string{"-c:a", "libopus", "-b:a", "96k", "-frame_duration", "10"}, "libopus", 312, 480, 50},
-		{"opus_60ms", hwmediacodec.Opus, 48000, 2, []string{"-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60"}, "libopus", 312, 2880, 50},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if c.decoder == "libopus" && !testutil.HasEncoder(t, "libopus") {
-				t.Skip("ffmpeg has no libopus")
-			}
-			pcm := testutil.AudioSignal(c.sampleRate, c.channels, c.sampleRate*2)
-			path := testutil.EncodeAudio(t, pcm, c.sampleRate, c.channels, "in.mp4", c.args...)
-			d, err := mp4.Open(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer d.Close()
-			a := d.Audio()
-			if a == nil {
-				t.Fatal("no audio track")
-			}
-			if len(d.Others()) != 1 || d.Others()[0].ID != a.ID {
-				t.Errorf("the audio track is not among Others")
-			}
-			format := a.Format()
-			if format.Codec != c.codec || format.SampleRate != c.sampleRate || format.Channels != c.channels || format.Delay != c.delay || format.FrameSamples != c.frame || len(format.Config) == 0 {
-				t.Fatalf("format %+v; want %s %d Hz %d channels, delay %d, frames of %d", format, c.codec, c.sampleRate, c.channels, c.delay, c.frame)
-			}
-
-			src := a.PacketSource()
-			frames := mediatest.DecodeAudio(t, audioDecoderOrSkip(t, format), src)
-			if len(frames) != a.SampleCount() {
-				t.Fatalf("got %d frames for %d samples of the track", len(frames), a.SampleCount())
-			}
-			var all []int16
-			for i, f := range frames {
-				if f.Samples() != c.frame || f.SampleRate != c.sampleRate || f.Channels != c.channels {
-					t.Fatalf("frame %d: %d samples at %d Hz with %d channels", i, f.Samples(), f.SampleRate, f.Channels)
-				}
-				all = append(all, f.Int16s()...)
-			}
-			if got, want := frames[0].PTS*int64(c.sampleRate)/int64(src.TimeScale()), int64(-c.delay); got != want {
-				t.Errorf("the first frame starts at sample %d, want %d", got, want)
-			}
-
-			// Everything the stream codes, against ffmpeg's decoder. (The
-			// first 2.5 ms of Opus are silence here; they lie in the
-			// pre-skip.)
-			ref := testutil.DecodeAudio(t, path, true, c.decoder)
-			skip := 0
-			if c.codec == hwmediacodec.Opus {
-				skip = 120 * c.channels
-			}
-			if len(all) != len(ref) {
-				t.Errorf("decoded %d samples, ffmpeg %d", len(all)/c.channels, len(ref)/c.channels)
-			}
-			shift, snr := testutil.AudioAlignment(ref[skip:], all[skip:], c.channels, 8)
-			t.Logf("%d packets; against ffmpeg's decoder %.1f dB at shift %d", len(frames), snr, shift)
-			if shift != 0 || snr < c.minSNR {
-				t.Errorf("decoded samples differ from ffmpeg's: best SNR %.1f dB at a shift of %d samples", snr, shift)
-			}
-
-			// What a player hears, against the signal that was encoded.
-			heard := presented(frames, src.TimeScale(), src.Length())
-			if len(heard) != len(pcm) {
-				t.Errorf("the presentation has %d samples, the input had %d", len(heard)/c.channels, len(pcm)/c.channels)
-			}
-			shift, snr = testutil.AudioAlignment(pcm, heard, c.channels, 8)
-			t.Logf("against the input %.1f dB at shift %d", snr, shift)
-			if shift != 0 || snr < 15 {
-				t.Errorf("the presented samples are not the input in place: best SNR %.1f dB at a shift of %d samples", snr, shift)
-			}
-		})
-	}
-}
-
-// TestAudioMuxRoundTrip encodes a signal, writes it as the audio track of
-// an MP4 file and checks the file three ways: ffprobe's view of the
-// stream, ffmpeg's decoding against the input, and this package reading
-// back the format and the packets that were written.
-func TestAudioMuxRoundTrip(t *testing.T) {
-	mediatest.RequireFFmpeg(t)
-	cases := []struct {
-		codec                hwmediacodec.Codec
-		sampleRate, channels int
-		name                 string
-		minSNR               float64
-	}{
-		{hwmediacodec.AAC, 48000, 2, "aac", 20},
-		{hwmediacodec.AAC, 44100, 1, "aac", 20},
-		{hwmediacodec.Opus, 48000, 2, "opus", 15},
-		{hwmediacodec.Opus, 48000, 1, "opus", 15},
-	}
-	for _, c := range cases {
-		t.Run(fmt.Sprintf("%s_%d_%dch", c.codec, c.sampleRate, c.channels), func(t *testing.T) {
-			samples := c.sampleRate*2 + 321
-			pcm := testutil.AudioSignal(c.sampleRate, c.channels, samples)
-			enc := audioEncoderOrSkip(t, c.codec, c.sampleRate, c.channels, hwmediacodec.WithBitrate(96000*c.channels))
-			format := enc.Format()
-
-			path := filepath.Join(t.TempDir(), "out.mp4")
-			m, err := mp4.Create(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			aw, err := m.AddAudioTrack(format, uint32(c.sampleRate))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var written []hwmediacodec.Packet
-			n := mediatest.EncodeAudio(t, enc, pcm, 1470, 0, hwmediacodec.PacketWriterFunc(func(p hwmediacodec.Packet) error {
-				written = append(written, p)
-				return aw.WritePacket(p)
-			}))
-			if err := m.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			mediatest.CheckDecodes(t, path)
-			s := mediatest.AudioStream(t, path)
-			want := float64(samples) / float64(c.sampleRate)
-			if s.CodecName != c.name || s.Rate() != c.sampleRate || s.Channels != c.channels || s.PacketCount() != n ||
-				math.Abs(s.Seconds()-want) > 0.002 || math.Abs(s.Start()) > 0.0005 {
-				t.Errorf("ffprobe: %s %d Hz %d channels, %d packets, %.4f s from %.4f; want %s %d Hz %d channels, %d packets, %.4f s from 0",
-					s.CodecName, s.Rate(), s.Channels, s.PacketCount(), s.Seconds(), s.Start(), c.name, c.sampleRate, c.channels, n, want)
-			}
-
-			// ffmpeg applies the edit list: what comes out is the input.
-			// (For Opus it only applies the start and plays the padding of
-			// the last packet too, as it does with files of its own.)
-			heard := testutil.DecodeAudio(t, path, false, "")
-			wantHeard := samples
-			if c.codec == hwmediacodec.Opus {
-				wantHeard = n*format.FrameSamples - format.Delay
-			}
-			if len(heard) != wantHeard*c.channels {
-				t.Errorf("ffmpeg plays %d samples, want %d", len(heard)/c.channels, wantHeard)
-			}
-			shift, snr := testutil.AudioAlignment(pcm, heard, c.channels, 8)
-			t.Logf("%d packets, delay %d; ffmpeg's decoding against the input: %.1f dB at shift %d", n, format.Delay, snr, shift)
-			if shift != 0 || snr < c.minSNR {
-				t.Errorf("ffmpeg's decoding is not the input in place: best SNR %.1f dB at a shift of %d samples", snr, shift)
-			}
-
-			// Reading the file back gives the same stream.
-			d, err := mp4.Open(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer d.Close()
-			a := d.Audio()
-			if a == nil {
-				t.Fatal("no audio track in the written file")
-			}
-			got := a.Format()
-			if got.Codec != format.Codec || got.SampleRate != format.SampleRate || got.Channels != format.Channels ||
-				got.Delay != format.Delay || got.FrameSamples != format.FrameSamples || !bytes.Equal(got.Config, format.Config) {
-				t.Errorf("format read back %+v, written %+v", got, format)
-			}
-			src := a.PacketSource()
-			if l := src.Length(); l != time.Duration(samples)*time.Second/time.Duration(c.sampleRate) {
-				t.Errorf("length %v, want %d samples", l, samples)
-			}
-			for i, w := range written {
-				p, err := src.ReadPacket()
-				if err != nil {
-					t.Fatalf("ReadPacket %d: %v", i, err)
-				}
-				if !bytes.Equal(p.Data, w.Data) || p.PTS != w.PTS || p.Duration != w.Duration || !p.Keyframe {
-					t.Fatalf("packet %d read back with PTS %d duration %d (%d bytes), written with PTS %d duration %d (%d bytes)",
-						i, p.PTS, p.Duration, len(p.Data), w.PTS, w.Duration, len(w.Data))
-				}
-			}
-
-			// And decoding it here gives the input as well.
-			src = a.PacketSource()
-			frames := mediatest.DecodeAudio(t, audioDecoderOrSkip(t, got), src)
-			own := presented(frames, src.TimeScale(), src.Length())
-			shift, snr = testutil.AudioAlignment(pcm, own, c.channels, 8)
-			if len(own) != len(pcm) || shift != 0 || snr < c.minSNR {
-				t.Errorf("own decoding: %d samples for %d, best SNR %.1f dB at a shift of %d samples", len(own)/c.channels, samples, snr, shift)
-			}
-		})
-	}
 }
 
 // TestAudioPacketSourceSeek jumps into the middle of a track: decoding

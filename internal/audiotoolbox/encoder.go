@@ -116,7 +116,7 @@ func (e *encoder) createConverter() error {
 	}
 	switch cfg.Codec {
 	case codec.AAC:
-		e.format.Config = configFromCookie(sys.GetBytes(conv, sys.PropCompressionMagicCookie))
+		e.format.Config = aac.ConfigFromESDescriptor(sys.GetBytes(conv, sys.PropCompressionMagicCookie))
 		if e.format.Config == nil {
 			asc, err := aac.LCConfig(cfg.SampleRate, cfg.Channels)
 			if err != nil {

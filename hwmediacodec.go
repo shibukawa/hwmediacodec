@@ -52,10 +52,11 @@
 // streams in Ebitengine.
 //
 // AAC and Opus audio is decoded and encoded on macOS and iOS through
-// AudioToolbox (see NewAudioDecoder and NewAudioEncoder); the other
+// AudioToolbox and in the browser through WebCodecs, as far as the browser
+// has the codecs (see NewAudioDecoder and NewAudioEncoder); the other
 // platforms report ErrUnsupported for audio so far. The audio codecs are
-// the operating system's own and run in software; the library contains no
-// codec and bundles none.
+// the operating system's or the browser's own and run in software; the
+// library contains no codec and bundles none.
 //
 // On Linux the VA-API backend opens the first usable DRM render node and the
 // Intel VPL backend the first Intel one; set HWMEDIACODEC_VAAPI_DEVICE or

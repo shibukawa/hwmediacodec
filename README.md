@@ -60,14 +60,15 @@ decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
 has no AV1 encoder; on the other platforms the encoders exist in newer GPUs
 and are not wired up).
 
-Audio goes through the codecs the operating system ships, which run in
-software everywhere (`Probe` lists them with `Hardware` false). One
-platform has a backend so far:
+Audio goes through the codecs the operating system or the browser ships,
+which run in software everywhere (`Probe` lists them with `Hardware`
+false):
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
-| macOS, iOS | AudioToolbox (`AudioConverter`) | AAC-LC from mono to 7.1 (mono, stereo and 5.1 are tested), HE-AAC and HE-AAC v2 (with the band replication and parametric stereo, at the full sample rate); Opus mono and stereo, any packet length; 16-bit or float samples | AAC-LC and Opus (48 kHz), mono and stereo; bitrate with VBR or CBR; **compared with ffmpeg on macOS, round trips verified in the iOS Simulator** |
-| Android, Windows, Linux, browsers | none yet | `ErrUnsupported` | `ErrUnsupported` |
+| macOS, iOS | AudioToolbox (`AudioConverter`) | AAC-LC from mono to 5.1, HE-AAC and HE-AAC v2 (with the band replication and parametric stereo, at the full sample rate); Opus mono and stereo, any packet length; 16-bit or float samples | AAC-LC and Opus (48 kHz), mono and stereo; bitrate with VBR or CBR; **compared with ffmpeg on macOS, round trips verified in the iOS Simulator** |
+| Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
+| Android, Windows, Linux | none yet | `ErrUnsupported` | `ErrUnsupported` |
 
 See [Audio](#audio) for the API and for what using the system's codecs
 means for AAC licensing.
@@ -497,6 +498,53 @@ Foundation, VA-API or MediaCodec behind it.
   take BT.709 (measured on 320x240 streams), where the pixel formats
   follow the library's one rule. The Ebitengine player does not use
   these frames; see [Ebitengine](#ebitengine) for why.
+- **Audio** goes through `AudioDecoder` and `AudioEncoder`, with the
+  same API and the same timestamps as on the other platforms. WebCodecs
+  leaves a few things unsaid that the backend settles itself:
+  - A decoder stamps its output on its own (the first chunk's timestamp
+    plus the samples so far), so frames are matched to packets by order.
+    Every packet still yields one frame with its PTS and all its samples.
+    An Opus decoder that is given the identification header drops the
+    pre-skip itself, so the header is kept from it.
+  - An encoder's chunks are stamped from 0, with no word about the
+    samples the encoder starts early by. `NewAudioEncoder` therefore runs
+    a trial the first time a configuration is asked for: a short signal is
+    encoded, an Opus encoder's delay is read from the identification
+    header it reports, and an AAC encoder's is measured by decoding the
+    trial in the same page and looking for the signal (2112 samples in
+    Chrome and Safari on macOS, the figure of AudioToolbox). The trial
+    takes some tens of milliseconds and its result is kept for the page.
+  - The trial also shows whether the encoder works: Chrome's AAC encoder
+    on macOS says yes to 64 kbit/s stereo at 48 kHz in `isConfigSupported`
+    and then fails on the first packets, which the backend reports as
+    `ErrUnsupported` from `NewAudioEncoder` (80 kbit/s and above work).
+  - A bitrate the browser's encoder does not offer is not refused: Chrome
+    encodes at its default instead (32 kbit/s asked, 138 kbit/s made), and
+    nothing in the API tells. Chrome's AAC encoder gives the same packets
+    for VBR and CBR.
+  - **Safari** (27 on macOS): its AAC encoder ignores the bitrate in its
+    variable mode, so a bitrate is passed with the constant mode there,
+    which holds it on average. It replaces the first 1024 samples of
+    every signal with silence; the trial notices, and that much silence
+    is sent ahead of the signal (the delay it reports is 3136, not 2112).
+    It hands out the stream description as a whole ES_Descriptor, from
+    which the AudioSpecificConfig is taken. Its decoder returns AAC with
+    more than two channels in the order of the bitstream (centre first),
+    which is put into the order of a WAV file. Its Opus encoder runs in
+    the mode for telephony, as AudioToolbox's does by default, and a page
+    cannot change that: Opus encoded in Safari is good for speech and
+    loses low frequencies of music (17 dB against the input where the
+    other browsers reach 38 dB on the test signal).
+  - **Firefox** (157 on macOS) has no AAC encoder and refuses HE-AAC and
+    4.0 AAC streams after saying yes to their configuration (an
+    `ErrInvalidData` from a later call). Opus in both directions and
+    AAC-LC decoding in mono, stereo, 3.0, 5.0 and 5.1 pass.
+  - HE-AAC in Chrome comes out 962 samples (20 ms) later than on macOS
+    and in Safari: the decoder Chrome uses leaves the delay of the band
+    replication in its output and AudioToolbox takes it out.
+  - Sample rates and channel counts the browser accepts for encoding
+    beyond the library's own rules (Opus at 48 kHz, mono or stereo) are
+    the browser's business; an odd rate may be resampled without notice.
 - **Not done.** No AV1 encoding, as on every backend.
 
 **Verification (2026-10-12).** `scripts/browser_test.sh` builds a `go
@@ -530,6 +578,20 @@ keyframe, profile, bitrate and low-latency tests and encodes H.264 at
 decode tests pass bit-exact in a page where Safari offers AV1 and skip
 where it does not. Chrome on Windows,
 Linux and Android has not been run.
+
+**Audio (2026-10-13).** The audio tests of the root package run through
+the same script: Chrome 153, Firefox 157 and Safari 27 on an Apple M3.
+In Chrome all of them pass: AAC (ADTS and MP4, mono to 5.1) and Opus
+(10, 20 and 60 ms packets) decode to ffmpeg's samples in place (75 dB),
+HE-AAC and HE-AAC v2 decode at the full rate, AAC and Opus encoded in the
+page decode with ffmpeg to the input in place (47 dB and 39 dB), from an
+ADTS file and from an MP4 file with the delay in its edit list, and the
+bitrate, flush, error and garbage tests pass; the 64 kbit/s stereo AAC
+cases skip as unsupported. In Safari the same tests pass with the workarounds
+above (AAC round trips at 51 to 56 dB once the lost first samples are
+compensated, Opus at 17 dB in its telephony mode). In Firefox the Opus
+tests and the AAC decoding tests pass and the tests that need an AAC
+encoder, HE-AAC or 4.0 skip.
 
 ### AV1 on Linux and Windows
 
@@ -861,7 +923,7 @@ m.Close()
   positions itself one packet (AAC) or 80 ms (Opus) before the target for
   that reason, and the samples up to the target are to be dropped.
 - **Channels** come out in the order of a WAV file (left, right, centre,
-  LFE, surrounds). Encoding takes mono and stereo.
+  LFE, surrounds), up to 5.1. Encoding takes mono and stereo.
 - **Sample rate.** The decoder returns the stream's rate (48 kHz for Opus,
   whatever the recording had) and the encoder takes what it is given
   (Opus: 48 kHz only). The library does not resample.
@@ -882,6 +944,10 @@ What the backend does on macOS and iOS:
 - Only an edit list gives `AudioFormat.Delay` for a track. Files that
   record the delay in iTunes metadata alone (`iTunSMPB`, as `afconvert`
   writes) report 0.
+
+In a browser the same API sits on `AudioDecoder` and `AudioEncoder`; what
+differs there (the delay of an encoder has to be measured, each browser
+has codecs of its own) is in the [browser notes](#browser-notes).
 
 ### AAC and licences
 
@@ -1382,7 +1448,8 @@ an MP4 file) must be the input in place, which checks the reported delay to
 the sample, and ffprobe must see the stream parameters, the packet count
 and the duration; a second track that starts later must start later in the
 file by the same amount. HE-AAC files come from `afconvert`, since ffmpeg
-has no free HE-AAC encoder, so that test runs on macOS only. The test
+has no free HE-AAC encoder, so that test runs on macOS only
+(`scripts/browser_test.sh` lends it to the browser like ffmpeg). The test
 signal is a tone per channel plus a sweep that never repeats, so that a
 shift by one sample or two swapped channels show up. The header code in
 `internal/aac`, `internal/opus` and `encoding/adts` is plain Go and tested

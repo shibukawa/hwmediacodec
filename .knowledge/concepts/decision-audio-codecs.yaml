@@ -73,7 +73,7 @@ facts:
     android: NDK AMediaCodec, reusing internal/mediacodec (audio/mp4a-latm, audio/opus)
     windows: Media Foundation MFTs (AAC decode and LC encode, Opus decode expected only)
     linux: dlopen libopus for Opus; AAC only through an installed libavcodec or libfdk-aac
-    browser: WebCodecs AudioDecoder and AudioEncoder, once the wasm branch is merged
+    browser: WebCodecs AudioDecoder and AudioEncoder (delivered, milestone:audio-webcodecs)
 open_questions:
   linux-aac-library:
     text: Which library does the Linux AAC backend open (libavcodec with its changing ABI, libfdk-aac
@@ -93,6 +93,9 @@ relations:
 - relation: extends
   to: decision:ffi-strategy
 history:
+  browser-2026-10-13:
+    summary: 'After the browser video backend was merged the author asked for audio in the browser too
+      ("音声側もブラウザ対応をお願いします"); delivered as milestone:audio-webcodecs on the same day.'
   agreed-2026-10-13:
     summary: Feasibility, the licensing position and the layering proposed in three answers and accepted
       by the author; two milestones follow (core audio on macOS and iOS with MP4 tracks, then synchronised

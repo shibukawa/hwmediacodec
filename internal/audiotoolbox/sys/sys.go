@@ -71,7 +71,6 @@ const (
 	LayoutMPEG_4_0A uint32 = 115<<16 | 4 // L R C Cs
 	LayoutMPEG_5_0A uint32 = 117<<16 | 5 // L R C Ls Rs
 	LayoutMPEG_5_1A uint32 = 121<<16 | 6 // L R C LFE Ls Rs
-	LayoutMPEG_7_1C uint32 = 128<<16 | 8 // L R C LFE Ls Rs Rls Rrs
 )
 
 // AudioStreamBasicDescription mirrors the CoreAudio struct (40 bytes).

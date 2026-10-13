@@ -18,13 +18,14 @@ import (
 // channelLayouts names the order of the decoded channels for streams with
 // more than two: the order of WAV files and of most audio APIs (front left
 // and right, centre, LFE, then the surrounds) instead of the order the AAC
-// bitstream stores them in.
+// bitstream stores them in. 7.1 is left out: its AAC form has two more
+// front channels where the common 7.1 has two rear ones, and which of the
+// orders in use a caller expects is not settled by a test here.
 var channelLayouts = map[int]uint32{
 	3: sys.LayoutMPEG_3_0A,
 	4: sys.LayoutMPEG_4_0A,
 	5: sys.LayoutMPEG_5_0A,
 	6: sys.LayoutMPEG_5_1A,
-	8: sys.LayoutMPEG_7_1C,
 }
 
 type decoder struct {
@@ -180,7 +181,7 @@ func (d *decoder) createConverter() error {
 	if d.channels > 2 {
 		tag, ok := channelLayouts[d.channels]
 		if !ok {
-			return d.unsupported(fmt.Sprintf("no channel layout for %d channels", d.channels))
+			return d.unsupported(fmt.Sprintf("%d channels are not supported; mono to 5.1 are", d.channels))
 		}
 		layout := sys.AudioChannelLayout{Tag: tag}
 		if st := sys.AudioConverterSetProperty(conv, sys.PropOutputChannelLayout, uint32(unsafe.Sizeof(layout)), unsafe.Pointer(&layout)); st != 0 {

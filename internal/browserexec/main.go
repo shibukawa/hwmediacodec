@@ -59,8 +59,9 @@ import (
 	"time"
 )
 
-// allowed lists the host tools a test may run.
-var allowed = map[string]bool{"ffmpeg": true, "ffprobe": true, "x265": true, "aomenc": true}
+// allowed lists the host tools a test may run (afconvert is macOS's audio
+// converter, the one free source of HE-AAC files).
+var allowed = map[string]bool{"ffmpeg": true, "ffprobe": true, "x265": true, "aomenc": true, "afconvert": true}
 
 // page starts the test binary. Output goes to the wrapper in order; the
 // exit code follows once everything has been delivered.

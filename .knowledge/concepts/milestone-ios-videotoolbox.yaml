@@ -254,7 +254,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: hwmediacodec.go
-      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
+      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
 relations:
 - relation: implements
   to: requirement:hwmediacodec

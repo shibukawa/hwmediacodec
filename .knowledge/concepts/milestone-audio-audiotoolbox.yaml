@@ -97,9 +97,9 @@ non_goals:
 acceptance:
   aac-decode-matches-ffmpeg:
     text: AAC-LC streams from ffmpeg's encoder (48 kHz stereo, 44.1 kHz mono, 22.05 kHz stereo in ADTS;
-      48 kHz stereo and 44.1 kHz mono in MP4; 5.1 in ADTS) decode to as many samples as ffmpeg's decoder
-      gives with -flags2 +skip_manual, at shift 0 and at least 50 dB (30 dB per channel for 5.1, where
-      the order must be the WAV order); S16 and F32 output agree.
+      48 kHz stereo and 44.1 kHz mono in MP4; 3.0, 4.0, 5.0 and 5.1 in ADTS) decode to as many samples
+      as ffmpeg's decoder gives with -flags2 +skip_manual, at shift 0 and at least 50 dB (30 dB per channel
+      for the layouts with more than two, where the order must be the WAV order); S16 and F32 output agree.
     scope:
       milestone: audio-audiotoolbox
       platform: darwin
@@ -232,19 +232,19 @@ verification:
         Opus CBR 64000/160000'
     basis:
     - path: audio_test.go
-      input_hash: 9f9de344a4746c7e2f740bf4e76d86c6f4a57b4e3b2e8e5d54eb2dae05ca8f6a
+      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: audio.go
       input_hash: 4499f9910b67f655e78a4a82d6e90b370df541ae913d8bbc89a5e892a8aefb08
     - path: internal/codec/audio.go
       input_hash: c5d32693b648056bc2f70cfa632cd281c7b37e2600a57e55b83775f955c9a016
     - path: internal/audiotoolbox/decoder.go
-      input_hash: f5391319579ff47d003697be61dc13c1d2d15573e5d12690419bd34004ff69a8
+      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
     - path: internal/audiotoolbox/encoder.go
-      input_hash: f66b0bda3c5a3de8f86b80fab2b13f83c3c2612c799663374330b4ad1fe0e6ef
+      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
     - path: internal/audiotoolbox/converter.go
       input_hash: 70a85e1da0284f5576981ab09928ef96b494d4245014477aa15d8541231beeb0
     - path: internal/audiotoolbox/sys/sys.go
-      input_hash: 868110ef584437a33dc1e7ffed170e6761ba7a28ea0fedb84b5201de4ef58f18
+      input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
     - path: encoding/adts/adts.go
       input_hash: d0a7dc27138d9b72f6b59c79a979b625e4cc5b7d7ad41d92cfdd7ec27a0767e8
   mp4-audio-tests:
@@ -254,7 +254,7 @@ verification:
     scope:
       milestone: audio-audiotoolbox
       platform: darwin
-    test: go test ./mediacontainer/mp4/ -run 'TestAudio|TestMuxAudioWithVideo'
+    test: go test . -run 'TestAudioTrackDecode|TestAudioMuxRoundTrip|TestAudioTrackDecodeHEAAC' ; go test ./mediacontainer/mp4/ -run 'TestAudioPacketSourceSeek|TestMuxAudioWithVideo'
     evidence:
       path: mediacontainer/mp4/audio_test.go
       note: '2026-10-13 on an Apple M3: AAC from ffmpeg 63.8 / 57.4 dB against its decoder, Opus from
@@ -266,9 +266,9 @@ verification:
         and ffmpeg plays up to 192 padding samples)'
     basis:
     - path: mediacontainer/mp4/audio_test.go
-      input_hash: 20c12cef8fe47417c853e7b014f2187e19cee7cc5f97bba3f84e689e3e19a33e
-    - path: mediacontainer/mp4/audio_he_test.go
-      input_hash: fa1bdcd45b7a0a31165c73345ef8f27d579b520f7d9cf27ef27195ef8bea7d99
+      input_hash: b73c85310211174442bafacf727d1f9698b6fb3a96da7af282cf3a030385cbca
+    - path: audio_mp4_test.go
+      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
     - path: mediacontainer/mp4/audio.go
       input_hash: 57c8fb1e0e6ebac54e3917e98253af37ddff4c17ce90ecbcba8c0e86edf30653
     - path: mediacontainer/mp4/mux.go
@@ -276,9 +276,9 @@ verification:
     - path: mediacontainer/mp4/demux.go
       input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: internal/audiotoolbox/decoder.go
-      input_hash: f5391319579ff47d003697be61dc13c1d2d15573e5d12690419bd34004ff69a8
+      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
     - path: internal/audiotoolbox/encoder.go
-      input_hash: f66b0bda3c5a3de8f86b80fab2b13f83c3c2612c799663374330b4ad1fe0e6ef
+      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
   header-unit-tests:
     state: passed
     method: unit
@@ -305,9 +305,9 @@ verification:
     - path: encoding/adts/adts_test.go
       input_hash: bb30b83b3fba190fb52fbe0c919c7600d2590a777f777a003b4c30f0e77c4e8e
     - path: internal/audiotoolbox/cookie.go
-      input_hash: 13d58898fe46fba6a5717a9cf3aa28f70c4819484a8d4309cbcbc461bb0e1562
+      input_hash: 35e6eda5432d110d9d99543b0956491ea7bfbad7f7e59772b7ceca3dc2418abd
     - path: internal/audiotoolbox/cookie_test.go
-      input_hash: 7fd522916a33a8442a995d0c1eb24f3782b0e14ad7cb58cda3f9c202261e92da
+      input_hash: afd1d8f39c957f3a20b26060a3c168f94caef21f21e600ff7fbbba0210826ad0
   simulator-test-run:
     state: passed
     method: manual
@@ -324,11 +324,11 @@ verification:
         cannot run there
     basis:
     - path: audio_test.go
-      input_hash: 9f9de344a4746c7e2f740bf4e76d86c6f4a57b4e3b2e8e5d54eb2dae05ca8f6a
+      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: internal/audiotoolbox/backend.go
       input_hash: 48e6d2cf9b8402612d13978f7863ff5fdb0b39a858652b8c702ff19302bae6b1
     - path: internal/audiotoolbox/sys/sys.go
-      input_hash: 868110ef584437a33dc1e7ffed170e6761ba7a28ea0fedb84b5201de4ef58f18
+      input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
   iphone-audio-run:
     state: not_run
     method: manual
@@ -355,9 +355,9 @@ verification:
         check passes
     basis:
     - path: hwmediacodec.go
-      input_hash: 4cf5337d4f24a22994f7a4ded131736d33c54b58b98285d8b182a132102ccba9
+      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
     - path: internal/codec/codec.go
-      input_hash: dbab35abcc9b5845b232e1273b76b93c1d6f8d9b089ae6f883e40484d3f9c020
+      input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
     - path: backends_darwin.go
       input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
 relations:
@@ -372,6 +372,12 @@ relations:
 - relation: extends
   to: milestone:mediacontainer-mp4
 history:
+  reworked-with-browser-2026-10-13:
+    summary: 'While the browser slice (milestone:audio-webcodecs) was added on the same branch - the tests
+      that take the codecs through MP4 files moved from mediacontainer/mp4 to the root package (audio_mp4_test.go,
+      files through testutil so that they run in a browser); the ES_Descriptor parser moved to internal/aac
+      for the browser backend; decoding was limited to 5.1 (3.0, 4.0, 5.0 and 5.1 are tested against ffmpeg;
+      7.1 was mapped but never tested, and its AAC form has front pairs where common 7.1 has rear ones).'
   planned-2026-10-13:
     summary: The author asked whether audio decoding and encoding could be added, then about AAC licensing
       and about how far the library should go with sound; the scope in decision:audio-codecs was agreed

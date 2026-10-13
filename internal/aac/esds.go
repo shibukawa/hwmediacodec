@@ -1,0 +1,54 @@
+package aac
+
+// ConfigFromESDescriptor returns the AudioSpecificConfig inside an MPEG-4
+// ES_Descriptor (ISO/IEC 14496-1, section 7.2.6.5), or nil when there is
+// none. The descriptor is the payload of an MP4 esds box, the magic cookie
+// of an AudioToolbox AAC converter and what Safari hands out as the
+// description of an AAC stream.
+func ConfigFromESDescriptor(b []byte) []byte {
+	for len(b) >= 2 {
+		tag := b[0]
+		b = b[1:]
+		size := 0
+		for i := 0; i < 4 && len(b) > 0; i++ {
+			c := b[0]
+			b = b[1:]
+			size = size<<7 | int(c&0x7F)
+			if c&0x80 == 0 {
+				break
+			}
+		}
+		if size > len(b) {
+			size = len(b)
+		}
+		switch tag {
+		case 0x03: // ES_Descriptor
+			// Descend past ES_ID and the flags with their optional fields.
+			if size < 3 {
+				return nil
+			}
+			skip := 3
+			if flags := b[2]; flags&0x80 != 0 {
+				skip += 2
+			} else if flags&0x40 != 0 && len(b) > skip {
+				skip += 1 + int(b[skip])
+			} else if flags&0x20 != 0 {
+				skip += 2
+			}
+			if skip > len(b) {
+				return nil
+			}
+			b = b[skip:]
+		case 0x04: // DecoderConfigDescriptor
+			if size < 13 {
+				return nil
+			}
+			b = b[13:]
+		case 0x05: // DecoderSpecificInfo
+			return append([]byte(nil), b[:size]...)
+		default:
+			b = b[size:]
+		}
+	}
+	return nil
+}

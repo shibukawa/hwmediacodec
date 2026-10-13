@@ -5,9 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -70,16 +69,14 @@ func PCMSamples(b []byte) []int16 {
 func EncodeAudio(t testing.TB, pcm []int16, sampleRate, channels int, name string, args ...string) string {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	dir := t.TempDir()
-	in := filepath.Join(dir, "in.pcm")
-	if err := os.WriteFile(in, PCMBytes(pcm), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	out := filepath.Join(dir, name)
+	dir := TempDir(t)
+	in := dir + "/in.pcm"
+	WriteFile(t, in, PCMBytes(pcm))
+	out := dir + "/" + name
 	all := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "s16le", "-ar", fmt.Sprint(sampleRate), "-ac", fmt.Sprint(channels), "-i", in}
 	all = append(append(all, args...), out)
-	cmd := exec.Command(ffmpeg, all...)
+	cmd := Command(ffmpeg, all...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -104,13 +101,14 @@ func DecodeAudio(t testing.TB, path string, all bool, decoder string) []int16 {
 		args = append(args, "-c:a", decoder)
 	}
 	args = append(args, "-i", path, "-vn", "-f", "s16le", "-c:a", "pcm_s16le", "-")
-	cmd := exec.Command(ffmpeg, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	cmd := Command(ffmpeg, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.Output()
+	if err != nil {
 		t.Fatalf("ffmpeg decode audio failed: %v\n%s", err, stderr.String())
 	}
-	return PCMSamples(stdout.Bytes())
+	return PCMSamples(stdout)
 }
 
 // AudioSNR returns the signal-to-noise ratio in dB of got against ref over
@@ -150,4 +148,54 @@ func AudioAlignment(ref, got []int16, channels, maxShift int) (shift int, snr fl
 		}
 	}
 	return shift, snr
+}
+
+// AudioInfo is ffprobe's view of the first audio stream of a file.
+type AudioInfo struct {
+	Codec      string
+	SampleRate int
+	Channels   int
+	Packets    int
+	// Start and Duration are in seconds.
+	Start    float64
+	Duration float64
+}
+
+// ProbeAudio runs ffprobe on the first audio stream of path.
+func ProbeAudio(t testing.TB, path string) AudioInfo {
+	t.Helper()
+	if _, err := LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not found in PATH")
+	}
+	cmd := Command("ffprobe", "-v", "error", "-select_streams", "a:0", "-count_packets",
+		"-show_entries", "stream=codec_name,sample_rate,channels,nb_read_packets,start_time,duration",
+		"-of", "default=noprint_wrappers=1", path)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffprobe %s: %v\n%s", path, err, stderr.String())
+	}
+	var info AudioInfo
+	for _, line := range strings.Split(string(out), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "codec_name":
+			info.Codec = value
+		case "sample_rate":
+			info.SampleRate, _ = strconv.Atoi(value)
+		case "channels":
+			info.Channels, _ = strconv.Atoi(value)
+		case "nb_read_packets":
+			info.Packets, _ = strconv.Atoi(value)
+		case "start_time":
+			info.Start, _ = strconv.ParseFloat(value, 64)
+		case "duration":
+			info.Duration, _ = strconv.ParseFloat(value, 64)
+		}
+	}
+	return info
 }
