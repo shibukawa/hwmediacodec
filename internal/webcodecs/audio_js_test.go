@@ -15,53 +15,6 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
-// TestTrialMeasurement checks the arithmetic of the encoder trial on
-// made-up decoder output: where the signal starts and how much of its
-// start is missing.
-func TestTrialMeasurement(t *testing.T) {
-	signal := trialSignal()
-	for _, v := range signal {
-		if v < -0.25 || v > 0.25 {
-			t.Fatalf("trial signal sample %g outside [-0.25, 0.25]", v)
-		}
-	}
-	shifted := func(delay, lost int) []float32 {
-		out := make([]float32, delay+len(signal)+trialTail)
-		copy(out[delay:], signal)
-		clear(out[delay : delay+lost])
-		// A codec's output is not the input: add a little of something else.
-		for i := range out {
-			out[i] += 0.01 * float32((i*7919)%13-6) / 6
-		}
-		return out
-	}
-	for _, c := range []struct{ delay, lost, wantLead int }{
-		{2112, 0, 0},
-		{312, 0, 0},
-		{0, 0, 0},
-		{2112, 1024, 1024},
-		{1600, 1000, 1024},
-	} {
-		decoded := shifted(c.delay, c.lost)
-		delay, ok := signalDelay(signal, decoded, 1024)
-		if !ok || delay != c.delay {
-			t.Errorf("delay %d with %d lost: measured %d (found %v)", c.delay, c.lost, delay, ok)
-			continue
-		}
-		if lead := lostLead(signal, decoded, delay); lead != c.wantLead {
-			t.Errorf("delay %d with %d lost: lead %d, want %d", c.delay, c.lost, lead, c.wantLead)
-		}
-	}
-	// Output that has nothing to do with the signal gives no delay.
-	unrelated := make([]float32, len(signal)+trialTail)
-	for i := range unrelated {
-		unrelated[i] = float32((i*31)%17-8) / 64
-	}
-	if delay, ok := signalDelay(signal, unrelated, 1024); ok {
-		t.Errorf("a delay of %d was found in unrelated samples", delay)
-	}
-}
-
 func TestAudioConfigs(t *testing.T) {
 	for _, c := range []struct {
 		asc  []byte

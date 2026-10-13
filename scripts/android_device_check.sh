@@ -4,7 +4,10 @@
 # the README was done: probe, decode a B-frame H.264 and an HEVC stream
 # (per-frame SHA-256 in display order against ffmpeg's decode), encode
 # H.264 and HEVC from raw NV12 (frame count and PSNR by ffprobe/ffmpeg),
-# and transcode H.264 to HEVC.
+# and transcode H.264 to HEVC. Then the audio codecs: AAC and Opus files
+# from ffmpeg decoded on the device (every sample against ffmpeg's
+# decoder), and the test signal encoded on the device, decoded by ffmpeg
+# and compared with the input.
 #
 # Needs: adb with one device attached (or ANDROID_SERIAL set), the NDK at
 # ANDROID_NDK_HOME, ffmpeg and ffprobe, python3. SOFTWARE=1 passes
@@ -122,5 +125,41 @@ if run transcode -in h264 -codec hevc -bitrate 800k $SW -o tc.hevc in.h264; then
 else
   echo "   transcode failed"; fail=1
 fi
+# Audio: the framework's AAC and Opus codecs, which are software on every
+# device (no -software needed). The samples are compared on the host.
+cmp_audio() { go run ./internal/audiocmp "$@"; }
+go run ./internal/audiocmp -make -rate 48000 -channels 2 -seconds 2 > "$WORK/signal.pcm"
+ffmpeg -hide_banner -loglevel error -y -f s16le -ar 48000 -ac 2 -i "$WORK/signal.pcm" -c:a aac -b:a 128k "$WORK/in_aac.mp4"
+ffmpeg -hide_banner -loglevel error -y -f s16le -ar 48000 -ac 2 -i "$WORK/signal.pcm" -c:a aac -b:a 128k "$WORK/in_adts.aac"
+audio_in="in_aac.mp4 in_adts.aac"
+if ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libopus; then
+  ffmpeg -hide_banner -loglevel error -y -f s16le -ar 48000 -ac 2 -i "$WORK/signal.pcm" -c:a libopus -b:a 96k "$WORK/in_opus.mp4"
+  audio_in="$audio_in in_opus.mp4"
+fi
+adb push "$WORK/signal.pcm" $(for f in $audio_in; do echo "$WORK/$f"; done) "$DEV/" > /dev/null
+for f in $audio_in; do
+  echo "== decode audio $f (every sample against ffmpeg's decoder)"
+  if run decode-audio -o dec.pcm "$f"; then
+    adb pull "$DEV/dec.pcm" "$WORK/dec.pcm" > /dev/null
+    ffmpeg -hide_banner -loglevel error -y -flags2 +skip_manual -i "$WORK/$f" -f s16le -c:a pcm_s16le "$WORK/ref.pcm"
+    cmp_audio -channels 2 -min-snr 50 "$WORK/ref.pcm" "$WORK/dec.pcm" || { echo "   DIFFERS from ffmpeg"; fail=1; }
+  else
+    echo "   decode-audio $f failed"; fail=1
+  fi
+done
+for c in aac opus; do
+  echo "== encode audio $c (ffmpeg decodes the MP4 file; against the input)"
+  if run encode-audio -codec $c -bitrate 128k -o enc_$c.mp4 signal.pcm; then
+    adb pull "$DEV/enc_$c.mp4" "$WORK/enc_$c.mp4" > /dev/null
+    ffprobe -hide_banner -loglevel error -select_streams a -count_packets -show_entries stream=codec_name,sample_rate,channels,nb_read_packets,start_time,duration -of csv=p=0 "$WORK/enc_$c.mp4"
+    # ffmpeg applies the edit list, so what it plays starts at the input's
+    # first sample; behind the end of an Opus track it plays the padding.
+    ffmpeg -hide_banner -loglevel error -y -i "$WORK/enc_$c.mp4" -f s16le -c:a pcm_s16le "$WORK/heard.pcm"
+    cmp_audio -channels 2 -prefix -min-snr 15 "$WORK/signal.pcm" "$WORK/heard.pcm" || { echo "   the decoded file is not the input in place"; fail=1; }
+  else
+    echo "   encode-audio $c failed"; fail=1
+  fi
+done
+
 adb shell rm -rf "$DEV"
 [ $fail -eq 0 ] && echo "== all checks passed" || { echo "== some checks failed"; exit 1; }

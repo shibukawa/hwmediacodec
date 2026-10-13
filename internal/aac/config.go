@@ -210,6 +210,18 @@ func ParseConfig(asc []byte) (Config, error) {
 	return c, nil
 }
 
+// StandardRate reports whether a sample rate is one of those in the
+// sampling frequency table, which is what ADTS can carry and what most
+// encoders take.
+func StandardRate(sampleRate int) bool {
+	for _, r := range sampleRates {
+		if r == sampleRate {
+			return true
+		}
+	}
+	return false
+}
+
 // LCConfig builds the AudioSpecificConfig of an AAC-LC stream.
 func LCConfig(sampleRate, channels int) ([]byte, error) {
 	cc := -1
