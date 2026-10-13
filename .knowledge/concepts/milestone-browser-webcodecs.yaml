@@ -38,7 +38,8 @@ constraints:
   ffmpeg and files through one seam (host.go) that is os/exec natively and HTTP to the wrapper in the
   browser.
 non_goals:
-- A sanctioned way into Ebitengine's textures (the direct upload finds them from the outside; see facts.zero_copy).
+- Zero-copy display in ebitenvideo - tried and taken out; it needs a sanctioned way into Ebitengine's textures
+  (facts.zero_copy).
 - AV1 encoding (a separate slice on every backend).
 - GopherJS, TinyGo and WASI support.
 - Running Chrome on other operating systems from this session.
@@ -77,14 +78,6 @@ acceptance:
       milestone: browser-webcodecs
     verified_by:
     - player-in-browser
-  zero-copy:
-    text: In a browser the Ebitengine player shows frames without taking them through CPU memory where that is
-      cheaper, the picture is the same as on the copy path, and when the short way is not available playback goes
-      on with RGBA frames.
-    scope:
-      milestone: browser-webcodecs
-    verified_by:
-    - direct-upload
   clip-plays-without-hevc:
     text: A browser without an HEVC decoder (Firefox) gets the bundled clip in H.264, chosen without any setting,
       and automated tests cover the choice and both encodings.
@@ -248,7 +241,7 @@ verification:
         No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: aefc56e4b93c400e7e0f9e4d04791e9098d63f80cddc4e85477f07e4c64ce358
+      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
     - path: playback/source.go
       input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
     - path: internal/webcodecs/decoder.go
@@ -321,29 +314,23 @@ verification:
       input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
     - path: examples/internal/bundled/bundled_test.go
       input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
-  direct-upload:
+  player-in-game-loop:
     state: passed
     method: integration
     authority: observed
     scope:
       milestone: browser-webcodecs
       platform: js
-    test: scripts/browser_test.sh -v -run TestDirectUpload ./ebitenvideo in Chrome (headless and with HWMEDIACODEC_BROWSER_HEADED=1,
-      also with HWMEDIACODEC_TEST_SIZE=1920x1080 and 3840x2160), Safari and Firefox
+    test: scripts/browser_test.sh -v -run TestPlayerInGameLoop ./ebitenvideo (a real ebiten.RunGame in the page)
     evidence:
-      path: ebitenvideo/upload_js_test.go
-      note: '2026-10-13: inside ebiten.RunGame the player finds its texture; the image read back after 60 directly
-        uploaded frames equals frame 29 of the stream as the RGBA path decodes it (identical in Chrome, 37 dB in
-        Safari, whose RGBA path converts in Go); a second player with the search broken goes back to RGBA frames at
-        50 ms and keeps playing the right pictures. Firefox skips (RGBA frames by choice). The player sample shows
-        "zero-copy" in the app''s built-in browser at 60 fps without skipped frames.'
+      path: ebitenvideo/player_js_test.go
+      note: 2026-10-13, Chrome - after 40 ticks with a picture the image read back equals a frame of the stream as
+        decoded on its own
     basis:
-    - path: ebitenvideo/upload_js.go
-      input_hash: 8174a0525926dcc980be7ae30a0e404b498e6421652e7fa439fe8fea96cffd39
-    - path: ebitenvideo/upload_js_test.go
-      input_hash: e4ef5ce2bc2348990b5e834fe2488eb8db5c3e71b7baddf135958f5ed8bbf98f
+    - path: ebitenvideo/player_js_test.go
+      input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
     - path: ebitenvideo/player.go
-      input_hash: f21624601cacdb2981af6820944f62bb71c53eda33bac02811737d8b6e3a0726
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
   other-browsers:
     state: not_run
     method: integration
@@ -385,6 +372,11 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  zero-copy-removed-2026-10-13:
+    summary: 'After asking how the other backends manage frame memory (CPU copies in a per-decoder pool, no GPU hand-over
+      anywhere), the author decided to drop the direct upload from ebitenvideo. The player takes RGBA frames again
+      on every platform; the Native frame format stays in the core, and a game-loop test in the browser stays in
+      ebitenvideo.'
   zero-copy-2026-10-13:
     summary: 'The author asked for zero-copy display. The core gained the Native frame format (the decoder''s VideoFrame
       behind Frame.Native) and ebitenvideo uploads those frames straight into the texture of its image in Chrome
@@ -437,37 +429,32 @@ facts:
     tinygo: -target wasm is GOOS=js with a syscall/js of its own (the option missing from the author's
       list); wasip1/wasip2 as for Go; untested, a later check
   zero_copy:
+    state: 'tried and taken out on 2026-10-13 (commit 543e25b has the implementation, the one after it removes it):
+      the core keeps the Native frame format, ebitenvideo is back to RGBA frames and WritePixels in the browser too'
+    why_removed: the author's decision after the measurements and the memory model of the other backends were on
+      the table - the upload had to find Ebitengine's texture from outside, it paid only from 1080p up in Chrome,
+      it was slower in Firefox, and no native backend can do the same. Revisit when Ebitengine offers a way to
+      write an image source into an image's texture.
     core: hwmediacodec.Native output format; see backend:webcodecs facts.native_frames_2026-10-13
     ebitengine_internals: 'Ebitengine 2.10.4 on js creates a WebGL2 context on its canvas, copies the context''s
       functions with bind when it starts, allocates one texture per unmanaged image with texImage2D(TEXTURE_2D,
       0, RGBA, w, h, 0, RGBA, UNSIGNED_BYTE, null) at the next power of two (16 at least), no padding, and writes
       pixels with texSubImage2D at flush time. It exposes none of it.'
-    how: 'upload_js.go - an init function wraps texImage2D on WebGL2RenderingContext.prototype (before Ebitengine
-      binds it) and records allocations (context, texture, size, sequence). The player writes its first frames
-      with WritePixels (pixels read back through an OffscreenCanvas), remembers 16 of them, and then looks among
-      the allocations made since its image exists for a texture of the right size that reads those pixels back
-      (temporary framebuffer + readPixels, framebuffer binding restored). From then on - bindTexture, texSubImage2D(TEXTURE_2D,
-      0, 0, 0, RGBA, UNSIGNED_BYTE, videoFrame), previous binding restored; getError only on the first upload.'
-    fallbacks: 'texture not found within 10 frames (3 when no allocation was seen at all), an upload error, or a
-      texture that is gone - the player closes its playback core and reopens the source with RGBA frames at the
-      same position (Player.reopen; sources that cannot seek keep the canvas read-back). Firefox (user agent with
-      Gecko/) asks for RGBA frames from the start. Players created before the game loop work: the search starts
-      with the first frame.'
-    measurements_m3: 'time per frame on the page''s one thread, measured in TestDirectUpload inside ebiten.RunGame
-      (Chrome with a window): RGBA path = copy into Go memory + WritePixels + texSubImage2D at flush = 0.9 ms
-      at 720p, 1.7 ms at 1080p, 9.4 ms at 4K; direct upload 1.1-1.7 ms at every size; canvas read-back 5.6-9 ms
-      at 720p, 12 ms at 1080p, 50 ms at 4K. Firefox 720p - RGBA 1.9 ms, direct 4.5 ms. Safari 720p - RGBA 1.3-1.7
-      ms plus the Go YUV-to-RGB conversion in the decoder, direct 3.8-5.4 ms. The RGBA path additionally makes
-      the browser read every frame back from the GPU, off the page''s thread.'
-    colour_caveat: with the direct upload the browser converts the frame; for untagged SD streams Safari and Firefox
-      take BT.709 where the RGBA path follows the library's rule (BT.601). Tagged and HD content is the same either
-      way.
-    risks:
-    - A new Ebitengine release that allocates or binds differently - the texture is not found and the player falls
-      back (covered by the test's breakDirect phase), nothing is corrupted because a texture is only used after
-      its pixels were read back.
-    - An atlas page or another image of the same internal size allocated in the same frame cannot be mistaken for
-      the image's texture, for the same reason.
+    how_it_worked: 'an init function wrapped texImage2D on WebGL2RenderingContext.prototype (before Ebitengine binds
+      it) and recorded allocations; the player wrote its first frames with WritePixels (read back through an OffscreenCanvas),
+      then took the allocation of the right size that read those pixels back (temporary framebuffer + readPixels),
+      and from then on called texSubImage2D(TEXTURE_2D, 0, 0, 0, RGBA, UNSIGNED_BYTE, videoFrame) with the previous
+      texture binding restored. When the texture was not found it reopened the source with RGBA frames at the same
+      position. It worked in Chrome and Safari (the image read back was identical to the RGBA path in Chrome); Firefox
+      was left on RGBA frames.'
+    measurements_m3: 'time per frame on the page''s one thread, inside ebiten.RunGame (Chrome with a window): RGBA
+      path = copy into Go memory + WritePixels + texSubImage2D at flush = 0.9 ms at 720p, 1.7 ms at 1080p, 9.4 ms
+      at 4K; direct upload 1.1-1.7 ms at every size; a VideoFrame read back through a canvas 5.6-9 ms at 720p, 12
+      ms at 1080p, 50 ms at 4K. Firefox 720p - RGBA 1.9 ms, direct 4.5 ms. Safari 720p - RGBA 1.3-1.7 ms plus the
+      Go YUV-to-RGB conversion in the decoder, direct 3.8-5.4 ms. The RGBA path additionally makes the browser read
+      every frame back from the GPU, off the page''s thread.'
+    colour_caveat: with a direct upload the browser converts the frame; for untagged SD streams Safari and Firefox
+      take BT.709 where the RGBA path follows the library's rule (BT.601).
   test_harness:
     wrapper: internal/browserexec, built as go_js_wasm_exec and put first on PATH by scripts/browser_test.sh,
       so that go test finds it without -exec
@@ -494,6 +481,6 @@ facts:
     browser backend could be the first with an AV1 encoder when that slice comes.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB
     output, with the header writers of internal/h264 and internal/hevc.
-  - Ask Ebitengine for an API to write a browser image source into an image's texture; it would replace the
-    texture search in ebitenvideo/upload_js.go.
+  - Ask Ebitengine for an API to write a browser image source (a VideoFrame) into an image's texture; with it
+    the direct upload measured in facts.zero_copy can come back without reaching into Ebitengine.
   - TinyGo -target wasm build check.

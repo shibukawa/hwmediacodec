@@ -591,7 +591,7 @@ verification:
       locator: TestPlayerPlaysAndLoops
     basis:
     - path: ebitenvideo/player.go
-      input_hash: f21624601cacdb2981af6820944f62bb71c53eda33bac02811737d8b6e3a0726
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
     - path: ebitenvideo/player_darwin_test.go
       input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
 open_questions:
@@ -666,9 +666,9 @@ open_questions:
       D3D11 texture, DMA-BUF)?
     state: deferred
     resolution: Ebitengine has no public native-texture import today; revisit if Ebitengine gains one
-      or if WritePixels throughput is measured as the bottleneck. In the browser the answer is yes since 2026-10-13
-      (milestone:browser-webcodecs facts.zero_copy) - the VideoFrame goes into the image's texture, which is found
-      from outside Ebitengine; the native platforms are as before.
+      or if WritePixels throughput is measured as the bottleneck. In the browser it was built and measured on 2026-10-13
+      and taken out again (milestone:browser-webcodecs facts.zero_copy) - it works only by finding Ebitengine's
+      texture from outside; the frames themselves are available as hwmediacodec.Native.
   software-fallback:
     text: Should the library offer a software path when no hardware is present?
     state: deferred
