@@ -143,6 +143,41 @@ func decode(t *testing.T, d codec.Decoder, packets [][]byte) [][32]byte {
 	return sums
 }
 
+// decodeBytes is decode with a tightly packed copy of every frame instead
+// of its checksum.
+func decodeBytes(t *testing.T, d codec.Decoder, packets [][]byte) [][]byte {
+	t.Helper()
+	ctx := context.Background()
+	var frames [][]byte
+	drain := func(end error) {
+		for {
+			f, err := d.Receive(ctx)
+			if err == end {
+				return
+			}
+			if errors.Is(err, codec.ErrUnsupported) {
+				t.Skipf("not available in this browser: %v", err)
+			}
+			if err != nil {
+				t.Fatalf("Receive: %v", err)
+			}
+			frames = append(frames, testutil.FrameBytes(f))
+			f.Release()
+		}
+	}
+	for i, p := range packets {
+		if err := d.Send(ctx, codec.Packet{Data: p, PTS: int64(i)}); err != nil {
+			t.Fatalf("Send %d: %v", i, err)
+		}
+		drain(codec.ErrAgain)
+	}
+	if err := d.Flush(ctx); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	drain(io.EOF)
+	return frames
+}
+
 func compare(t *testing.T, got, want [][32]byte) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -150,6 +185,9 @@ func compare(t *testing.T, got, want [][32]byte) {
 	}
 	for i := range want {
 		if got[i] != want[i] {
+			if WidenedFrames() {
+				t.Skipf("frame count matches (%d); this browser's NV12 is restored, not bit-exact (see TestWidenedFramesMatchFixture)", len(want))
+			}
 			t.Fatalf("frame %d differs from ffmpeg's", i)
 		}
 	}
@@ -168,6 +206,92 @@ func TestSoftwareDecodeMatchesReference(t *testing.T) {
 			s := testutil.GenerateStreamBFrames(t, c, 320, 240, 40, 2)
 			want := testutil.ReferenceNV12(t, s.Path, c, s.Width, s.Height)
 			compare(t, decode(t, d, units(t, c, testutil.ReadFile(t, s.Path))), want)
+		})
+	}
+}
+
+// TestWidenedFramesMatchFixture is the decode conformance test for a
+// browser that does not hand over the decoder's own samples: WebKit
+// returns H.264 and HEVC pictures widened to full range with the chroma
+// moved up a quarter line. The frames are taken as the browser hands them
+// over and every one is compared, in display order, with a fixture in that
+// form made from ffmpeg's decode of the same B-frame stream (webKitForm).
+// Every sample has to be within one step, the room Safari's own rounding
+// takes; a wrong frame, order or plane is off by tens. Browsers whose
+// frames are the decoder's samples skip: the checksum tests of the root
+// package cover them.
+func TestWidenedFramesMatchFixture(t *testing.T) {
+	requireWebCodecs(t)
+	keepBrowserForm = true
+	t.Cleanup(func() { keepBrowserForm = false })
+	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			const w, h = 320, 240
+			d := openDecoder(t, c, codec.NV12)
+			s := testutil.GenerateStreamBFrames(t, c, w, h, 30, 2)
+			want := testutil.ReferenceNV12Frames(t, s.Path, c, w, h)
+			got := decodeBytes(t, d, units(t, c, testutil.ReadFile(t, s.Path)))
+			if !WidenedFrames() {
+				t.Skip("this browser hands over the decoder's own samples; see the checksum tests")
+			}
+			if len(got) != len(want) {
+				t.Fatalf("got %d frames, want %d", len(got), len(want))
+			}
+			worst := 0
+			for i := range want {
+				fixture := webKitForm(want[i], w, h)
+				if len(got[i]) != len(fixture) {
+					t.Fatalf("frame %d has %d bytes, want %d", i, len(got[i]), len(fixture))
+				}
+				off := 0
+				for j := range fixture {
+					diff := int(got[i][j]) - int(fixture[j])
+					if diff < 0 {
+						diff = -diff
+					}
+					worst = max(worst, diff)
+					if diff > 1 {
+						off++
+					}
+				}
+				if off > 0 {
+					t.Fatalf("frame %d: %d samples are more than one step from the fixture (worst %d)", i, off, worst)
+				}
+			}
+			t.Logf("%d frames within %d step of the fixture in WebKit's form", len(want), worst)
+		})
+	}
+}
+
+// TestWidenedFramesRestored measures what the public API returns in such a
+// browser: the frames brought back to the stream's range and chroma
+// position, against ffmpeg's. Luma comes back exactly except where the
+// stream leaves the video range (the test pattern does, in places);
+// chroma to within a step or two.
+func TestWidenedFramesRestored(t *testing.T) {
+	requireWebCodecs(t)
+	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			const w, h = 320, 240
+			d := openDecoder(t, c, codec.NV12)
+			s := testutil.GenerateStreamBFrames(t, c, w, h, 30, 2)
+			want := testutil.ReferenceNV12Frames(t, s.Path, c, w, h)
+			got := decodeBytes(t, d, units(t, c, testutil.ReadFile(t, s.Path)))
+			if !WidenedFrames() {
+				t.Skip("this browser hands over the decoder's own samples; see the checksum tests")
+			}
+			if len(got) != len(want) {
+				t.Fatalf("got %d frames, want %d", len(got), len(want))
+			}
+			luma, chroma := 1000.0, 1000.0
+			for i := range want {
+				luma = min(luma, testutil.PSNR(got[i][:w*h], want[i][:w*h]))
+				chroma = min(chroma, testutil.PSNR(got[i][w*h:], want[i][w*h:]))
+			}
+			t.Logf("worst PSNR against ffmpeg: luma %.1f dB, chroma %.1f dB", luma, chroma)
+			if luma < 60 || chroma < 45 {
+				t.Errorf("restored frames are too far from ffmpeg's: luma %.1f dB (want 60), chroma %.1f dB (want 45)", luma, chroma)
+			}
 		})
 	}
 }

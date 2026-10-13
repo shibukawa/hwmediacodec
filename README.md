@@ -427,13 +427,22 @@ Foundation, VA-API or MediaCodec behind it.
     H.264 as well and fall back to it.
 - **Safari** (macOS, measured 2026-10-13) works for playback and differs
   in these ways:
-  - Decoded frames are full-range NV12 whatever the stream says. The
-    backend brings them back to the stream's range: luma comes back
-    exactly, chroma only as close as Safari's own resampling allows, so
-    NV12 output is not bit-exact with ffmpeg there. Its `copyTo` does not
-    convert YUV frames to RGB (the option is ignored, which the backend
-    detects), so RGBA and BGRA output are converted in Go from those
-    frames (38 dB against ffmpeg's).
+  - Decoded H.264 and HEVC frames are NV12 in a form of WebKit's own,
+    whatever the stream says: widened to full range, and the chroma plane
+    moved up a quarter line (every row is three quarters of itself and a
+    quarter of the row below; measured against ffmpeg sample by sample).
+    The backend undoes both, so a frame has the stream's range and chroma
+    position again: the luma exactly, the chroma to within a step or two
+    (54 dB against ffmpeg on the test pattern, 76 dB and more for luma,
+    where the only differences are samples outside the video range that
+    the widening clipped). That is not bit-exact, so in Safari the
+    checksum tests give way to a test that compares the frames as Safari
+    hands them over with a fixture in that form, made from ffmpeg's decode
+    of the same B-frame streams: every sample of every frame is within one
+    step, in display order. Its `copyTo` does not convert YUV frames to
+    RGB (the option is ignored, which the backend detects), so RGBA and
+    BGRA output are converted in Go from the restored frames (41 dB
+    against ffmpeg's).
   - Its H.264 encoder stops returning chunks from the fifth frame on in
     `latencyMode: "quality"`, flush included. The first encoder a page
     opens therefore proves its latency mode with eight frames, and the
@@ -490,9 +499,10 @@ included), H.264 encoding with the bitrate modes, keyframe controls,
 profiles and low-latency fallback (45 dB), and the software H.264 encoder
 pass; every NV12 decode test skips, and four tests fail for the colour
 and quality reasons above. In Safari the same script decodes H.264 and
-HEVC in the right order with the right frame counts (the bit-exact
-comparisons fail, see above), passes the RGBA / BGRA, flush, keyframe,
-profile and low-latency tests and encodes H.264 at 48.7 dB; the AV1
+HEVC to within one step of the fixture in WebKit's frame form (see
+above; the checksum tests skip there), passes the RGBA / BGRA, flush,
+keyframe, profile, bitrate and low-latency tests and encodes H.264 at
+48.7 dB; the AV1
 decode tests pass bit-exact in a page where Safari offers AV1 and skip
 where it does not. Chrome on Windows,
 Linux and Android has not been run.

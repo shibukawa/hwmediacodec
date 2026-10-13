@@ -176,13 +176,13 @@ verification:
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/backend.go
       input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: decode_test.go
-      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
     - path: encode_test.go
@@ -203,11 +203,11 @@ verification:
         after "EncodingError - Error during flush" reported as ErrInvalidData
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 8dc8ab2297874572672958b209aa426c197c016f9d462a52e4bab0b66c9a60db
+      input_hash: 34e3c939e453fca804c113a7d3421ad84a1fb5136d4c579935ee15571740b23a
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/pixels.go
-      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
   chrome-no-acceleration:
     state: passed
     method: integration
@@ -244,7 +244,7 @@ verification:
     - path: playback/source.go
       input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
   firefox-macos:
     state: failed
     method: integration
@@ -264,11 +264,11 @@ verification:
     - path: internal/browserexec/main.go
       input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: decode_test.go
-      input_hash: cbb8f386e48b87cd9fd37365feb755b1341f73adbc12509e5621a02ade9e2aa2
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   safari-macos:
     state: failed
     method: integration
@@ -288,9 +288,9 @@ verification:
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/pixels.go
-      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
   bundled-clip-fallback:
     state: passed
     method: integration
@@ -354,6 +354,11 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  safari-nv12-2026-10-13:
+    summary: 'The author asked for the Safari NV12 difference to be dealt with and, where the output is in another
+      form, for tests against a fixture in that form. The form was measured (full range plus a quarter-line chroma
+      shift), the decoder now undoes both, and the Safari run has a fixture test in WebKit''s form that every frame
+      meets to within one step; the checksum tests skip there instead of failing.'
   h264-clip-2026-10-13:
     summary: 'The author chose the H.264 copy of the bundled clip (over a <video>-element player, whose drawbacks
       were discussed: a player rather than a decoder, no frame-exact Send/Receive, its own clock) and asked for
@@ -418,8 +423,6 @@ facts:
   - Run scripts/browser_test.sh on the author's Windows machine.
   - AV1 encoding through WebCodecs - all three browsers really encode it (software in Chrome and Firefox), so the
     browser backend could be the first with an AV1 encoder when that slice comes.
-  - Conformance tests that compare by PSNR where a browser cannot be bit-exact (Safari), so that its run
-    is a regression signal.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB
     output, with the header writers of internal/h264 and internal/hevc.
   - Zero-copy VideoFrame to WebGL for ebitenvideo, if Ebitengine gains a way in.

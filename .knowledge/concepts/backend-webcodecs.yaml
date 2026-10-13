@@ -188,10 +188,17 @@ facts:
     alike; started through LaunchServices (open -n -W -g -a Firefox.app --args ...) it works, which is what
     internal/browserexec does on macOS, stopping it by its profile path.'
   safari_macos_2026-10-13:
-  - 'Decoded VideoFrames are NV12 with colorSpace bt709 / iec61966-2-1 / fullRange true for a video-range
-    stream. Narrowing in Go (narrowRange) restores the luma exactly (PSNR infinite against ffmpeg) and
-    the chroma to about 37 dB - Safari resamples the chroma, so NV12 is not bit-exact there. A stream that
-    is itself full range is left alone.'
+  - 'Decoded H.264/HEVC VideoFrames are NV12 with colorSpace bt709 / iec61966-2-1 / fullRange true for a video-range
+    stream. A throwaway page sent the copyTo bytes to the host, where they were compared with ffmpeg sample by
+    sample and a filter was fitted: luma = round((Y-16)*255/219) to within 1; chroma = the row and the row below
+    mixed 0.747 : 0.249 in the video range (a quarter-line shift up, last row unchanged), then widened, to
+    within 1 (no integer formula matches exactly - Safari''s own arithmetic). The decoder undoes both (narrowRange,
+    unshiftChroma - from the last row up, c[y] = (4 t[y] - c[y+1]) / 3, errors shrink by 3 per row) when webKit()
+    and the frame says fullRange for a video-range stream: luma exact except clipped out-of-range samples (76-85
+    dB on testsrc2), chroma 54 dB (35-40 dB with narrowing alone). A stream that is itself full range is left alone.
+    Tests - TestWidenedFramesMatchFixture compares the frames as handed over (keepBrowserForm) with webKitForm(ffmpeg
+    frame), every sample within 1, B-frame H.264 and HEVC streams in display order; the root checksum tests skip
+    through exactNV12() once WidenedFrames() is set.'
   - 'H.264 encoder, latencyMode quality: takes four frames, never emits a chunk, the fifth encode stays in
     encodeQueueSize and flush() never settles; one frame plus flush works. realtime works. Hence the trial
     of trialFrames (8) frames in encoder.open, with the proven/broken mode remembered per page, codec and
@@ -295,7 +302,7 @@ verification:
     - path: internal/webcodecs/backend.go
       input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/jsutil.go
@@ -303,7 +310,7 @@ verification:
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
-      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
     - path: backends_js.go
@@ -323,9 +330,9 @@ verification:
         the next stream decoded bit-exactly
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 8dc8ab2297874572672958b209aa426c197c016f9d462a52e4bab0b66c9a60db
+      input_hash: 34e3c939e453fca804c113a7d3421ad84a1fb5136d4c579935ee15571740b23a
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
   unit-tests:
@@ -348,7 +355,7 @@ verification:
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
-      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
   firefox-macos:
@@ -371,7 +378,7 @@ verification:
         0.5 and 0.9).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/browserexec/main.go
@@ -394,11 +401,11 @@ verification:
         for 1 Mbit/s). Skip - AV1 (Probe did not list it in this run), WithQuality (ErrUnsupported).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: c67c8aeefd4e830bb904a8394dd73594f7a94b2280606d7afedfdcb11644f7ae
+      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/pixels.go
-      input_hash: 00dd72362165ea6741adb15f951922c9acd1ef37d8eae58e19db72a60741fc52
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
   other-browsers:
     state: not_run
     method: integration

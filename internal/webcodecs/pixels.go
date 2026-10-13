@@ -106,10 +106,9 @@ func init() {
 
 // narrowRange brings the planes of an NV12 picture from full range to
 // video range in place. Safari decodes video-range streams into full-range
-// frames; the frames of this library keep the range of the stream. The
-// luma mapping undoes the browser's expansion exactly (every video-range
-// value comes back), the chroma one to within the browser's own
-// resampling.
+// frames; the frames of this library keep the range of the stream. Every
+// video-range value comes back as it was (what the widening clipped, a
+// sample outside the video range, does not).
 func narrowRange(planes [][]byte) {
 	for i, p := range planes {
 		table := &narrowLuma
@@ -118,6 +117,37 @@ func narrowRange(planes [][]byte) {
 		}
 		for j, v := range p {
 			p[j] = table[v]
+		}
+	}
+}
+
+// unshiftChroma undoes what WebKit's decoders do to the chroma plane on
+// top of widening it: every row arrives as three quarters of itself and
+// one quarter of the row below (the picture's chroma moved up a quarter
+// line, measured on Safari 27 for H.264 and HEVC; the last row is left as
+// it is). With t the rows as they arrive and c the rows as decoded,
+// t[y] = (3*c[y] + c[y+1]) / 4, so from the last row up
+// c[y] = (4*t[y] - c[y+1]) / 3. An error in a row reaches the row above
+// divided by three, so the rounding of the samples on the way in costs at
+// most a step or two; sharp vertical chroma edges, which the shift blurred
+// by tens of steps, come back.
+//
+// uv holds rows of stride bytes with rowBytes meaningful ones, in video
+// range (after narrowRange).
+func unshiftChroma(uv []byte, stride, rowBytes, rows int) {
+	for y := rows - 2; y >= 0; y-- {
+		row := uv[y*stride : y*stride+rowBytes]
+		below := uv[(y+1)*stride : (y+1)*stride+rowBytes]
+		for x, t := range row {
+			v := 4*int(t) - int(below[x])
+			switch {
+			case v <= 0:
+				row[x] = 0
+			case v >= 3*255:
+				row[x] = 255
+			default:
+				row[x] = byte((v + 1) / 3)
+			}
 		}
 	}
 }

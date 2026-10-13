@@ -541,7 +541,14 @@ func (d *decoder) output(vf js.Value) {
 			ferr = err
 		}
 		if ferr == nil && widened && f.Format == codec.NV12 {
-			narrowRange(f.Planes)
+			widenedFrames = true
+			if !keepBrowserForm {
+				narrowRange(f.Planes)
+				if webKit() {
+					rows, rowBytes := codec.NV12.PlaneLayout(1, f.Width, f.Height)
+					unshiftChroma(f.Planes[1], f.Strides[1], rowBytes, rows)
+				}
+			}
 		}
 		d.jsBufs.put(buf)
 		finish(f, ferr)
@@ -582,6 +589,24 @@ func (d *decoder) drawFrame(vf js.Value, w, h int, in inflightFrame) (*codec.Fra
 	codec.SetRelease(f, func() { d.goBufs.put(mem) })
 	return f, nil
 }
+
+var (
+	// widenedFrames records that the browser handed over full-range NV12
+	// frames for a video-range stream (WebKit does). Such frames are
+	// brought back to the stream's form, which is close to but not always
+	// exactly what was decoded.
+	widenedFrames bool
+	// keepBrowserForm makes the decoder return such frames as the browser
+	// handed them over. The tests set it to compare them with a fixture
+	// in the browser's own form.
+	keepBrowserForm bool
+)
+
+// WidenedFrames reports whether this browser has handed over full-range
+// frames for a video-range stream so far, which means that the NV12 frames
+// of its decoders are restored rather than exact. The conformance tests
+// ask before they insist on checksums.
+func WidenedFrames() bool { return widenedFrames }
 
 // take returns what Send recorded for the chunk with the given timestamp.
 func (d *decoder) take(ts int64) inflightFrame {
