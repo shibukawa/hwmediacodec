@@ -42,10 +42,11 @@ func TestProbe(t *testing.T) {
 			}
 		}
 	case runtime.GOOS == "android":
-		// Every entry comes from MediaCodec and names a hardware codec;
-		// an emulator (software codecs only) lists nothing.
+		// Every entry comes from MediaCodec: the video ones name a
+		// hardware codec (an emulator, with software codecs only, lists
+		// none), the audio ones the framework's software codecs.
 		for _, c := range caps {
-			if c.Backend != "mediacodec" || !c.Hardware {
+			if c.Backend != "mediacodec" || c.Hardware == c.Codec.IsAudio() {
 				t.Errorf("unexpected capability on android: %+v", c)
 			}
 		}

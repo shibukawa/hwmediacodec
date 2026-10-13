@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec/internal/aac"
+	"github.com/shibukawa/hwmediacodec/internal/audioutil"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/opus"
 )
@@ -53,32 +54,6 @@ var (
 	knownAudioDelays = map[string]audioTraits{}
 )
 
-// trialSamples is the length of the trial signal, and trialTail the
-// silence sent after it so that the encoder gives all of it back.
-const (
-	trialSamples = 6144
-	trialTail    = 8192
-)
-
-// trialSignal is noise with most of its energy in the low end, which
-// every codec keeps at every bitrate: one channel, in [-0.25, 0.25].
-func trialSignal() []float32 {
-	out := make([]float32, trialSamples)
-	state := uint32(0x9E3779B9)
-	var window [4]float32
-	var sum float32
-	for i := range out {
-		state ^= state << 13
-		state ^= state >> 17
-		state ^= state << 5
-		v := float32(int32(state)) / (1 << 31)
-		sum += v - window[i&3]
-		window[i&3] = v
-		out[i] = sum / 16
-	}
-	return out
-}
-
 // encoderTraits returns the traits of the browser's encoder for cfg, from
 // a trial the first time a configuration is asked for: a short signal is
 // encoded, which gives the configuration record and the packet length and
@@ -93,7 +68,7 @@ func encoderTraits(ctx context.Context, cfg *codec.AudioEncoderConfig, cls js.Va
 	if t, ok := knownAudioTraits[key]; ok {
 		return t, nil
 	}
-	signal := trialSignal()
+	signal := audioutil.TrialSignal()
 	chunks, description, micros, err := trialEncode(ctx, cfg, cls, config, signal)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -146,12 +121,12 @@ func encoderTraits(ctx context.Context, cfg *codec.AudioEncoderConfig, cls js.Va
 		}
 		if decoded, ok := trialDecode(ctx, format, chunks, t.frame); ok {
 			if !t.measured {
-				if delay, ok := signalDelay(signal, decoded, t.frame); ok {
+				if delay, ok := audioutil.SignalDelay(signal, decoded, t.frame); ok {
 					t.delay, t.measured = delay, true
 				}
 			}
 			if t.measured {
-				t.lead = lostLead(signal, decoded, t.delay)
+				t.lead = audioutil.LostLead(signal, decoded, t.delay)
 				t.delay += t.lead
 			}
 		}
@@ -195,7 +170,7 @@ func trialEncode(ctx context.Context, cfg *codec.AudioEncoderConfig, cls js.Valu
 	defer onOutput.Release()
 	defer onError.Release()
 
-	total := len(signal) + trialTail
+	total := len(signal) + audioutil.TrialTail
 	pcm := make([]byte, total*cfg.Channels*4)
 	for i, v := range signal {
 		for c := range cfg.Channels {
@@ -281,56 +256,6 @@ func trialDecode(ctx context.Context, format codec.AudioFormat, chunks [][]byte,
 	}
 	take()
 	return decoded, len(decoded) == len(chunks)*frame
-}
-
-// signalDelay returns where the trial signal starts in the decoded
-// samples: the lag at which a stretch of it correlates best with them. ok
-// is false when it is not found clearly.
-func signalDelay(signal, decoded []float32, frame int) (delay int, ok bool) {
-	// The stretch starts a good way into the signal, clear of the codec's
-	// onset and of samples an encoder may lose at the start.
-	const from, length = 2048, 2048
-	ref := signal[from : from+length]
-	var refEnergy float64
-	for _, v := range ref {
-		refEnergy += float64(v) * float64(v)
-	}
-	best, bestScore := -1, 0.0
-	for lag := 0; from+lag+length <= len(decoded) && lag <= 3*frame+1024; lag++ {
-		got := decoded[from+lag : from+lag+length]
-		var dot, energy float64
-		for i, v := range ref {
-			dot += float64(v) * float64(got[i])
-			energy += float64(got[i]) * float64(got[i])
-		}
-		if energy == 0 {
-			continue
-		}
-		if score := dot / math.Sqrt(refEnergy*energy); score > bestScore {
-			best, bestScore = lag, score
-		}
-	}
-	if best < 0 || bestScore < 0.6 {
-		return 0, false
-	}
-	return best, true
-}
-
-// lostLead returns how many samples at the start of the trial signal came
-// back as silence, rounded up to a multiple of 128.
-func lostLead(signal, decoded []float32, delay int) int {
-	const block, limit = 64, 4096
-	for at := 0; at < limit && delay+at+block <= len(decoded); at += block {
-		var in, out float64
-		for i := at; i < at+block; i++ {
-			in += float64(signal[i]) * float64(signal[i])
-			out += float64(decoded[delay+i]) * float64(decoded[delay+i])
-		}
-		if out >= in/16 {
-			return (at + 127) / 128 * 128
-		}
-	}
-	return 0
 }
 
 func audioEncoderError(c codec.Codec, v js.Value) error {
