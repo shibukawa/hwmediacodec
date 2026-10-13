@@ -38,7 +38,7 @@ constraints:
   ffmpeg and files through one seam (host.go) that is os/exec natively and HTTP to the wrapper in the
   browser.
 non_goals:
-- Zero-copy display (VideoFrame to a WebGL texture); frames cross into Go memory like on every backend.
+- A sanctioned way into Ebitengine's textures (the direct upload finds them from the outside; see facts.zero_copy).
 - AV1 encoding (a separate slice on every backend).
 - GopherJS, TinyGo and WASI support.
 - Running Chrome on other operating systems from this session.
@@ -77,6 +77,14 @@ acceptance:
       milestone: browser-webcodecs
     verified_by:
     - player-in-browser
+  zero-copy:
+    text: In a browser the Ebitengine player shows frames without taking them through CPU memory where that is
+      cheaper, the picture is the same as on the copy path, and when the short way is not available playback goes
+      on with RGBA frames.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - direct-upload
   clip-plays-without-hevc:
     text: A browser without an HEVC decoder (Firefox) gets the bundled clip in H.264, chosen without any setting,
       and automated tests cover the choice and both encodings.
@@ -170,17 +178,17 @@ verification:
     - path: scripts/browser_test.sh
       input_hash: 801c7e184214edee774b0b5e3553bfd0069f52d4b71c5485abe7fa0f987c6e25
     - path: internal/browserexec/main.go
-      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
     - path: internal/testutil/host.go
       input_hash: 27be1d9f3c40f579bcf45ac6b6338a7118deb7bccbfe6322ac7d5e07d61a1a5f
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/backend.go
-      input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: decode_av1_test.go
@@ -203,9 +211,9 @@ verification:
         after "EncodingError - Error during flush" reported as ErrInvalidData
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 34e3c939e453fca804c113a7d3421ad84a1fb5136d4c579935ee15571740b23a
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/pixels.go
       input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
   chrome-no-acceleration:
@@ -222,7 +230,7 @@ verification:
       note: 2026-10-12 - Probe lists nothing and the hardware test skips with "no hardware h264 decode"
     basis:
     - path: internal/webcodecs/backend.go
-      input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
   player-in-browser:
     state: passed
     method: manual
@@ -240,11 +248,11 @@ verification:
         No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: aefc56e4b93c400e7e0f9e4d04791e9098d63f80cddc4e85477f07e4c64ce358
     - path: playback/source.go
       input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
   firefox-macos:
     state: failed
     method: integration
@@ -262,9 +270,9 @@ verification:
         decoder output reported as ErrUnsupported, the encoder confirming configure and falling back from realtime.'
     basis:
     - path: internal/browserexec/main.go
-      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: decode_test.go
@@ -288,7 +296,7 @@ verification:
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/pixels.go
       input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
   bundled-clip-fallback:
@@ -312,7 +320,30 @@ verification:
     - path: examples/internal/bundled/bundled.go
       input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
     - path: examples/internal/bundled/bundled_test.go
-      input_hash: 387944f1b386560a8621922511896324dac305ab8e3b7cd111674d3183df9755
+      input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
+  direct-upload:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh -v -run TestDirectUpload ./ebitenvideo in Chrome (headless and with HWMEDIACODEC_BROWSER_HEADED=1,
+      also with HWMEDIACODEC_TEST_SIZE=1920x1080 and 3840x2160), Safari and Firefox
+    evidence:
+      path: ebitenvideo/upload_js_test.go
+      note: '2026-10-13: inside ebiten.RunGame the player finds its texture; the image read back after 60 directly
+        uploaded frames equals frame 29 of the stream as the RGBA path decodes it (identical in Chrome, 37 dB in
+        Safari, whose RGBA path converts in Go); a second player with the search broken goes back to RGBA frames at
+        50 ms and keeps playing the right pictures. Firefox skips (RGBA frames by choice). The player sample shows
+        "zero-copy" in the app''s built-in browser at 60 fps without skipped frames.'
+    basis:
+    - path: ebitenvideo/upload_js.go
+      input_hash: 8174a0525926dcc980be7ae30a0e404b498e6421652e7fa439fe8fea96cffd39
+    - path: ebitenvideo/upload_js_test.go
+      input_hash: e4ef5ce2bc2348990b5e834fe2488eb8db5c3e71b7baddf135958f5ed8bbf98f
+    - path: ebitenvideo/player.go
+      input_hash: f21624601cacdb2981af6820944f62bb71c53eda33bac02811737d8b6e3a0726
   other-browsers:
     state: not_run
     method: integration
@@ -354,6 +385,12 @@ relations:
 - relation: ranked_by
   to: policy:support-tiers
 history:
+  zero-copy-2026-10-13:
+    summary: 'The author asked for zero-copy display. The core gained the Native frame format (the decoder''s VideoFrame
+      behind Frame.Native) and ebitenvideo uploads those frames straight into the texture of its image in Chrome
+      and Safari, found from outside Ebitengine and verified by reading back; Player.ZeroCopy tells. Measured,
+      it pays from 1080p up in Chrome and in Safari, not in Firefox, which keeps RGBA frames; where the texture
+      cannot be found the player restarts the stream with RGBA frames.'
   safari-nv12-2026-10-13:
     summary: 'The author asked for the Safari NV12 difference to be dealt with and, where the output is in another
       form, for tests against a fixture in that form. The form was measured (full range plus a quarter-line chroma
@@ -399,6 +436,38 @@ facts:
       not targeted
     tinygo: -target wasm is GOOS=js with a syscall/js of its own (the option missing from the author's
       list); wasip1/wasip2 as for Go; untested, a later check
+  zero_copy:
+    core: hwmediacodec.Native output format; see backend:webcodecs facts.native_frames_2026-10-13
+    ebitengine_internals: 'Ebitengine 2.10.4 on js creates a WebGL2 context on its canvas, copies the context''s
+      functions with bind when it starts, allocates one texture per unmanaged image with texImage2D(TEXTURE_2D,
+      0, RGBA, w, h, 0, RGBA, UNSIGNED_BYTE, null) at the next power of two (16 at least), no padding, and writes
+      pixels with texSubImage2D at flush time. It exposes none of it.'
+    how: 'upload_js.go - an init function wraps texImage2D on WebGL2RenderingContext.prototype (before Ebitengine
+      binds it) and records allocations (context, texture, size, sequence). The player writes its first frames
+      with WritePixels (pixels read back through an OffscreenCanvas), remembers 16 of them, and then looks among
+      the allocations made since its image exists for a texture of the right size that reads those pixels back
+      (temporary framebuffer + readPixels, framebuffer binding restored). From then on - bindTexture, texSubImage2D(TEXTURE_2D,
+      0, 0, 0, RGBA, UNSIGNED_BYTE, videoFrame), previous binding restored; getError only on the first upload.'
+    fallbacks: 'texture not found within 10 frames (3 when no allocation was seen at all), an upload error, or a
+      texture that is gone - the player closes its playback core and reopens the source with RGBA frames at the
+      same position (Player.reopen; sources that cannot seek keep the canvas read-back). Firefox (user agent with
+      Gecko/) asks for RGBA frames from the start. Players created before the game loop work: the search starts
+      with the first frame.'
+    measurements_m3: 'time per frame on the page''s one thread, measured in TestDirectUpload inside ebiten.RunGame
+      (Chrome with a window): RGBA path = copy into Go memory + WritePixels + texSubImage2D at flush = 0.9 ms
+      at 720p, 1.7 ms at 1080p, 9.4 ms at 4K; direct upload 1.1-1.7 ms at every size; canvas read-back 5.6-9 ms
+      at 720p, 12 ms at 1080p, 50 ms at 4K. Firefox 720p - RGBA 1.9 ms, direct 4.5 ms. Safari 720p - RGBA 1.3-1.7
+      ms plus the Go YUV-to-RGB conversion in the decoder, direct 3.8-5.4 ms. The RGBA path additionally makes
+      the browser read every frame back from the GPU, off the page''s thread.'
+    colour_caveat: with the direct upload the browser converts the frame; for untagged SD streams Safari and Firefox
+      take BT.709 where the RGBA path follows the library's rule (BT.601). Tagged and HD content is the same either
+      way.
+    risks:
+    - A new Ebitengine release that allocates or binds differently - the texture is not found and the player falls
+      back (covered by the test's breakDirect phase), nothing is corrupted because a texture is only used after
+      its pixels were read back.
+    - An atlas page or another image of the same internal size allocated in the same frame cannot be mistaken for
+      the image's texture, for the same reason.
   test_harness:
     wrapper: internal/browserexec, built as go_js_wasm_exec and put first on PATH by scripts/browser_test.sh,
       so that go test finds it without -exec
@@ -425,5 +494,6 @@ facts:
     browser backend could be the first with an AV1 encoder when that slice comes.
   - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB
     output, with the header writers of internal/h264 and internal/hevc.
-  - Zero-copy VideoFrame to WebGL for ebitenvideo, if Ebitengine gains a way in.
+  - Ask Ebitengine for an API to write a browser image source into an image's texture; it would replace the
+    texture search in ebitenvideo/upload_js.go.
   - TinyGo -target wasm build check.

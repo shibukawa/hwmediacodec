@@ -21,6 +21,10 @@ const (
 	// maxPending bounds the decoded frames and encoded packets held for
 	// Receive; Send reports ErrAgain beyond it.
 	maxPending = 16
+	// maxNativePending is that bound for frames in the Native format,
+	// which are the browser's own pictures: a hardware decoder has few,
+	// and each one held here is one it cannot decode into.
+	maxNativePending = 4
 )
 
 var (

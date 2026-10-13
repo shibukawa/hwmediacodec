@@ -324,7 +324,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := d.takeFailure(); err != nil {
 		return err
 	}
-	if len(d.slots) >= maxPending {
+	if len(d.slots) >= d.pendingLimit() {
 		return codec.ErrAgain
 	}
 	d.flushed = false
@@ -427,12 +427,21 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	return d.waitQueue(ctx)
 }
 
+// pendingLimit is the number of frames held for Receive beyond which Send
+// reports ErrAgain.
+func (d *decoder) pendingLimit() int {
+	if d.cfg.OutputFormat == codec.Native {
+		return maxNativePending
+	}
+	return maxPending
+}
+
 // waitQueue blocks while the browser's decoder is saturated: it reports
 // the chunks it has not taken yet in decodeQueueSize. This is where the
 // page's event loop gets to run, and with it the output callback.
 func (d *decoder) waitQueue(ctx context.Context) error {
 	deadline := time.Now().Add(stallTimeout)
-	for d.failure == nil && d.opened && len(d.slots) < maxPending {
+	for d.failure == nil && d.opened && len(d.slots) < d.pendingLimit() {
 		if d.dec.Get("decodeQueueSize").Int() == 0 {
 			return nil
 		}
@@ -453,6 +462,13 @@ func (d *decoder) output(vf js.Value) {
 	gen := d.gen
 	s := &slot{}
 	d.slots = append(d.slots, s)
+	if d.cfg.OutputFormat == codec.Native {
+		// The frame itself is the picture: nothing is copied, and the
+		// VideoFrame stays open until the frame is released.
+		s.frame, s.err, s.done = d.nativeFrame(vf), nil, true
+		d.wake.signal()
+		return
+	}
 	d.copying++
 	finish := func(f *codec.Frame, err error) {
 		try("VideoFrame.close", func() { vf.Call("close") })
@@ -556,6 +572,24 @@ func (d *decoder) output(vf js.Value) {
 		d.jsBufs.put(buf)
 		finish(nil, jsError("VideoFrame.copyTo", e))
 	})
+}
+
+// nativeFrame wraps the browser's VideoFrame as a frame in the Native
+// format.
+func (d *decoder) nativeFrame(vf js.Value) *codec.Frame {
+	f := &codec.Frame{Format: codec.Native}
+	var ts int64
+	try("VideoFrame", func() {
+		ts = int64(vf.Get("timestamp").Float())
+		rect := vf.Get("visibleRect")
+		f.Width, f.Height = rect.Get("width").Int(), rect.Get("height").Int()
+	})
+	in := d.take(ts)
+	f.PTS = in.pts
+	codec.SetFrameOrder(f, in.order)
+	codec.SetNative(f, vf)
+	codec.SetRelease(f, func() { try("VideoFrame.close", func() { vf.Call("close") }) })
+	return f
 }
 
 // drawFrame reads a frame whose pixels the browser does not expose

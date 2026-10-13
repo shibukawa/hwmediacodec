@@ -79,13 +79,16 @@ const page = `<!doctype html>
     send(buf.slice(offset, offset + length));
     callback(null, length);
   };
-  addEventListener("error", (e) => say("browserexec: uncaught " + e.message + "\n"));
-  addEventListener("unhandledrejection", (e) => say("browserexec: unhandled rejection: " + e.reason + "\n"));
+  // Once the program has exited, callbacks that still reach for it (a
+  // game loop's next frame) fail by design; that is not the test's news.
+  let exited = false;
+  addEventListener("error", (e) => { if (!exited) say("browserexec: uncaught " + e.message + "\n"); });
+  addEventListener("unhandledrejection", (e) => { if (!exited) say("browserexec: unhandled rejection: " + e.reason + "\n"); });
   let code = 0;
   const go = new Go();
   go.argv = cfg.argv;
   go.env = cfg.env;
-  go.exit = (c) => { code = c; };
+  go.exit = (c) => { code = c; exited = true; };
   try {
     const result = await WebAssembly.instantiateStreaming(fetch("test.wasm"), go.importObject);
     await go.run(result.instance);

@@ -57,7 +57,9 @@ func TestChoose(t *testing.T) {
 func play(t *testing.T, p *ebitenvideo.Player) {
 	t.Helper()
 	p.Play()
-	for i := 0; i < 400 && p.Image() == nil; i++ {
+	// A deadline rather than a number of ticks: several browsers testing
+	// at once make the first frame slow to arrive.
+	for deadline := time.Now().Add(10 * time.Second); p.Image() == nil && time.Now().Before(deadline); {
 		if err := p.Update(); err != nil {
 			t.Fatal(err)
 		}

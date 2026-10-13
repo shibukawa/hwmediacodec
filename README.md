@@ -470,10 +470,20 @@ Foundation, VA-API or MediaCodec behind it.
     every timeout of the Go program: run the tests with the Safari window
     in view (`HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a
     Safari"`).
-- **Not done.** Frames always go through CPU memory; handing the
-  `VideoFrame` to WebGL as a texture without the copy is future work (it
-  needs a way into the renderer that Ebitengine does not offer yet). No
-  AV1 encoding, as on every backend.
+- **Frames that stay on the GPU.** `WithOutputFormat(hwmediacodec.Native)`
+  returns the decoder's own pictures instead of pixels: the frame has no
+  `Planes`, and `Frame.Native()` is the WebCodecs `VideoFrame` (a
+  `syscall/js` value) that WebGL (`texImage2D`), WebGPU and canvases take
+  as an image source without the pixels leaving the GPU. `Release` closes
+  it, and since a hardware decoder has few pictures, a frame should not
+  be held for long (the decoder keeps four at most for `Receive`). The
+  order is the display order as for every other format. How such a frame
+  turns into colours is then the browser's business: for a stream that
+  names no matrix Chrome takes BT.601 at SD sizes while Firefox and Safari
+  take BT.709 (measured on 320x240 streams), where the pixel formats
+  follow the library's one rule. The Ebitengine player uses these frames;
+  see [Ebitengine](#ebitengine).
+- **Not done.** No AV1 encoding, as on every backend.
 
 **Verification (2026-10-12).** `scripts/browser_test.sh` builds a `go
 test -exec` wrapper (`internal/browserexec`) that serves the js/wasm test
@@ -1103,6 +1113,41 @@ builds and serves it on `http://localhost:8080/`:
 ```sh
 cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player
 ```
+
+There the player skips CPU memory where that pays: it takes the decoder's
+own frames (`hwmediacodec.Native`) and uploads each `VideoFrame` into the
+texture Ebitengine keeps for the player's image with one `texSubImage2D`
+call. `Player.ZeroCopy` reports whether the picture on the screen went
+that way (the player sample shows it in its status line).
+
+| Per frame on the page's one thread (Apple M3) | 720p | 1080p | 4K |
+| --- | --- | --- | --- |
+| Chrome, RGBA frames and `WritePixels` | 0.9 ms | 1.7 ms | 9.4 ms |
+| Chrome, direct upload | 1.3 ms | 1.3 ms | 1.3 ms |
+| Safari, direct upload | 3.8 ms | | |
+| Firefox, RGBA frames / direct upload | 1.9 ms / 4.5 ms | | |
+
+The RGBA figures are the copy into Go memory, `WritePixels` and
+Ebitengine's texture upload; on top of them the browser reads every frame
+back from the GPU, and in Safari the library converts YUV to RGB in Go,
+neither of which the direct upload needs. In Chrome it is the cheaper way
+from 1080p up and the same at 720p; in Firefox, whose decoders hand over
+frames that are in CPU memory already, it is the slower way, so there the
+player keeps RGBA frames.
+
+Ebitengine does not hand out its textures, so the player finds the one
+behind its image from the outside: it watches the texture allocations of
+the WebGL2 context (a wrapper put on `texImage2D` before Ebitengine
+starts) and takes the one of the right size that reads back the pixels it
+wrote with the first frames. This leans on Ebitengine as it is today
+(2.10). When it does not hold, the texture is simply not found, and the
+player starts the stream again at the same position with RGBA frames, as
+it works outside the browser; a source that cannot seek reads its frames
+back through a canvas instead, which is slow. The game-loop test
+(`scripts/browser_test.sh ./ebitenvideo`, a real `ebiten.RunGame` in the
+browser) checks that the uploaded picture read back from the image is the
+stream's frame, bit for bit the one the RGBA path shows in Chrome, and
+that the fallback keeps playing.
 
 Inside the repository the modules build against each other's working tree
 through `go.work`. Consumers get the version named in the `require` line of

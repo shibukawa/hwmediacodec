@@ -92,7 +92,7 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: aefc56e4b93c400e7e0f9e4d04791e9098d63f80cddc4e85477f07e4c64ce358
     - path: examples/player/main_test.go
       input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
   mesh-test:

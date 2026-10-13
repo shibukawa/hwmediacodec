@@ -45,6 +45,12 @@ type Player struct {
 	width   int
 	height  int
 	last    time.Time
+	direct  directUpload // the browser's way around CPU memory; empty elsewhere
+	// reopen starts the stream again with another frame format, or is
+	// nil when the source cannot be read twice. The browser's upload
+	// uses it to go back to RGBA frames.
+	reopen func(hwmediacodec.PixelFormat) (*playback.Player, error)
+	failed error // reopening did not work
 }
 
 // NewPlayer starts decoding the Annex-B elementary stream r (for example a
@@ -53,28 +59,44 @@ type Player struct {
 // can loop and Seek (the stream is scanned once for keyframes on the first
 // seek).
 func NewPlayer(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (*Player, error) {
-	core, err := playback.NewStream(r, c, fps, rgba(opts)...)
+	core, err := playback.NewStream(r, c, fps, frameFormat(opts, uploadFormat())...)
 	if err != nil {
 		return nil, err
 	}
-	return &Player{core: core}, nil
+	p := &Player{core: core}
+	if rs, ok := r.(io.ReadSeeker); ok {
+		p.reopen = func(f hwmediacodec.PixelFormat) (*playback.Player, error) {
+			if _, err := rs.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
+			return playback.NewStream(rs, c, fps, frameFormat(opts, f)...)
+		}
+	}
+	return p, nil
 }
 
 // NewPlayerFromSource starts decoding packets from src, which carries its
 // own presentation times (an MP4 demuxer, for example). Looping and Seek
 // need src to be a hwmediacodec.PacketSeeker.
 func NewPlayerFromSource(src hwmediacodec.PacketReader, opts ...Option) (*Player, error) {
-	core, err := playback.New(src, rgba(opts)...)
+	core, err := playback.New(src, frameFormat(opts, uploadFormat())...)
 	if err != nil {
 		return nil, err
 	}
-	return &Player{core: core}, nil
+	p := &Player{core: core}
+	if _, ok := src.(hwmediacodec.PacketSeeker); ok {
+		p.reopen = func(f hwmediacodec.PixelFormat) (*playback.Player, error) {
+			return playback.New(src, frameFormat(opts, f)...)
+		}
+	}
+	return p, nil
 }
 
-// rgba pins the frame format to what WritePixels takes, whatever the
-// options say.
-func rgba(opts []Option) []Option {
-	return append(opts[:len(opts):len(opts)], playback.WithOutputFormat(hwmediacodec.RGBA))
+// frameFormat pins the frame format to what upload takes, whatever the
+// options say: RGBA pixels for WritePixels, or in a browser the decoder's
+// own frames (see upload_js.go).
+func frameFormat(opts []Option, f hwmediacodec.PixelFormat) []Option {
+	return append(opts[:len(opts):len(opts)], playback.WithOutputFormat(f))
 }
 
 // Play starts or resumes playback.
@@ -91,7 +113,12 @@ func (p *Player) IsPlaying() bool { return p.core.IsPlaying() }
 func (p *Player) Ended() bool { return p.core.Ended() }
 
 // Err returns the first decoding error.
-func (p *Player) Err() error { return p.core.Err() }
+func (p *Player) Err() error {
+	if p.failed != nil {
+		return p.failed
+	}
+	return p.core.Err()
+}
 
 // Position is the current playback time within the stream.
 func (p *Player) Position() time.Duration { return p.core.Position() }
@@ -123,6 +150,9 @@ func (p *Player) Size() (width, height int) { return p.width, p.height }
 // Update advances playback by one tick and uploads the frame that became
 // due. Call it once from the game's Update.
 func (p *Player) Update() error {
+	if p.failed != nil {
+		return p.failed
+	}
 	if !p.core.IsPlaying() {
 		p.last = time.Time{}
 		return p.core.Err()
@@ -151,15 +181,31 @@ func (p *Player) tick() time.Duration {
 	return dt
 }
 
-func (p *Player) upload(f *hwmediacodec.Frame) {
-	w, h := f.Width, f.Height
-	if p.img == nil || w != p.width || h != p.height {
-		if p.img != nil {
-			p.img.Deallocate()
-		}
-		p.img = ebiten.NewImageWithOptions(image.Rect(0, 0, w, h), &ebiten.NewImageOptions{Unmanaged: true})
-		p.width, p.height = w, h
+// ZeroCopy reports whether the picture that is showing went from the
+// decoder to the image's texture without passing through CPU memory. That
+// happens in a browser once the player has found the texture Ebitengine
+// keeps for the image (see upload_js.go); it is false everywhere else and
+// for the first frames of a stream.
+func (p *Player) ZeroCopy() bool { return p.direct.used() }
+
+// ensureImage makes p.img an image of the given size; it reports whether
+// the image is a new one.
+func (p *Player) ensureImage(w, h int) bool {
+	if p.img != nil && w == p.width && h == p.height {
+		return false
 	}
+	if p.img != nil {
+		p.img.Deallocate()
+	}
+	p.img = ebiten.NewImageWithOptions(image.Rect(0, 0, w, h), &ebiten.NewImageOptions{Unmanaged: true})
+	p.width, p.height = w, h
+	return true
+}
+
+// uploadPixels writes the RGBA pixels of f into the image.
+func (p *Player) uploadPixels(f *hwmediacodec.Frame) {
+	w, h := f.Width, f.Height
+	p.ensureImage(w, h)
 	pix := f.Planes[0]
 	if stride := f.Strides[0]; stride != w*4 {
 		// WritePixels wants tightly packed rows.

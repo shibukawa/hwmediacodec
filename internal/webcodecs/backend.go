@@ -118,7 +118,7 @@ func (Backend) NewDecoder(ctx context.Context, cfg codec.DecoderConfig) (codec.D
 		return nil, unsupported(cfg.Codec, codec.Decode, noWebCodecs)
 	}
 	switch cfg.OutputFormat {
-	case codec.NV12:
+	case codec.NV12, codec.Native:
 	case codec.RGBA, codec.BGRA:
 		if !rgbCopySupported() {
 			return nil, unsupported(cfg.Codec, codec.Decode, "this browser's VideoFrame.copyTo does not convert to "+cfg.OutputFormat.String()+"; use NV12")

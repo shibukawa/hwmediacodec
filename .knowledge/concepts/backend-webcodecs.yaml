@@ -266,13 +266,22 @@ facts:
     hdr: mediaCapabilities reports HEVC Main 10 with rec2020 + pq/hlg as supported and power efficient in all three;
       10-bit AV1 with pq/hlg in Firefox and Safari but not in Chrome on this Mac. WebCodecs itself has no query
       for it beyond the codec string.
+  native_frames_2026-10-13:
+  - 'codec.Native (hwmediacodec.Native) is a decoder output format: the frame has no Planes, Frame.Native()
+    returns the VideoFrame as js.Value, Release closes it (and clears the handle). The output callback wraps the
+    frame without copyTo; at most maxNativePending (4) wait for Receive. Other backends refuse the format (ErrUnsupported),
+    encoders too. The colorSpace override for untagged streams is put into the configuration as for RGB output.'
+  - 'Order: the Go reorder layer stays in front. A throwaway test with WithDecodeOrder and the counter timestamps
+    showed why - Chrome emits display order by itself, Safari emits such a stream in decode order (0 3 1 2 7 5 4 6
+    ...), so it sorts by the chunk timestamps, not by picture order count.'
+  - 'Colours of a drawn native frame are the browser''s: for an untagged 320x240 stream Chrome draws BT.601 (51 dB
+    against ffmpeg converted with BT.601), Firefox BT.709 (46 dB), Safari BT.709 (32 dB, its chroma shift included),
+    for H.264 and HEVC alike. TestNativeFrames accepts either and logs it.'
   not_run:
   - Chrome on Windows, Linux and Android
   - TinyGo (-target wasm shares GOOS=js and syscall/js) and GopherJS, neither tried; WASI targets have
     no access to the page's API and are out of scope
   future:
-  - Zero-copy display - hand the VideoFrame to WebGL (texImage2D) instead of copyTo; needs a hook into
-    the renderer that Ebitengine does not expose; Frame.Native() is reserved for it
   - AV1 encoding ("av01.0.xxM.08"), with the AV1 slice of the other backends
   - Running the conformance tests on Windows/Linux/Android Chrome; AV1 in Safari
   - 'Firefox colours: write the colour description into the SPS/VPS VUI of encoder output ourselves when
@@ -300,13 +309,13 @@ verification:
         Chrome (VideoToolbox).'
     basis:
     - path: internal/webcodecs/backend.go
-      input_hash: ac884f416578d3641055f60005aad7bdfb6cb29f80ed9eb7123e3470cb017fd9
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/jsutil.go
-      input_hash: a0d52a893a25b8e8dbcce239eaf4e6ffccb93c8d73d8e9c01cb17093d1a903be
+      input_hash: 1773322c816d2792faf0ef72ac770d26c5d8e0333192db94005c5f6bfd49328f
     - path: internal/webcodecs/names.go
       input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
     - path: internal/webcodecs/pixels.go
@@ -330,9 +339,9 @@ verification:
         the next stream decoded bit-exactly
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 34e3c939e453fca804c113a7d3421ad84a1fb5136d4c579935ee15571740b23a
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
   unit-tests:
@@ -378,11 +387,11 @@ verification:
         0.5 and 0.9).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/browserexec/main.go
-      input_hash: 14abc9344a31380125845b0ce469276fa229b230f47b425ae42550113bdbd1a0
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
   safari-macos:
     state: failed
     method: integration
@@ -401,11 +410,33 @@ verification:
         for 1 Mbit/s). Skip - AV1 (Probe did not list it in this run), WithQuality (ErrUnsupported).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: ae81c4a629e7598df75c17a69af2e749ccdacd7e8f862e1054b9a8cdcd23d8a3
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
     - path: internal/webcodecs/encoder.go
       input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
     - path: internal/webcodecs/pixels.go
       input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+  native-frames:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh -v -run TestNativeFrames ./internal/webcodecs in Chrome, Firefox and Safari; go test
+      -run TestNativeFormatOutsideTheBrowser . natively
+    evidence:
+      path: internal/webcodecs/browser_js_test.go
+      note: 2026-10-13 - 24 frames of B-frame H.264 and HEVC streams in display order with the packets' timestamps,
+        each VideoFrame drawn on a canvas within 30 dB of ffmpeg's picture, closed by Release, left open by Close
+        when the caller holds it; HEVC skips in Firefox
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/browser_js_test.go
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
+    - path: internal/codec/codec.go
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
+    - path: native_test.go
+      input_hash: a4cd0b7206d94e0cd85670e7ebeee6fec40e04950848c743afa5a31b9ec78bf1
   other-browsers:
     state: not_run
     method: integration

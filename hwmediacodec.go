@@ -29,7 +29,8 @@
 // (decoding with the Microsoft decoder transforms accelerated by Direct3D 11,
 // encoding with the vendor's hardware encoder transforms), and in browsers
 // through WebCodecs (the codecs the browser reports as hardware ones; RGBA
-// and BGRA output converted by the browser). Where the NVIDIA
+// and BGRA output converted by the browser, and the Native format for
+// frames that stay on the GPU). Where the NVIDIA
 // driver is installed its backend is tried first. Raw frames are NV12, RGBA
 // or BGRA in CPU memory. VideoToolbox converts to and from the RGB formats
 // itself and NVENC takes them as input; everywhere else the library converts
@@ -139,9 +140,10 @@ const (
 	Decode = codec.Decode
 	Encode = codec.Encode
 
-	NV12 = codec.NV12
-	RGBA = codec.RGBA
-	BGRA = codec.BGRA
+	NV12   = codec.NV12
+	RGBA   = codec.RGBA
+	BGRA   = codec.BGRA
+	Native = codec.Native
 
 	VBR = codec.VBR
 	CBR = codec.CBR
@@ -386,7 +388,8 @@ func WithTimeScale(unitsPerSecond int32) Option {
 }
 
 // WithOutputFormat requests a pixel format for decoded frames: NV12 (the
-// default), RGBA or BGRA. RGBA and BGRA frames have one plane with rows of
+// default), RGBA or BGRA, or Native for frames that stay with the decoder
+// (see Native; browsers only, ErrUnsupported elsewhere). RGBA and BGRA frames have one plane with rows of
 // exactly 4*Width bytes, ready for ebiten.Image.WritePixels or image.RGBA.
 // The backend converts where it can; for a backend that returns NV12 only
 // the frames are converted in Go, with the colour matrix and range the

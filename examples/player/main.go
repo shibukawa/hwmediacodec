@@ -101,8 +101,13 @@ func (g *game) Draw(screen *ebiten.Image) {
 	if time.Since(g.at) > 2*time.Second {
 		status = ""
 	}
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("%s  %dx%d  %.2fs / %.1fs  %.0f fps  skipped %d  %s\n[space] pause  [<-][->] seek 5s  [home] restart",
-		g.name, vw, vh, g.player.Position().Seconds(), g.player.Length().Seconds(), ebiten.ActualFPS(), g.player.Skipped(), status))
+	path := ""
+	if g.player.ZeroCopy() {
+		// In a browser: the frames go from the decoder to the texture on the GPU.
+		path = "  zero-copy"
+	}
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("%s  %dx%d  %.2fs / %.1fs  %.0f fps  skipped %d%s  %s\n[space] pause  [<-][->] seek 5s  [home] restart",
+		g.name, vw, vh, g.player.Position().Seconds(), g.player.Length().Seconds(), ebiten.ActualFPS(), g.player.Skipped(), path, status))
 }
 
 func (g *game) rect(dst *ebiten.Image, x, y, w, h float64, c color.RGBA) {

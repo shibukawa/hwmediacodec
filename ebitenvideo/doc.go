@@ -26,6 +26,11 @@
 // Seek; an io.ReadSeeker given to NewPlayer gets that too, by scanning the
 // stream once for keyframes.
 //
+// In a browser (GOOS=js GOARCH=wasm) the player uploads the decoder's
+// frames into the image's texture without taking them through CPU memory
+// where that is the cheaper way; Player.ZeroCopy tells, and upload_js.go
+// explains how and what it costs.
+//
 // Playback advances by one tick per Update (1/TPS seconds, or wall-clock
 // time when the TPS is SyncWithFPS); when decoding falls behind, frames
 // are skipped so that the picture stays in time. Seek restarts decoding at
