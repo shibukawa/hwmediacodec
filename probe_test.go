@@ -66,6 +66,14 @@ func TestProbe(t *testing.T) {
 				t.Errorf("unexpected capability on windows: %+v", c)
 			}
 		}
+	case runtime.GOOS == "js":
+		// What the browser reports a hardware codec for; nothing under
+		// Node.js, which has no WebCodecs.
+		for _, c := range caps {
+			if c.Backend != "webcodecs" || !c.Hardware {
+				t.Errorf("unexpected capability in the browser: %+v", c)
+			}
+		}
 	case runtime.GOOS != "darwin":
 		if len(caps) != 0 {
 			t.Errorf("no backend exists for %s yet, but Probe returned %d capabilities", runtime.GOOS, len(caps))

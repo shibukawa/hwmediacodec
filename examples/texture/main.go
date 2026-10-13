@@ -34,7 +34,8 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
-	"github.com/shibukawa/hwmediacodec/examples/assets"
+	"github.com/shibukawa/hwmediacodec/examples/internal/bundled"
+	"github.com/shibukawa/hwmediacodec/examples/internal/fatal"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
@@ -185,7 +186,9 @@ func main() {
 	}
 	player, closer, err := openVideo(flag.Arg(0), *codecName, *fps, opts)
 	if err != nil {
-		log.Fatal(err)
+		// In a browser the message goes into the page.
+		fatal.Exit(err)
+		return
 	}
 	defer closer.Close()
 	defer player.Close()
@@ -229,11 +232,12 @@ func openVideo(path, codecName string, fps float64, opts []ebitenvideo.Option) (
 	var closer io.Closer
 	switch {
 	case path == "":
-		var err error
-		if d, err = mp4.NewDemuxer(assets.Waterfall()); err != nil {
+		// The bundled clip, in the encoding this machine decodes.
+		p, _, err := bundled.Open(opts...)
+		if err != nil {
 			return nil, nil, err
 		}
-		closer = io.NopCloser(nil)
+		return p, io.NopCloser(nil), nil
 	case isMP4(path):
 		var err error
 		if d, err = mp4.Open(path); err != nil {

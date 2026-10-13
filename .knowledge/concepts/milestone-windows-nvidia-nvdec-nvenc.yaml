@@ -146,7 +146,7 @@ verification:
         hash it lacked since the Media Foundation slice.
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_windows.go
       input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
     - path: backends_windows_amd64.go
@@ -196,11 +196,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
   windows-loader-run:
     state: not_run
     method: integration
@@ -245,7 +245,7 @@ verification:
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   hardware-encode-windows:
     state: not_run
     method: integration
@@ -266,7 +266,7 @@ verification:
     - path: internal/nvidia/sys/nvenc.go
       input_hash: 28e4e07e2c7f4ac6ffa47b4c88299aa94db45019ebf3ef3b056cc8f5988ac3ba
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
 open_questions:
   hardware-verification:
     text: Does the backend work on a Windows machine with an NVIDIA GPU? Nothing above the compile-time

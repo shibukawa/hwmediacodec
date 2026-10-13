@@ -112,7 +112,7 @@ verification:
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
-      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
     - path: internal/bitstream/reader.go
       input_hash: b938130875981723695b8a1cdc4fb25d5ecd0d06ce210a0f05cfa162382e1630
   dpb-oracle-test:
@@ -143,7 +143,7 @@ verification:
     - path: internal/h264/dpb_test.go
       input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
     - path: internal/testutil/h264.go
-      input_hash: 43ff80adfa575cff68550f26f545640c3cb3858d0c80cd725cf7c4a17f72c435
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
   layout-test:
     state: passed
     method: unit
@@ -186,7 +186,7 @@ verification:
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
   hardware-conformance:
     state: not_run
     method: integration
@@ -242,7 +242,7 @@ verification:
     - path: internal/vaapi/sys/sys_linux.go
       input_hash: 4de70c455ca376415931156846d2422d3427a171bb2ce5f8893e869e89779ae7
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
   cross-build-check:
     state: passed
     method: static
@@ -254,11 +254,11 @@ verification:
       path: scripts/crossbuild.sh
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
-      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
 facts:
   steps:
   - internal/bitstream - lazy emulation-prevention removal (slice headers no longer copy the slice) and

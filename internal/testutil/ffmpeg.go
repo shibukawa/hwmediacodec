@@ -8,8 +8,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,7 +19,7 @@ import (
 // RequireFFmpeg skips the test when ffmpeg is not installed.
 func RequireFFmpeg(t testing.TB) string {
 	t.Helper()
-	p, err := exec.LookPath("ffmpeg")
+	p, err := LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not found in PATH; skipping reference comparison")
 	}
@@ -31,7 +29,7 @@ func RequireFFmpeg(t testing.TB) string {
 // HasEncoder reports whether the installed ffmpeg offers the named encoder.
 func HasEncoder(t testing.TB, name string) bool {
 	t.Helper()
-	out, err := exec.Command(RequireFFmpeg(t), "-hide_banner", "-encoders").Output()
+	out, err := Command(RequireFFmpeg(t), "-hide_banner", "-encoders").Output()
 	if err != nil {
 		return false
 	}
@@ -65,7 +63,7 @@ func GenerateStream(t testing.TB, c codec.Codec, width, height, frames int) Stre
 func GenerateStreamBFrames(t testing.TB, c codec.Codec, width, height, frames, bframes int) Stream {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	dir := t.TempDir()
+	dir := TempDir(t)
 	var path string
 	args := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
@@ -92,7 +90,7 @@ func GenerateStreamBFrames(t testing.TB, c codec.Codec, width, height, frames, b
 	default:
 		t.Fatalf("no generator for %s", c)
 	}
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := Command(ffmpeg, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -139,7 +137,7 @@ func ReferenceFrames(t testing.TB, path string, c codec.Codec, f codec.PixelForm
 		args = append(args, "-vf", "scale=flags=bilinear+full_chroma_int+accurate_rnd")
 	}
 	args = append(args, "-f", "rawvideo", "-pix_fmt", PixFmt(f), "-")
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := Command(ffmpeg, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -191,7 +189,7 @@ func GenerateNV12Frames(t testing.TB, width, height, frames int) [][]byte {
 func GenerateRawFrames(t testing.TB, f codec.PixelFormat, width, height, frames int) [][]byte {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+	cmd := Command(ffmpeg, "-hide_banner", "-loglevel", "error",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-f", "rawvideo", "-pix_fmt", PixFmt(f), "-")
 	var stderr bytes.Buffer
@@ -247,7 +245,7 @@ func FrameBytes(f *codec.Frame) []byte {
 func GenerateStreamWithTimestamps(t testing.TB, c codec.Codec, width, height, frames, bframes int) (Stream, []int64) {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	dir := t.TempDir()
+	dir := TempDir(t)
 	mp4 := filepath.Join(dir, "stream.mp4")
 	args := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
@@ -273,7 +271,7 @@ func GenerateStreamWithTimestamps(t testing.TB, c codec.Codec, width, height, fr
 		t.Fatalf("no generator for %s", c)
 	}
 	run := func(name string, args ...string) []byte {
-		cmd := exec.Command(name, args...)
+		cmd := Command(name, args...)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
@@ -284,7 +282,7 @@ func GenerateStreamWithTimestamps(t testing.TB, c codec.Codec, width, height, fr
 	}
 	run(ffmpeg, args...)
 	run(ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", mp4, "-c", "copy", "-bsf:v", bsf, "-f", map[codec.Codec]string{codec.H264: "h264", codec.HEVC: "hevc"}[c], path)
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err := LookPath("ffprobe")
 	if err != nil {
 		t.Skip("ffprobe not found in PATH")
 	}
@@ -334,11 +332,11 @@ type FrameInfo struct {
 // information in decode order. It skips the test when ffprobe is missing.
 func ProbeFrames(t testing.TB, path string, c codec.Codec) []FrameInfo {
 	t.Helper()
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err := LookPath("ffprobe")
 	if err != nil {
 		t.Skip("ffprobe not found in PATH")
 	}
-	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
+	cmd := Command(ffprobe, "-hide_banner", "-loglevel", "error",
 		"-f", containerFormat(c), "-i", path, "-select_streams", "v:0",
 		"-show_entries", "frame=key_frame,pict_type", "-of", "csv=p=0")
 	var stderr bytes.Buffer
@@ -372,11 +370,11 @@ func ProbeProfile(t testing.TB, path string, c codec.Codec) string {
 // "profile" or "color_space").
 func ProbeStreamField(t testing.TB, path string, c codec.Codec, field string) string {
 	t.Helper()
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err := LookPath("ffprobe")
 	if err != nil {
 		t.Skip("ffprobe not found in PATH")
 	}
-	cmd := exec.Command(ffprobe, "-hide_banner", "-loglevel", "error",
+	cmd := Command(ffprobe, "-hide_banner", "-loglevel", "error",
 		"-f", containerFormat(c), "-i", path, "-select_streams", "v:0",
 		"-show_entries", "stream="+field, "-of", "csv=p=0")
 	out, err := cmd.Output()
@@ -384,16 +382,6 @@ func ProbeStreamField(t testing.TB, path string, c codec.Codec, field string) st
 		t.Fatalf("ffprobe failed: %v", err)
 	}
 	return strings.TrimSpace(string(out))
-}
-
-// ReadFile reads a whole file or fails the test.
-func ReadFile(t testing.TB, path string) []byte {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
 }
 
 // FrameChecksum hashes a frame in the same layout ReferenceFrames uses,

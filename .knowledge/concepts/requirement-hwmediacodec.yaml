@@ -30,7 +30,8 @@ constraints:
   through ebitengine/purego (darwin, ios, linux) and golang.org/x/sys/windows (windows). cgo is allowed
   only after a concrete, documented blocker (see decision:ffi-strategy). The mobile targets (ios, android)
   are built with CGO_ENABLED=1 because purego needs the cgo runtime there; the library itself keeps no
-  cgo source (2026-10-12, milestone:ios-videotoolbox).
+  cgo source (2026-10-12, milestone:ios-videotoolbox). The browser target (GOOS=js GOARCH=wasm) has no
+  native library at all; its backend calls the WebCodecs API through syscall/js (2026-10-12, milestone:browser-webcodecs).
 - Every backend call that blocks (session creation, flush) must respect context cancellation or a documented
   timeout.
 - 'Encoders must expose the controls that streaming needs: target bitrate with CBR/VBR, GOP length / keyframe
@@ -58,9 +59,9 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
   api/probe:
     state: implemented
     about: capability:hwmediacodec/probe
@@ -139,9 +140,9 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
   encode/hevc:
     state: partial
     about: capability:hwmediacodec/encode-hevc
@@ -154,9 +155,9 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -328,13 +329,13 @@ verification:
       note: go test -count=1 -v . on 2026-10-09; videotoolbox h264/hevc decode and encode hardware=true
     basis:
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
   decode-reference-test:
@@ -358,13 +359,13 @@ verification:
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   unsupported-test:
     state: passed
     method: unit
@@ -379,9 +380,9 @@ verification:
         direction and reason
     basis:
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
   cross-build-check:
     state: passed
     method: static
@@ -397,9 +398,9 @@ verification:
         windows/arm64 on 2026-10-09 (after M2)
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_other.go
-      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
     - path: backends_darwin.go
       input_hash: 80dab191e30fd6e1aa284ec444c358278ad2c05488fcb37ec2ef09fb3f67ff98
   bframe-set-test:
@@ -423,13 +424,13 @@ verification:
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: probe_test.go
-      input_hash: 05f17ef27504407695c13de7980215f5873abb1a9f315ca2f6dca75f1c02a933
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   encode-reference-test:
     state: passed
     method: integration
@@ -454,13 +455,13 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   encoder-controls-test:
     state: passed
     method: integration
@@ -485,13 +486,13 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   transcode-test:
     state: passed
     method: integration
@@ -515,13 +516,13 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: internal/codec/codec.go
-      input_hash: 781740c242e8b7614ecbcc35f825a1456f249767e9afddf2941bfe9494e0904b
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
-      input_hash: e0159766e3188172b7233627fd7cc925d838b0872861fd2d8e42bd57c2a3ef47
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
     - path: internal/videotoolbox/decoder.go
       input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
   reorder-oracle-test:
@@ -558,7 +559,7 @@ verification:
     - path: internal/videotoolbox/pixels.go
       input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
     - path: decode_test.go
-      input_hash: 030febdee786b7e5db94d003a7c5809e0cc317c9395990c14626c3f46d94012f
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   rgb-encode-test:
     state: passed
     method: integration
@@ -575,7 +576,7 @@ verification:
     - path: internal/videotoolbox/encoder.go
       input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
     - path: encode_test.go
-      input_hash: c86184d23e998a23508c5ebc4d9fb4be30cfcb62ff0d2336bc00caf81e4fe522
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
   ebitenvideo-test:
     state: passed
     method: integration
@@ -665,7 +666,9 @@ open_questions:
       D3D11 texture, DMA-BUF)?
     state: deferred
     resolution: Ebitengine has no public native-texture import today; revisit if Ebitengine gains one
-      or if WritePixels throughput is measured as the bottleneck.
+      or if WritePixels throughput is measured as the bottleneck. In the browser it was built and measured on 2026-10-13
+      and taken out again (milestone:browser-webcodecs facts.zero_copy) - it works only by finding Ebitengine's
+      texture from outside; the frames themselves are available as hwmediacodec.Native.
   software-fallback:
     text: Should the library offer a software path when no hardware is present?
     state: deferred
@@ -764,6 +767,12 @@ history:
       Simulator-verified; iPhone run pending. Android (NDK MediaCodec) is the next slice: libmediandk.so
       through purego, synchronous dequeue, AImageReader YUV_420_888 output packed to NV12 in Go, AMediaCodec_getName
       to refuse c2.android./OMX.google. software codecs unless WithSoftwareFallback, minimum API 28.'
+  browser-2026-10-12:
+    summary: 'Browser slice delivered (milestone:browser-webcodecs, backend:webcodecs): the author asked for
+      Go in the browser, chose GOOS=js GOARCH=wasm (Ebitengine''s web target) over GopherJS, WASI and TinyGo,
+      and the WebCodecs backend through syscall/js was written and verified in headless Chrome on an Apple
+      M3 with the existing conformance tests, run in the browser by a go test wrapper that lends them the
+      host''s ffmpeg. Other browsers and operating systems are not run yet; the support tier is to be set.'
   android-2026-10-12:
     summary: 'Android slice delivered in the same request (milestone:android-mediacodec, backend:mediacodec):
       NDK MediaCodec through purego, synchronous, byte-buffer output packed to NV12 from the MediaImage2
@@ -884,6 +893,8 @@ facts:
       - no encode
       - darwin Apple Silicon only
     next_candidates:
+    - Browser backend in Firefox, Safari and Chrome on Windows/Linux/Android (scripts/browser_test.sh);
+      zero-copy VideoFrame display for ebitenvideo; a TinyGo build check (milestone:browser-webcodecs).
     - Hardware conformance runs for the Linux backends (NVIDIA, Intel VPL, VA-API on AMD and Intel) and
       for Windows; all were written without the target GPU.
     - RGBA/BGRA on the NV12-only backends (MFXVideoVPP on Intel VPL, a Go NV12<->RGBA converter
@@ -1054,6 +1065,8 @@ relations:
   to: milestone:m2-darwin-encode
 - relation: delivered_milestone
   to: milestone:display-order-rgba
+- relation: active_milestone
+  to: milestone:browser-webcodecs
 - relation: active_milestone
   to: milestone:linux-vaapi-h264-decode
 - relation: active_milestone

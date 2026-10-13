@@ -130,9 +130,9 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
     - path: convert_test.go
-      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
+      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
   videotoolbox-comparison-test:
     state: passed
     method: integration
@@ -151,7 +151,7 @@ verification:
         and libx265; run 2026-10-10'
     basis:
     - path: convert_test.go
-      input_hash: 463adcf733156d153ec91c32e05816e3b56352324fb7b5aacd80da29bea80bbb
+      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
@@ -173,7 +173,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: hwmediacodec.go
-      input_hash: 8f92688a07521c473731ac4b7d1b8a592b52961070e4f6237b62a1816d344609
+      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
   hardware-run:
     state: not_run
     method: manual

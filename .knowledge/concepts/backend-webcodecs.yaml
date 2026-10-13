@@ -1,0 +1,449 @@
+id: backend:webcodecs
+type: backend
+title: Browser WebCodecs (syscall/js)
+summary: The one codec API a web page has. VideoDecoder and VideoEncoder are full codecs behind which
+  the browser puts the platform's engine (VideoToolbox, Media Foundation, VA-API, MediaCodec); the
+  backend in internal/webcodecs drives them through syscall/js in a GOOS=js GOARCH=wasm build, the
+  target Ebitengine builds for the web.
+lifecycle: proposed
+authority: inferred
+aliases:
+- WebCodecs
+- VideoDecoder
+- VideoEncoder
+- browser backend
+- ブラウザ対応
+- GOOS=js
+- wasm
+scope:
+  platform: js
+capabilities:
+  decode/h264:
+    state: implemented
+    about: capability:hwmediacodec/decode-h264
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: bit-exact with ffmpeg in headless Chrome on an Apple M3 (hardware and software decoder), 2026-10-12
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  decode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/decode-hevc
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: bit-exact with ffmpeg in headless Chrome on an Apple M3 (hardware only; Chrome has no software HEVC decoder)
+    verified_by:
+    - chrome-conformance
+  decode/av1:
+    state: implemented
+    about: capability:hwmediacodec/decode-av1
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: 8-bit bit-exact with libdav1d (hardware and software decoder); 10-bit to RGBA/BGRA only, through
+        an OffscreenCanvas because Chrome's 10-bit hardware frames have no pixel format
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  encode/h264:
+    state: implemented
+    about: capability:hwmediacodec/encode-h264
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: ffmpeg decodes the output at about 50 dB luma PSNR (hardware) and 47 dB (Chrome's software encoder)
+    verified_by:
+    - chrome-conformance
+    - chrome-software
+  encode/hevc:
+    state: implemented
+    about: capability:hwmediacodec/encode-hevc
+    authority: observed
+    scope:
+      platform: js
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/webcodecs/encoder.go
+    verified_by:
+    - chrome-conformance
+  encode/av1:
+    state: absent
+    about: capability:hwmediacodec/encode-av1
+    authority: authored
+    scope:
+      platform: js
+    evidence:
+      path: internal/webcodecs/backend.go
+      note: NewEncoder(AV1) reports ErrUnsupported; AV1 encoding is a separate slice on every backend
+        (WebCodecs would take "av01.*" with little extra code)
+facts:
+  api_model: full decoder/encoder objects with callbacks on the page's event loop; no native library, no
+    purego, only syscall/js
+  build: GOOS=js GOARCH=wasm with the standard Go toolchain (build tag "js && wasm"); names.go, pixels.go
+    and paramsets.go carry no tag and are unit-tested on every host
+  availability: window and dedicated worker, secure context only (https or localhost); under Node.js and
+    on http pages the constructors are missing, Probe is empty and NewDecoder/NewEncoder report ErrUnsupported
+  key_calls:
+    common:
+    - VideoDecoder.isConfigSupported / VideoEncoder.isConfigSupported (Probe, NewDecoder, NewEncoder, every
+      reconfiguration)
+    - hardwareAcceleration "prefer-hardware" by default, "no-preference" with WithSoftwareFallback
+    - decodeQueueSize / encodeQueueSize and the dequeue event for back-pressure; flush() promise for Flush
+    decode:
+    - 'configure({codec, hardwareAcceleration, codedWidth, codedHeight, colorSpace?}) without a description:
+      chunks are Annex-B (AV1: temporal units) with the parameter sets in every key chunk, prepended from
+      the Go store when a keyframe lacks them'
+    - codec string from the stream (avc1.PPCCLL from the SPS; hev1./hvc1. from profile_tier_level; av01.P.LLT.DD
+      from the sequence header); reconfigured (after a flush) when the string or the coded size changes
+    - EncodedVideoChunk({type key|delta, timestamp, data}); the timestamp is a counter in 10 ms steps that
+      maps back to the packet's PTS and display-order key
+    - 'output: VideoFrame.copyTo into a Uint8Array, then js.CopyBytesToGo; NV12 as is, I420/I420A (software
+      decoders) interleaved to NV12 in Go, RGBA/BGRA through copyTo({format}); the frame is closed when
+      the copy is done'
+    encode:
+    - 'configure({codec, width, height, bitrate, bitrateMode variable|constant|quantizer, framerate, latencyMode,
+      avc|hevc: {format: "annexb"}})'
+    - new VideoFrame(Uint8Array, {format NV12, codedWidth, codedHeight, timestamp, duration, colorSpace
+      bt709 when the Go converter made the pixels})
+    - 'encode(frame, {keyFrame, avc|hevc: {quantizer}}); output chunks copied with EncodedVideoChunk.copyTo'
+  hardware_semantics: Chrome treats prefer-hardware as a requirement (measured 2026-10-12 - with --disable-accelerated-video-decode
+    --disable-accelerated-video-encode Probe is empty). The specification calls it a hint, so another
+    engine may answer for a software codec and Capability.Hardware would then be wrong there.
+  threading: 'A js/wasm Go program shares one thread with the page. Callbacks (js.FuncOf) run only while
+    every goroutine is blocked, and a callback must not block. Send blocks while decodeQueueSize /
+    encodeQueueSize is above zero, Flush on the flush() promise and on the outstanding copies; Receive
+    waits only for a copy that is already running and otherwise reports ErrAgain. No mutex: methods and
+    callbacks never run concurrently. Every wait is bounded by 30 s and the context.'
+  display_order: H.264/HEVC through the Go reorder layer (OutputsDisplayOrder false). Chrome emits presentation
+    order from the picture order counts whatever the chunk timestamps say (measured - the decode-order
+    test saw display order), so WithDecodeOrder returns that; the reorder layer makes the result independent
+    of the engine and of the caller's timestamps at the price of the reorder bound in latency a second
+    time. AV1 native.
+  colour: 'RGBA/BGRA are converted by the browser with the stream''s declared matrix. For a stream that
+    declares none the decoder configuration carries colorSpace from pixconv.ColorFor (BT.709 above 704x576,
+    BT.601 otherwise), because Chrome converted an untagged 320x240 AV1 stream with BT.709 (24.9 dB against
+    ffmpeg) and the same pictures in H.264 with BT.601; with the override all three codecs score 86 dB
+    or more. rgbCopySupported detects a copyTo that ignores the format option (allocationSize of a 4x4
+    NV12 frame); the public API then converts in Go.'
+  opaque_frames: 'VideoFrame.format null (Chrome 10-bit hardware frames on macOS; expected from some Android
+    hardware decoders): copyTo and allocationSize reject them, so for RGB output the frame is drawn on
+    an OffscreenCanvas 2D context and read with getImageData. For NV12 output a stream of more than 8
+    bits or other than 4:2:0 is refused with ErrUnsupported at its keyframe; an opaque 8-bit frame is
+    a BackendError at Receive.'
+  error_model: 'The browser closes a VideoDecoder/VideoEncoder for good when it reports an error. The
+    error (EncodingError and DataError as ErrInvalidData, NotSupportedError as UnsupportedError, else
+    BackendError with the DOMException text) is returned by the next method call and a new codec object
+    is created at the next keyframe.'
+  encoder_notes:
+  - Without a bitrate the configuration carries 0.1 bit per pixel per frame (at least 200 kbit/s), as
+    on Windows and Android, instead of the browser's default.
+  - 'H.264 level from Table A-1 and HEVC level from Table A.8 for the picture size and frame rate, never
+    below 3.1; profile from WithProfile, otherwise High, Main, Constrained Baseline (42E0), Baseline tried
+    in that order.'
+  - WithQuality maps to the quantizer mode with QP round(51 - 45 q) on every frame, the VA-API/NVENC line.
+  - WithBFrames has no WebCodecs equivalent; packets have DTS = PTS.
+  - 'A browser that ignores {format: "annexb"} and returns length-prefixed NAL units with an avcC/hvcC
+    description is handled (paramSets.addDescription + annexb.FromLengthPrefixed); unit-tested against
+    mp4ff-built records, never taken by Chrome.'
+  firefox_macos_2026-10-13:
+  - Firefox updated itself from 146.0.1 to 157.0.1 between the runs of 2026-10-12 and 2026-10-13; the suite
+    gives the same results in both.
+  - 'Decoded VideoFrames are BGRX (H.264 and AV1, hardware and prefer-software, headless and with a window),
+    not NV12/I420. RGBA/BGRA output works through copyTo; NV12 output is an UnsupportedError from Receive
+    - inverting the RGB would need the matrix Firefox used, which the frame no longer tells.'
+  - VideoDecoderConfig.colorSpace is ignored for H.264 - an untagged 320x240 stream is shown as BT.709
+    (24.9 dB against ffmpeg's BT.601) with smpte170m in the configuration; untagged AV1 comes out right
+    (41 dB).
+  - The encoder writes no colour description (ffprobe color_space unknown) although the VideoFrame carries
+    colorSpace bt709; RGB input converted with BT.709 is then read as BT.601 by decoders at SD sizes
+    (27.6 dB at 320x240). HD is unaffected by the usual rule.
+  - 'bitrateMode quantizer is accepted by isConfigSupported and the per-frame quantizer has no effect (identical
+    stream sizes). latencyMode realtime is accepted by isConfigSupported and fails configure with "EncodingError:
+    The given encoding is not supported"; the encoder now waits for configure (an empty flush) and retries
+    with latencyMode quality.'
+  - No HEVC decode or encode. Probe reports h264 decode/encode and av1 decode as hardware; whether Firefox
+    treats prefer-hardware as a requirement was not measured.
+  - 'A Firefox started by the path of its binary from a shell spins at 100% CPU without loading the page ("sandbox_extension_issue_file_to_process
+    failed for plugin-container.app: Operation not permitted"), in the agent sandbox and in a plain terminal
+    alike; started through LaunchServices (open -n -W -g -a Firefox.app --args ...) it works, which is what
+    internal/browserexec does on macOS, stopping it by its profile path.'
+  safari_macos_2026-10-13:
+  - 'Decoded H.264/HEVC VideoFrames are NV12 with colorSpace bt709 / iec61966-2-1 / fullRange true for a video-range
+    stream. A throwaway page sent the copyTo bytes to the host, where they were compared with ffmpeg sample by
+    sample and a filter was fitted: luma = round((Y-16)*255/219) to within 1; chroma = the row and the row below
+    mixed 0.747 : 0.249 in the video range (a quarter-line shift up, last row unchanged), then widened, to
+    within 1 (no integer formula matches exactly - Safari''s own arithmetic). The decoder undoes both (narrowRange,
+    unshiftChroma - from the last row up, c[y] = (4 t[y] - c[y+1]) / 3, errors shrink by 3 per row) when webKit()
+    and the frame says fullRange for a video-range stream: luma exact except clipped out-of-range samples (76-85
+    dB on testsrc2), chroma 54 dB (35-40 dB with narrowing alone). A stream that is itself full range is left alone.
+    Tests - TestWidenedFramesMatchFixture compares the frames as handed over (keepBrowserForm) with webKitForm(ffmpeg
+    frame), every sample within 1, B-frame H.264 and HEVC streams in display order; the root checksum tests skip
+    through exactNV12() once WidenedFrames() is set.'
+  - 'H.264 encoder, latencyMode quality: takes four frames, never emits a chunk, the fifth encode stays in
+    encodeQueueSize and flush() never settles; one frame plus flush works. realtime works. Hence the trial
+    of trialFrames (8) frames in encoder.open, with the proven/broken mode remembered per page, codec and
+    acceleration; the stream then gets a fresh encoder. On the author''s suggestion a WebKit user agent (AppleWebKit
+    without Chrome/Chromium/Edg) makes H.264 try realtime first, which saves the 3 s the stalled mode costs
+    (first encoder 3.5 s to 0.6 s); the trial still decides. HEVC keeps quality first, which works there.'
+  - A VideoFrame built from NV12 bytes without colorSpace is taken as full range (stream marked pc, 28.6
+    dB); with colorSpace fullRange false the H.264 stream is video range. The HEVC encoder converts the
+    samples to full range and marks the stream pc either way (widening the input ourselves made it 21.8
+    dB, so the conversion is Safari's and the stream is consistent).
+  - No colour description written (ffprobe color_space unknown), as in Firefox. bitrateMode quantizer is
+    not supported for H.264 (isConfigSupported false, WithQuality reports ErrUnsupported). CBR in realtime
+    mode gave 592 kbit/s for a 1 Mbit/s target at 320x240.
+  - isConfigSupported answers yes for every codec under prefer-hardware, no-preference and prefer-software
+    alike, so the hint does not select anything there.
+  - 'AV1: in a page where isConfigSupported says yes, the AV1 decode tests pass bit-exact with libdav1d (video-range
+    NV12, labelled smpte170m/bt470bg) and VideoEncoder really encodes AV1 (8 of 8 chunks in a throwaway probe).
+    But the answer is settled per page process and differs between page loads: of the loads observed on 2026-10-13
+    several answered no for all three acceleration preferences from the first call on, before any codec had been
+    used, and configure then fails with "NotSupportedError: Codec is not supported"; others answered yes throughout.
+    Ruled out as triggers with throwaway probes: the number of decoders created, decoder errors, decoders left
+    open, elapsed time, encoders, VideoFrame construction, allocationSize/copyTo with a format. Cause unknown
+    (inside Safari). 10-bit AV1 has no path there: NV12 is refused and copyTo does not convert to RGB, so
+    TestDecodeAV1TenBit fails in Safari.'
+  - Timers of a tab that is not visible are suspended (a 400 s test timeout and the 30 s stall timeouts
+    never fired in a background tab), so every time limit in the backend only holds while the page is
+    visible, and the tests need the Safari window in view.
+  survey_2026-10-13:
+    how: a throwaway page (not in the repository) that asks isConfigSupported for 20 codec strings x 3 acceleration
+      preferences, VideoEncoder.isConfigSupported x latency x bitrate modes, canPlayType / MediaSource / mediaCapabilities
+      (also with colorGamut, transferFunction, hdrMetadataType), the VideoColorSpace enumerations, the VideoFrame
+      pixel formats, and decodes one ffmpeg keyframe per codec with and without colorSpace in the configuration;
+      run in headless Chrome 153, Firefox 157.0.1 (default profile and one with dom.media.webcodecs.h265.enabled)
+      and Safari 27.0.1 on the M3
+    firefox_hevc: 'canPlayType, MediaSource.isTypeSupported and mediaCapabilities say yes (hardware) for hvc1/hev1, but
+      VideoDecoder.isConfigSupported says no and configure fails with NotSupportedError unless the preference
+      dom.media.webcodecs.h265.enabled is set; with it HEVC decodes (Annex-B and hvcC alike, BGRX frames). No
+      HEVC encoder with or without it.'
+    hardware_hint: Chrome distinguishes (HEVC decode hw/any yes, sw no; AV1/VP9 encode sw only; High 10 H.264
+      and 4:4:4 AV1 sw only). Firefox and Safari answer identically for all three preferences.
+    encoder_modes: 'Chrome H.264/HEVC hardware - variable, constant, quantizer; software - no quantizer. Firefox claims
+      all three for H.264 (the quantizer has no effect in practice). Safari rejects bitrateMode quantizer as an unknown
+      value and says yes to every codec including AV1/VP9/VP8 encode.'
+    decode_colour:
+    - 'Chrome - NV12 frames. Untagged SD H.264/HEVC come out as smpte170m; colorSpace in the configuration is ignored
+      for H.264 (frame.colorSpace and the RGBA pixels do not change) and honoured for AV1 (untagged AV1 is bt709
+      by default, smpte170m with the override, and the pixels change).'
+    - 'Firefox - BGRX frames. frame.colorSpace repeats what the configuration said, but the pixels are the same either
+      way: the conversion happened before (BT.709 for untagged SD H.264, BT.601 for untagged SD AV1).'
+    - 'Safari - H.264/HEVC as NV12 with bt709 / iec61966-2-1 / fullRange true whatever stream and configuration say;
+      AV1 as video-range NV12 labelled smpte170m / bt470bg with the same samples as Chrome. copyTo with a
+      format is ignored for YUV frames (rgbCopySupported is false there, so RGB output goes through pixconv).'
+    colour_values: 'VideoColorSpace accepts in Chrome and Firefox - primaries bt709 bt470bg smpte170m bt2020 smpte432;
+      transfer bt709 smpte170m iec61966-2-1 linear pq hlg; matrix rgb bt709 bt470bg smpte170m bt2020-ncl. Safari
+      also takes bt470m smpte240m film / gamma22curve gamma28curve smpte240m log / bt2020-cl smpte240m fcc.'
+    pixel_formats: Chrome builds VideoFrames in every format tried (I420, I422, I444, their 10/12-bit forms, NV12,
+      RGBA/RGBX/BGRA/BGRX); Firefox and Safari only I420, I420A, NV12 and the four RGB ones. A frame keeps the
+      colorSpace it is given in all three.
+    real_encodes: 'A second throwaway probe encoded 8 frames per codec and latency mode. Chrome - every codec and mode
+      delivers (H.264, HEVC, AV1, VP9, VP8). Firefox - H.264 in quality only (realtime fails configure with EncodingError),
+      no HEVC, AV1/VP9/VP8 in both modes. Safari - H.264 Baseline in both modes, H.264 High in realtime only (quality
+      gives 0 chunks and a flush that never settles), HEVC, VP9 and VP8 in both, AV1 in both when the page has AV1
+      at all. So the Safari stall is specific to High profile H.264 in quality mode; avc/hevc chunks came with
+      a description (no annexb format was asked for in the probe).'
+    hdr: mediaCapabilities reports HEVC Main 10 with rec2020 + pq/hlg as supported and power efficient in all three;
+      10-bit AV1 with pq/hlg in Firefox and Safari but not in Chrome on this Mac. WebCodecs itself has no query
+      for it beyond the codec string.
+  native_frames_2026-10-13:
+  - 'codec.Native (hwmediacodec.Native) is a decoder output format: the frame has no Planes, Frame.Native()
+    returns the VideoFrame as js.Value, Release closes it (and clears the handle). The output callback wraps the
+    frame without copyTo; at most maxNativePending (4) wait for Receive. Other backends refuse the format (ErrUnsupported),
+    encoders too. The colorSpace override for untagged streams is put into the configuration as for RGB output.'
+  - 'Order: the Go reorder layer stays in front. A throwaway test with WithDecodeOrder and the counter timestamps
+    showed why - Chrome emits display order by itself, Safari emits such a stream in decode order (0 3 1 2 7 5 4 6
+    ...), so it sorts by the chunk timestamps, not by picture order count.'
+  - 'Colours of a drawn native frame are the browser''s: for an untagged 320x240 stream Chrome draws BT.601 (51 dB
+    against ffmpeg converted with BT.601), Firefox BT.709 (46 dB), Safari BT.709 (32 dB, its chroma shift included),
+    for H.264 and HEVC alike. TestNativeFrames accepts either and logs it.'
+  not_run:
+  - Chrome on Windows, Linux and Android
+  - TinyGo (-target wasm shares GOOS=js and syscall/js) and GopherJS, neither tried; WASI targets have
+    no access to the page's API and are out of scope
+  future:
+  - AV1 encoding ("av01.0.xxM.08"), with the AV1 slice of the other backends
+  - Running the conformance tests on Windows/Linux/Android Chrome; AV1 in Safari
+  - 'Firefox colours: write the colour description into the SPS/VPS VUI of encoder output ourselves when
+    the browser did not (internal/h264 and internal/hevc have the writers), and give untagged H.264 input
+    a tagged SPS for RGB output'
+  support_tier: proposed (policy:support-tiers browser_proposed)
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers
+verification:
+  chrome-conformance:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh . (the root package's conformance tests in headless Chrome through internal/browserexec,
+      ffmpeg on the host as the oracle)
+    evidence:
+      path: scripts/browser_test.sh
+      note: '2026-10-12, Apple M3, go1.27.0: every test passes or skips for a stated reason (TestDecodeOrderOption:
+        the browser reorders natively). Hardware H.264, HEVC and AV1 decode, H.264 and HEVC encode behind
+        Chrome (VideoToolbox).'
+    basis:
+    - path: internal/webcodecs/backend.go
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: internal/webcodecs/jsutil.go
+      input_hash: 1773322c816d2792faf0ef72ac770d26c5d8e0333192db94005c5f6bfd49328f
+    - path: internal/webcodecs/names.go
+      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+    - path: internal/webcodecs/pixels.go
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+    - path: internal/webcodecs/paramsets.go
+      input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
+    - path: backends_js.go
+      input_hash: 88895814cb9e08abd68acd7212d2f22a51e293d5924f43639b201019fa8d0623
+  chrome-software:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh ./internal/webcodecs (TestSoftwareDecodeMatchesReference, TestSoftwareEncode,
+      TestDecoderRecoversFromError with hardwareAcceleration forced to prefer-software)
+    evidence:
+      path: internal/webcodecs/browser_js_test.go
+      note: 2026-10-12 - H.264 and AV1 software decode (I420 frames) bit-exact with ffmpeg, HEVC skips (no
+        software decoder), software H.264 encode 47 dB, a broken IDR slice reported as ErrInvalidData and
+        the next stream decoded bit-exactly
+    basis:
+    - path: internal/webcodecs/browser_js_test.go
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+  unit-tests:
+    state: passed
+    method: unit
+    authority: observed
+    test: go test ./internal/webcodecs/ (any host; also under Node.js with GOOS=js)
+    evidence:
+      path: internal/webcodecs/names_test.go
+      note: codec strings (H.264 and AV1 against the strings ffmpeg's DASH muxer writes, HEVC against the
+        ISO/IEC 14496-15 examples), level tables, I420 to NV12 with padded layouts, plane bounds, packed
+        RGB rows, frame validation, avcC/hvcC records built by mp4ff
+    basis:
+    - path: internal/webcodecs/names_test.go
+      input_hash: c5c2518a8b4ed822f70ce8604fdf9db6bd8c8f7c85354930c733ffc490db7fac
+    - path: internal/webcodecs/pixels_test.go
+      input_hash: 6aeb1def3aa781fd5b6c1b514d93e8f83043ee07c7cf155d2974e0209f9a5663
+    - path: internal/webcodecs/paramsets_test.go
+      input_hash: ad210b8917498b84eb62c5f129fd4f180914bf6e0a174a7c40cdc3e3f024dfc9
+    - path: internal/webcodecs/names.go
+      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+    - path: internal/webcodecs/pixels.go
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+    - path: internal/webcodecs/paramsets.go
+      input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
+  firefox-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox scripts/browser_test.sh -v
+      . ./internal/webcodecs (Firefox 146.0.1, Apple M3; headless, and with HWMEDIACODEC_BROWSER_HEADED=1 for
+      the decode, RGBA, quality and low-latency tests - same results)
+    evidence:
+      path: internal/webcodecs/decoder.go
+      note: '2026-10-13: runs to the end. Pass - H.264 and AV1 decode to RGBA/BGRA (AV1 41 dB, 10-bit AV1 to
+        BGRA), H.264 encode (45 dB), bitrate modes, keyframe interval and forced keyframes, profiles, flush
+        and reuse, low latency after the fallback, software H.264 encode, the pipelines. Skip - every NV12
+        decode test (frames are BGRX, ErrUnsupported), HEVC (none). Fail - TestDecodeRGBA h264 (24.9 dB, BT.709
+        used for an untagged SD stream although the configuration said smpte170m), TestEncodeRGBAInput and
+        TestEncodeConvertedRGB (stream untagged, 27.6 dB at 320x240), TestEncodeQuality (same size for quality
+        0.5 and 0.9).'
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: internal/browserexec/main.go
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+  safari-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh -p 1 -v . ./internal/webcodecs
+      (Safari 27.0.1 on the M3, the author's running Safari, window in view)
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: '2026-10-13: runs to the end in about 30 s. Pass - RGBA/BGRA decode (38 dB), flush and keyframe
+        resume, the converted-RGB decode cases, H.264 encode (48.7 dB), keyframe interval, forced keyframes,
+        profiles, low latency (43.9 dB), flush and reuse, pipelines. Fail - every bit-exact NV12 comparison
+        (H.264 and HEVC; frame counts and order are right), HEVC encode compared sample by sample (full-range
+        stream, 28.6 dB), RGB input (no colour description, 27.6 dB at 320x240), CBR accuracy (592 kbit/s
+        for 1 Mbit/s). Skip - AV1 (Probe did not list it in this run), WithQuality (ErrUnsupported).'
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: internal/webcodecs/pixels.go
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+  native-frames:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: js
+    test: scripts/browser_test.sh -v -run TestNativeFrames ./internal/webcodecs in Chrome, Firefox and Safari; go test
+      -run TestNativeFormatOutsideTheBrowser . natively
+    evidence:
+      path: internal/webcodecs/browser_js_test.go
+      note: 2026-10-13 - 24 frames of B-frame H.264 and HEVC streams in display order with the packets' timestamps,
+        each VideoFrame drawn on a canvas within 30 dB of ffmpeg's picture, closed by Release, left open by Close
+        when the caller holds it; HEVC skips in Firefox
+    basis:
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/browser_js_test.go
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
+    - path: internal/codec/codec.go
+      input_hash: 5e5bed90fdade56c11e540d9a7b14f47241b930c9c8c9776b7e07b5473447fe5
+    - path: native_test.go
+      input_hash: a4cd0b7206d94e0cd85670e7ebeee6fec40e04950848c743afa5a31b9ec78bf1
+  other-browsers:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      platform: js
+    test: scripts/browser_test.sh . ./internal/webcodecs on Windows, Linux and Android Chrome
+    evidence:
+      path: internal/browserexec/main.go
+      note: no Windows, Linux or Android machine in this session

@@ -1,8 +1,9 @@
-//go:build !darwin && !linux && !(windows && (amd64 || arm64))
+//go:build !darwin && !linux && !(windows && (amd64 || arm64)) && !(js && wasm)
 
 package hwmediacodec
 
 // No backend is implemented for this platform (this includes 32-bit
 // Windows, which is out of scope). Probe returns an empty list and
 // NewDecoder returns ErrUnsupported. Android satisfies the linux
-// constraint and has its own backends_android.go.
+// constraint and has its own backends_android.go; the browser
+// (GOOS=js GOARCH=wasm) has backends_js.go.

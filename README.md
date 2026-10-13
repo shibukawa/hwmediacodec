@@ -13,6 +13,9 @@ the NDK MediaCodec API; on both purego needs the cgo runtime, so mobile
 builds set `CGO_ENABLED=1` with the platform's clang (which
 `ebitenmobile bind` does by itself) while the library still contains no cgo
 code. See [iOS notes](#ios-notes) and [Android notes](#android-notes).
+In a browser (`GOOS=js GOARCH=wasm`, the target Ebitengine builds for the
+web) the engine is the WebCodecs API, reached through `syscall/js`; see
+[Browser notes](#browser-notes).
 
 ## Packages
 
@@ -42,6 +45,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
 | Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on the Android 14 emulator (its decoders), a device run is pending** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Android 14 emulator (software encoders), a device run is pending** |
+| Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only and Safari's NV12 is not bit-exact (see the notes); other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox and H.264 / HEVC in Safari on macOS with the limits in the notes; other operating systems not run yet** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified in the iOS Simulator (software decoder), the iPhone run is pending** | H.264, HEVC as on macOS; **verified in the iOS Simulator, the iPhone run is pending** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
@@ -327,6 +331,191 @@ MediaTek, Tensor) sit behind it.
   module, its test binaries and the CLI compile for `android/arm64` and
   `android/amd64` with NDK r27. `examples/mobile/android` is the app to
   run on a device; the author's Android tablet is the first target.
+
+### Browser notes
+
+The browser backend (`internal/webcodecs`) drives the
+[WebCodecs](https://www.w3.org/TR/webcodecs/) API through `syscall/js` in a
+`GOOS=js GOARCH=wasm` build, the one Ebitengine makes for the web:
+`VideoDecoder` fed with Annex-B access units (or AV1 temporal units) as
+`EncodedVideoChunk`s without a description, `VideoEncoder` configured for
+Annex-B output, and frames in CPU memory through `VideoFrame.copyTo`. It is
+the one codec API a page has; the browser puts VideoToolbox, Media
+Foundation, VA-API or MediaCodec behind it.
+
+- **Build.** `GOOS=js GOARCH=wasm go build` with the standard Go
+  toolchain; nothing else is needed, and purego is not part of the build.
+  TinyGo and GopherJS are untested, and the WASI targets have no way to
+  the browser's API.
+- **Where it runs.** WebCodecs needs a secure context (https, or
+  `localhost` during development) and exists in windows and dedicated
+  workers. Elsewhere (Node.js, an `http://` page) `Probe` returns an
+  empty list and `NewDecoder` / `NewEncoder` report `ErrUnsupported`.
+- **Hardware is the browser's word.** Configurations ask for
+  `hardwareAcceleration: "prefer-hardware"`. Chrome treats that as a
+  requirement: with accelerated video decoding switched off it reports
+  nothing as supported, `Probe` is empty and the hardware tests skip
+  (measured). The specification calls it a hint, and Firefox and Safari
+  take it as one: they answer the same for every preference (Firefox says
+  yes to "hardware" VP8, Safari to "software" HEVC), so
+  `Capability.Hardware` means something in Chromium browsers only. `WithSoftwareFallback` asks for
+  `"no-preference"` and lets the browser's software codecs in (Chrome has
+  them for H.264 and AV1 decoding and H.264 encoding, not for HEVC).
+- **One thread.** WebCodecs answers in callbacks on the page's event loop,
+  and a WebAssembly program shares that thread: a callback runs only while
+  every goroutine is blocked. `Send` blocks while the browser's codec is
+  saturated and `Flush` until everything is delivered; `Receive` never
+  waits and reports `ErrAgain` when nothing has arrived. The documented
+  Send/Receive loop, `DecodeReader`, `EncodeWriter`, `playback` and
+  `ebitenvideo` all block often enough. A loop that only polls `Receive`
+  until a frame shows up never lets the browser deliver it.
+- **Order.** WebCodecs decoders emit presentation order (Chrome does, from
+  the picture order counts). The library still sorts H.264 and HEVC frames
+  by picture order count itself, so the result does not depend on the
+  engine or on the timestamps of the packets; `WithDecodeOrder` returns the
+  browser's order.
+- **RGBA and BGRA output** is converted by the browser
+  (`copyTo({format})`), which is far cheaper than converting in
+  WebAssembly. For a stream that names no colour matrix the library puts
+  its own rule (BT.709 above 704x576, BT.601 otherwise) into the decoder
+  configuration, because browsers guess differently per codec (Chrome
+  showed an untagged 320x240 AV1 stream as BT.709). Chrome follows that
+  configuration for AV1 and ignores it for H.264, where its own guess
+  (BT.601 below 720 lines) agrees with the rule at the usual sizes. A
+  browser whose `copyTo` does not convert gets the Go conversion instead.
+- **10-bit and other pictures without an NV12 form** (4:2:2, 4:4:4) decode
+  to RGBA or BGRA only; with NV12 output the stream is refused with
+  `ErrUnsupported`. Frames the browser exposes without a pixel format
+  (`VideoFrame.format` is `null`: 10-bit hardware frames in Chrome, and
+  what some Android hardware decoders return) are read back through an
+  `OffscreenCanvas` for RGB output.
+- **Encoder.** NV12 frames are wrapped in `VideoFrame`s; bitrate with
+  `"variable"` or `"constant"` mode, `WithQuality` through the
+  `"quantizer"` mode with one quantiser per frame, `WithLowLatency` as
+  `latencyMode: "realtime"`, keyframes forced from Go at the exact frame
+  count. The codec string carries the profile and a level that fits the
+  picture size and frame rate; without `WithProfile`, H.264 tries High,
+  Main and Constrained Baseline in that order. WebCodecs encoders do not
+  reorder frames, so `WithBFrames` changes nothing. A browser that
+  ignores the request for Annex-B output and returns length-prefixed NAL
+  units with an `avcC` / `hvcC` record gets them converted (that path has
+  unit tests but no browser that takes it was run).
+- **Firefox** (146 and 157 on macOS, measured 2026-10-13) differs from
+  Chrome in what it gives the page:
+  - Its decoders hand over `BGRX` frames, not YUV. RGBA and BGRA output
+    work; NV12 output is `ErrUnsupported` at `Receive`, because turning RGB
+    back into YUV would need the matrix Firefox converted with. A
+    transcoder there decodes to RGBA and encodes from RGBA.
+  - It ignores the colour description in the decoder configuration for
+    H.264: an untagged 320x240 stream comes out as BT.709 where every
+    other backend shows BT.601. Tagged streams and HD are not affected by
+    the rule.
+  - Its encoder does not write the colour description into the stream, so
+    RGB input (converted with BT.709) is untagged; decoders then assume
+    BT.601 for pictures up to 704x576, and those come out in slightly wrong
+    colours. HD is assumed BT.709 and is fine.
+  - `WithQuality` is accepted and has no effect (the stream has the same
+    size for every value), and `latencyMode: "realtime"` is refused at
+    configure although `isConfigSupported` accepts it; the backend
+    notices (it waits for the configuration to take) and configures
+    without it.
+  - No HEVC through WebCodecs by default, although its `<video>` element
+    plays HEVC: `VideoDecoder` takes it only with the preference
+    `dom.media.webcodecs.h265.enabled` switched on in `about:config`
+    (measured in 157: with it, HEVC decodes, again to `BGRX`). There is no
+    HEVC encoder either way. The samples therefore bundle their clip in
+    H.264 as well and fall back to it.
+- **Safari** (macOS, measured 2026-10-13) works for playback and differs
+  in these ways:
+  - Decoded H.264 and HEVC frames are NV12 in a form of WebKit's own,
+    whatever the stream says: widened to full range, and the chroma plane
+    moved up a quarter line (every row is three quarters of itself and a
+    quarter of the row below; measured against ffmpeg sample by sample).
+    The backend undoes both, so a frame has the stream's range and chroma
+    position again: the luma exactly, the chroma to within a step or two
+    (54 dB against ffmpeg on the test pattern, 76 dB and more for luma,
+    where the only differences are samples outside the video range that
+    the widening clipped). That is not bit-exact, so in Safari the
+    checksum tests give way to a test that compares the frames as Safari
+    hands them over with a fixture in that form, made from ffmpeg's decode
+    of the same B-frame streams: every sample of every frame is within one
+    step, in display order. Its `copyTo` does not convert YUV frames to
+    RGB (the option is ignored, which the backend detects), so RGBA and
+    BGRA output are converted in Go from the restored frames (41 dB
+    against ffmpeg's).
+  - Its H.264 encoder stops returning chunks from the fifth frame on in
+    `latencyMode: "quality"`, flush included. The first encoder a page
+    opens therefore proves its latency mode with eight frames, and the
+    backend uses `"realtime"` where `"quality"` does not work (and the
+    other way round, which covers Firefox); the result is remembered for
+    the page. In a WebKit browser, recognised by its user agent string,
+    H.264 starts with `"realtime"` so that the proof does not have to wait
+    three seconds for the mode that stalls; the proof still decides. In that mode constant bitrate undershoots (592 kbit/s for a
+    1 Mbit/s target at 320x240) and `WithQuality` is `ErrUnsupported`.
+  - NV12 input without a colour space is taken for full-range samples, so
+    every input frame now says video range. Its HEVC encoder still writes
+    a full-range stream (it converts the samples itself); the picture is
+    right, the range is not the one asked for.
+  - Like Firefox it writes no colour description, with the same effect on
+    RGB input at SD sizes.
+  - AV1 decodes there, bit-exact with ffmpeg, when Safari offers it, but
+    Safari does not offer it to every page: whether `isConfigSupported`
+    says yes for AV1 is settled per page process and came out as no in
+    about half of the page loads on the same machine, before the page had
+    used any codec. The library reports what the browser says at that
+    moment, so `Probe` may or may not list `av1 decode` in Safari. 10-bit
+    AV1 has no output there (no NV12 form, and no RGB conversion in
+    `copyTo`).
+  - It suspends the timers of a tab that is not visible, and with them
+    every timeout of the Go program: run the tests with the Safari window
+    in view (`HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a
+    Safari"`).
+- **Frames that stay on the GPU.** `WithOutputFormat(hwmediacodec.Native)`
+  returns the decoder's own pictures instead of pixels: the frame has no
+  `Planes`, and `Frame.Native()` is the WebCodecs `VideoFrame` (a
+  `syscall/js` value) that WebGL (`texImage2D`), WebGPU and canvases take
+  as an image source without the pixels leaving the GPU. `Release` closes
+  it, and since a hardware decoder has few pictures, a frame should not
+  be held for long (the decoder keeps four at most for `Receive`). The
+  order is the display order as for every other format. How such a frame
+  turns into colours is then the browser's business: for a stream that
+  names no matrix Chrome takes BT.601 at SD sizes while Firefox and Safari
+  take BT.709 (measured on 320x240 streams), where the pixel formats
+  follow the library's one rule. The Ebitengine player does not use
+  these frames; see [Ebitengine](#ebitengine) for why.
+- **Not done.** No AV1 encoding, as on every backend.
+
+**Verification (2026-10-12).** `scripts/browser_test.sh` builds a `go
+test -exec` wrapper (`internal/browserexec`) that serves the js/wasm test
+binary to a headless browser and lends it the host's ffmpeg and temporary
+files over a loopback port, so the same conformance tests as on the other
+platforms run against WebCodecs. In Chrome on an Apple M3 (hardware H.264,
+HEVC and AV1 decoders, H.264 and HEVC encoders behind it) the whole root
+suite passes: H.264, HEVC and AV1 frames bit-exact with ffmpeg, B-frame
+streams in display order, RGBA and BGRA output at 86 dB or more against
+ffmpeg's conversion (8x8-block PSNR), a 10-bit AV1 stream to BGRA, H.264
+and HEVC encoding
+with the bitrate modes, constant quality, keyframe interval and forced
+keyframes, RGB input, and the packet and frame pipelines. The browser's
+software decoders (planar frames packed to NV12 in Go) are bit-exact with
+ffmpeg for H.264 and AV1, the software H.264 encoder's output decodes
+with ffmpeg, and a decoder that the browser closed after a broken keyframe
+decodes the next stream. `examples/player` plays the bundled 720x1280 HEVC
+clip in the browser at 60 frames per second without a skipped frame, with
+seeking. In Firefox 146 on the same Mac (headless and with a window, the
+same results) the suite runs with the limits listed above: H.264 and AV1
+decode to RGBA and BGRA (AV1 at 41 dB against ffmpeg, a 10-bit AV1 stream
+included), H.264 encoding with the bitrate modes, keyframe controls,
+profiles and low-latency fallback (45 dB), and the software H.264 encoder
+pass; every NV12 decode test skips, and four tests fail for the colour
+and quality reasons above. In Safari the same script decodes H.264 and
+HEVC to within one step of the fixture in WebKit's frame form (see
+above; the checksum tests skip there), passes the RGBA / BGRA, flush,
+keyframe, profile, bitrate and low-latency tests and encodes H.264 at
+48.7 dB; the AV1
+decode tests pass bit-exact in a page where Safari offers AV1 and skip
+where it does not. Chrome on Windows,
+Linux and Android has not been run.
 
 ### AV1 on Linux and Windows
 
@@ -916,6 +1105,28 @@ cd ebitenvideo && go run ./example -codec h264 -fps 30 ../video.h264
 cd examples && go run ./player
 ```
 
+The same player runs in a browser: Ebitengine builds for `GOOS=js
+GOARCH=wasm` and the frames come from WebCodecs (see [Browser
+notes](#browser-notes)). [wasmserve](https://github.com/hajimehoshi/wasmserve)
+builds and serves it on `http://localhost:8080/`:
+
+```sh
+cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player
+```
+
+The player takes RGBA frames from the decoder there as everywhere else.
+Uploading the browser's `VideoFrame` straight into the texture behind the
+player's image was built and measured on an Apple M3: per frame on the
+page's one thread it cost about 1.3 ms in Chrome whatever the picture
+size, against 0.9 ms (720p), 1.7 ms (1080p) and 9.4 ms (4K) for RGBA
+frames and `WritePixels`, and it was the slower way in Firefox. It was
+taken out again, because Ebitengine does not hand out its textures and the
+upload had to find them from the outside, by watching the WebGL context,
+which holds only as long as Ebitengine's internals stay as they are. The
+frames themselves are available (`hwmediacodec.Native`, see [Browser
+notes](#browser-notes)); what is missing is a way to give Ebitengine an
+image source for a texture.
+
 Inside the repository the modules build against each other's working tree
 through `go.work`. Consumers get the version named in the `require` line of
 `ebitenvideo/go.mod`; tag the core module first, update that line, then tag
@@ -1092,12 +1303,32 @@ decoder is software, so `decode` needs `-software` there). The
 session-invalidation recovery that iOS needs is tested on macOS by
 invalidating the session by hand.
 
+The browser backend is checked in a real browser, since Node.js (which the
+Go toolchain runs js/wasm tests in) has no WebCodecs.
+`scripts/browser_test.sh` builds `internal/browserexec` as the
+`go_js_wasm_exec` wrapper "go test" looks for: it serves the test binary
+and a page that starts it on a loopback port, opens the page in headless
+Chrome (Chromium or Edge; `HWMEDIACODEC_BROWSER` names another browser,
+`HWMEDIACODEC_BROWSER_HEADED=1` shows the window) and relays the output
+and the exit code. Firefox works the same way
+(`HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox`;
+on macOS the wrapper starts it through `open`, since a Firefox started by
+the path of its binary cannot start its content processes). A browser has neither processes nor files, so
+`internal/testutil` sends its ffmpeg and ffprobe calls and its temporary
+files to the wrapper instead (a random path token, 127.0.0.1 only, the
+tools named in the wrapper's list, files below its own temporary
+directory). That way the root package's conformance tests are the same
+ones as on every other platform, with ffmpeg on the host as the oracle.
+`./internal/webcodecs` adds the browser-only cases: software codecs and
+recovery from a decoder error. Under Node.js the same tests build and skip.
+
 ```sh
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 ./scripts/crossbuild.sh       # CGO_ENABLED=0 builds for every target
 ./scripts/mobilebuild.sh      # cgo builds for ios/arm64 (device, Simulator), the Android backend type-check and, with the NDK, android
 SOFTWARE=1 ./scripts/android_device_check.sh   # Android: the CLI on the attached emulator or device over adb, against ffmpeg
+./scripts/browser_test.sh . ./internal/webcodecs   # browser: the conformance tests in headless Chrome through WebCodecs, against ffmpeg
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)

@@ -65,6 +65,14 @@ const (
 	// BGRA is RGBA with B first in memory (the native 32-bit format of
 	// Metal, Direct3D and Core Video).
 	BGRA
+	// Native leaves a decoded picture where the decoder put it instead of
+	// copying it into CPU memory: the frame has no Planes and Frame.Native
+	// returns the backend's own object, which Release gives back. In a
+	// browser that object is the WebCodecs VideoFrame (a syscall/js
+	// Value), which WebGL, WebGPU and canvases take as an image source
+	// without the pixels leaving the GPU. Only decoders offer it, and of
+	// the backends only WebCodecs so far; the others report ErrUnsupported.
+	Native
 )
 
 func (p PixelFormat) String() string {
@@ -75,12 +83,14 @@ func (p PixelFormat) String() string {
 		return "rgba"
 	case BGRA:
 		return "bgra"
+	case Native:
+		return "native"
 	}
 	return fmt.Sprintf("pixelformat(%d)", uint8(p))
 }
 
 // PlaneCount returns the number of planes of a frame in format p, or 0 for
-// an unknown format.
+// an unknown format and for Native, whose pixels are not in CPU memory.
 func (p PixelFormat) PlaneCount() int {
 	switch p {
 	case NV12:
@@ -266,11 +276,13 @@ func (f *Frame) Release() {
 	r()
 	f.Planes = nil
 	f.Strides = nil
+	f.native = nil
 }
 
-// Native returns a backend-specific handle for the frame, or nil. No backend
-// exposes a handle yet; the accessor is reserved so that zero-copy paths can
-// be added without changing the API.
+// Native returns the backend's own object for a frame in the Native
+// format, and nil for every other frame: in a browser the WebCodecs
+// VideoFrame as a syscall/js Value. The object belongs to the frame; it is
+// gone after Release.
 func (f *Frame) Native() any { return f.native }
 
 // SetRelease installs the release callback. Backends call it when they

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -21,13 +20,13 @@ func GenerateH264(t testing.TB, width, height, frames int, extra ...string) stri
 	if !HasEncoder(t, "libx264") {
 		t.Skip("ffmpeg has no libx264 encoder")
 	}
-	path := filepath.Join(t.TempDir(), "stream.h264")
+	path := filepath.Join(TempDir(t), "stream.h264")
 	args := []string{"-hide_banner", "-loglevel", "error", "-y",
 		"-f", "lavfi", "-i", fmt.Sprintf("testsrc2=size=%dx%d:rate=30", width, height),
 		"-frames:v", fmt.Sprint(frames), "-pix_fmt", "yuv420p", "-c:v", "libx264"}
 	args = append(args, extra...)
 	args = append(args, "-f", "h264", path)
-	cmd := exec.Command(ffmpeg, args...)
+	cmd := Command(ffmpeg, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -64,7 +63,7 @@ var (
 func TraceHeaders(t testing.TB, path string, format string) []TraceUnit {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-f", format, "-i", path, "-c", "copy", "-bsf:v", "trace_headers", "-f", "null", "-")
+	cmd := Command(ffmpeg, "-hide_banner", "-f", format, "-i", path, "-c", "copy", "-bsf:v", "trace_headers", "-f", "null", "-")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ffmpeg trace_headers failed: %v\n%s", err, tail(out))
@@ -148,7 +147,7 @@ var (
 func DPBTrace(t testing.TB, path string) []RefList {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "debug", "-threads", "1", "-debug", "mmco", "-f", "h264", "-i", path, "-f", "null", "-")
+	cmd := Command(ffmpeg, "-hide_banner", "-loglevel", "debug", "-threads", "1", "-debug", "mmco", "-f", "h264", "-i", path, "-f", "null", "-")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ffmpeg -debug mmco failed: %v\n%s", err, tail(out))
@@ -230,7 +229,7 @@ var slicePOCRe = regexp.MustCompile(`^\[h264 @ ([^\]]+)\] slice:\d+ .* frame:(\d
 func POCTrace(t testing.TB, path string) []SlicePOC {
 	t.Helper()
 	ffmpeg := RequireFFmpeg(t)
-	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "debug", "-threads", "1", "-debug", "pict", "-f", "h264", "-i", path, "-f", "null", "-")
+	cmd := Command(ffmpeg, "-hide_banner", "-loglevel", "debug", "-threads", "1", "-debug", "pict", "-f", "h264", "-i", path, "-f", "null", "-")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ffmpeg -debug pict failed: %v\n%s", err, tail(out))

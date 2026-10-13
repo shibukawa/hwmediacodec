@@ -157,7 +157,7 @@ verification:
     - path: backends_android.go
       input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
     - path: backends_other.go
-      input_hash: 924ac9e85cc74927c2e82224c57644f8d084113e85076a2839298e1e8222dd5e
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   aar-build:
     state: passed
     method: static
@@ -249,7 +249,7 @@ verification:
     - path: scripts/mobilebuild.sh
       input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
     - path: scripts/crossbuild.sh
-      input_hash: 4ac382f6294357b8c3dfdfb1e6ebc33a2ae86c1611b4f0c70aec8111a7656acc
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
 relations:
 - relation: implements
   to: requirement:hwmediacodec

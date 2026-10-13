@@ -1,0 +1,486 @@
+id: milestone:browser-webcodecs
+type: milestone
+title: Browsers through the WebCodecs backend (GOOS=js GOARCH=wasm)
+summary: 'Requested 2026-10-12 ("Goをブラウザで動かす場合にも使えるようにしたい"; the author chose Go + wasm
+  as the first target because that is what Ebitengine supports, and told the agent to go ahead with the
+  recommended approach). A new backend internal/webcodecs on the WebCodecs API through syscall/js: H.264,
+  HEVC and AV1 decoding and H.264 and HEVC encoding, frames in CPU memory through VideoFrame.copyTo, RGBA
+  and BGRA converted by the browser, hardware only unless WithSoftwareFallback. Registered by backends_js.go.
+  Verified in headless Chrome on an Apple M3 with the existing conformance tests, which run in the browser
+  through a new go test wrapper (internal/browserexec) that lends them the host''s ffmpeg; examples/player
+  and examples/texture play the bundled clip in the browser.'
+lifecycle: active
+authority: authored
+aliases:
+- browser support
+- ブラウザ対応
+- WebCodecs backend
+- GOOS=js
+- Go + wasm
+- wasm
+scope:
+  platform: js
+  milestone: browser-webcodecs
+constraints:
+- 'Target chosen by the author: GOOS=js GOARCH=wasm with the standard Go toolchain (Ebitengine''s web
+  target). GopherJS, TinyGo and the WASI targets were discussed and left out: GopherJS trails the Go
+  release the module needs (not confirmed which release it reaches), TinyGo''s -target wasm shares GOOS=js
+  and syscall/js and may work untested, WASI has no way to the page''s API.'
+- No JavaScript source and no eval - everything goes through syscall/js, so a page's Content-Security-Policy
+  needs nothing beyond what running WebAssembly needs.
+- Callbacks never block and never let a JavaScript exception escape (both would end the program); methods
+  wait on a one-slot channel the callbacks signal, bounded by the context and a 30 s stall timeout.
+- Decoded VideoFrames are copied out and closed as soon as they arrive, not when Receive is called, so
+  that a hardware decoder's small picture pool is never held by the Go side.
+- H.264 and HEVC frames go through the Go reorder layer with a private timestamp per chunk; the result
+  does not depend on the engine's own ordering or on the caller's timestamps.
+- The conformance tests are the root package's own, unchanged in what they assert; internal/testutil reaches
+  ffmpeg and files through one seam (host.go) that is os/exec natively and HTTP to the wrapper in the
+  browser.
+non_goals:
+- Zero-copy display in ebitenvideo - tried and taken out; it needs a sanctioned way into Ebitengine's textures
+  (facts.zero_copy).
+- AV1 encoding (a separate slice on every backend).
+- GopherJS, TinyGo and WASI support.
+- Running Chrome on other operating systems from this session.
+- Working around Firefox's own gaps (no YUV frames, colour description ignored and not written, no constant
+  quality); they are recorded, and the two colour ones have a possible fix in facts.next_candidates.
+acceptance:
+  builds-everywhere:
+    text: GOOS=js GOARCH=wasm go build and go vet pass for the core module, the other targets still build
+      (scripts/crossbuild.sh, which now includes js/wasm), and under Node.js the tests build, Probe is
+      empty and the ffmpeg-based tests skip.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - crossbuild
+    - node-run
+  chrome-conformance:
+    text: In headless Chrome with hardware codecs, scripts/browser_test.sh passes the root package's tests -
+      H.264, HEVC and AV1 frames bit-exact with ffmpeg in display order, RGBA/BGRA against ffmpeg's conversion,
+      H.264 and HEVC encoding with every encoder control, the pipelines.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - chrome-conformance
+  software-and-recovery:
+    text: The browser's software decoders (planar frames) are bit-exact with ffmpeg, its software H.264
+      encoder's output decodes, and a Decoder whose VideoDecoder the browser closed after bad data decodes
+      the next stream.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - chrome-software
+  ebitengine-in-browser:
+    text: examples/player built for js/wasm plays the bundled clip in a browser at the display rate without
+      skipped frames, and seeking works.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - player-in-browser
+  clip-plays-without-hevc:
+    text: A browser without an HEVC decoder (Firefox) gets the bundled clip in H.264, chosen without any setting,
+      and automated tests cover the choice and both encodings.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - bundled-clip-fallback
+  no-hardware-is-reported:
+    text: With accelerated video switched off in Chrome, Probe lists nothing and NewDecoder reports ErrUnsupported
+      instead of using the software decoder.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - chrome-no-acceleration
+  firefox:
+    text: The same script passes (or skips for stated reasons) in Firefox.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - firefox-macos
+  safari:
+    text: The same script passes (or skips for stated reasons) in Safari.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - safari-macos
+  other-browsers:
+    text: The same script passes (or skips for stated reasons) in Chrome on Windows, Linux and Android.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - other-browsers
+  existing-suites:
+    text: go test ./... passes natively on the Mac after internal/testutil moved to the host seam.
+    scope:
+      milestone: browser-webcodecs
+    verified_by:
+    - existing-suites
+verification:
+  crossbuild:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+    test: 'scripts/crossbuild.sh ; GOOS=js GOARCH=wasm go vet ./... ; (cd examples && GOOS=js GOARCH=wasm
+      go build ./player ./texture)'
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-12, go1.27.0 darwin/arm64; the examples module as a whole does not build for js because
+        pion (net/webrtc) has another API there, which predates this slice
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+    - path: backends_js.go
+      input_hash: 88895814cb9e08abd68acd7212d2f22a51e293d5924f43639b201019fa8d0623
+    - path: backends_other.go
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
+  node-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+    test: PATH=$PATH:$(go env GOROOT)/lib/wasm GOOS=js GOARCH=wasm go test . ./internal/webcodecs/ ./encoding/...
+      ./internal/reorder/ ./internal/pixconv/
+    evidence:
+      path: internal/testutil/host_js.go
+      note: 2026-10-12, Node.js 26.8.1 - no WebCodecs, Probe empty, hardware and ffmpeg tests skip, the pure-Go
+        tests pass
+    basis:
+    - path: internal/testutil/host_js.go
+      input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
+    - path: probe_test.go
+      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
+  chrome-conformance:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh . (headless Google Chrome on macOS 27, Apple M3)
+    evidence:
+      path: scripts/browser_test.sh
+      note: '2026-10-12: ok in about 20 s. Findings on the way - Chrome emits display order by itself (TestDecodeOrderOption
+        skips for webcodecs); untagged AV1 was converted to RGB with BT.709 until the configuration carried
+        colorSpace (24.9 dB to 86 dB and more); 10-bit hardware frames have format null and need the canvas
+        path. Measured: RGBA 86 to 94 dB 8x8-block PSNR against ffmpeg, encode about 50 dB luma PSNR.'
+    basis:
+    - path: scripts/browser_test.sh
+      input_hash: 801c7e184214edee774b0b5e3553bfd0069f52d4b71c5485abe7fa0f987c6e25
+    - path: internal/browserexec/main.go
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+    - path: internal/testutil/host.go
+      input_hash: 27be1d9f3c40f579bcf45ac6b6338a7118deb7bccbfe6322ac7d5e07d61a1a5f
+    - path: internal/testutil/host_js.go
+      input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: internal/webcodecs/backend.go
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
+    - path: decode_test.go
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: convert_test.go
+      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
+  chrome-software:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh ./internal/webcodecs
+    evidence:
+      path: internal/webcodecs/browser_js_test.go
+      note: 2026-10-12 - software H.264 and AV1 decode bit-exact, software H.264 encode 47.4 dB, recovery
+        after "EncodingError - Error during flush" reported as ErrInvalidData
+    basis:
+    - path: internal/webcodecs/browser_js_test.go
+      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/pixels.go
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+  chrome-no-acceleration:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: HWMEDIACODEC_BROWSER_ARGS="--disable-accelerated-video-decode --disable-accelerated-video-encode"
+      scripts/browser_test.sh -v -run 'TestProbe|TestDecodeH264MatchesReference' .
+    evidence:
+      path: internal/webcodecs/backend.go
+      note: 2026-10-12 - Probe lists nothing and the hardware test skips with "no hardware h264 decode"
+    basis:
+    - path: internal/webcodecs/backend.go
+      input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
+  player-in-browser:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: examples/player and examples/texture built with GOOS=js GOARCH=wasm, served from localhost and
+      opened in the Claude desktop app's built-in (Chromium) browser; go run github.com/hajimehoshi/wasmserve@latest
+      ./player serves the same build
+    evidence:
+      path: examples/player/main.go
+      note: '2026-10-12: the status line read "waterfall-720p-hevc.mp4 720x1280 ... 60 fps skipped 0" at
+        3.15 s and 6.16 s; Home and the right arrow key seeked; texture showed the clip on its rotating quad.
+        No console messages.'
+    basis:
+    - path: examples/player/main.go
+      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+    - path: playback/source.go
+      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+  firefox-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox scripts/browser_test.sh -v
+      . ./internal/webcodecs (Firefox 146.0.1 on the M3, started by the author and then by the agent)
+    evidence:
+      path: internal/browserexec/main.go
+      note: '2026-10-13: 4 tests fail (TestDecodeRGBA h264, TestEncodeRGBAInput, TestEncodeConvertedRGB, TestEncodeQuality)
+        for reasons inside Firefox, the NV12 decode tests skip (BGRX frames), the rest passes; details in backend:webcodecs
+        facts.firefox_macos_2026-10-13. The run led to three changes - Firefox through "open" on macOS, RGB-only
+        decoder output reported as ErrUnsupported, the encoder confirming configure and falling back from realtime.'
+    basis:
+    - path: internal/browserexec/main.go
+      input_hash: 91fdde4992e2580229fb9b0965525c7fedf7fe3a4e8f187ffdc771b5ffa955b0
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: decode_test.go
+      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+  safari-macos:
+    state: failed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh -p 1 -v . ./internal/webcodecs
+      (Safari 27.0.1 on the M3; the author said Safari was running)
+    evidence:
+      path: internal/webcodecs/encoder.go
+      note: '2026-10-13: the bit-exact NV12 comparisons, sample-wise HEVC encode checks, RGB-input colour checks
+        and the CBR accuracy check fail for reasons inside Safari; the rest passes; details in backend:webcodecs
+        facts.safari_macos_2026-10-13. The run led to the latency-mode trial, narrowRange and the explicit video
+        range on input frames. The first runs stalled for minutes because the tab was in the background.'
+    basis:
+    - path: internal/webcodecs/encoder.go
+      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+    - path: internal/webcodecs/decoder.go
+      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+    - path: internal/webcodecs/pixels.go
+      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+  bundled-clip-fallback:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+    test: 'go test ./assets ./internal/bundled ./player ./texture (examples module, natively) ; scripts/browser_test.sh
+      -v ./examples/assets ./examples/internal/bundled in Chrome and with HWMEDIACODEC_BROWSER set to Firefox'
+    evidence:
+      path: examples/internal/bundled/bundled_test.go
+      note: '2026-10-13: Chrome decodes both encodings and Open takes the HEVC one; Firefox 157 skips the HEVC
+        one, decodes the H.264 one (30 frames RGBA in display order) and TestOpenFallsBackToH264 shows a frame;
+        TestChoose covers the order of attempts and the error returned. Not run in Safari.'
+    basis:
+    - path: examples/assets/assets.go
+      input_hash: 3e244ca1acab9f5c2a46d9dfea0f581277fa7be76eccd60ec7702804e0dd42c4
+    - path: examples/assets/assets_test.go
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
+    - path: examples/internal/bundled/bundled.go
+      input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
+    - path: examples/internal/bundled/bundled_test.go
+      input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
+  player-in-game-loop:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh -v -run TestPlayerInGameLoop ./ebitenvideo (a real ebiten.RunGame in the page)
+    evidence:
+      path: ebitenvideo/player_js_test.go
+      note: 2026-10-13, Chrome - after 40 ticks with a picture the image read back equals a frame of the stream as
+        decoded on its own
+    basis:
+    - path: ebitenvideo/player_js_test.go
+      input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+  other-browsers:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh . ./internal/webcodecs in Chrome on Windows, Linux and Android
+    evidence:
+      path: internal/browserexec/main.go
+      note: no other machine in this session
+  existing-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+    test: go vet ./... ; go test -count=1 ./... (core module, Apple M3)
+    evidence:
+      path: internal/testutil/host_native.go
+      note: 2026-10-12, after the testutil helpers and the root tests moved to testutil.Command / TempDir /
+        WriteFile
+    basis:
+    - path: internal/testutil/host.go
+      input_hash: 27be1d9f3c40f579bcf45ac6b6338a7118deb7bccbfe6322ac7d5e07d61a1a5f
+    - path: internal/testutil/host_native.go
+      input_hash: 746a3197c12e1bf137a92e48734b62d85460eb89ae5667e23005e56eb942ce9b
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: introduces
+  to: backend:webcodecs
+- relation: follows
+  to: milestone:android-mediacodec
+- relation: constrained_by
+  to: decision:ffi-strategy
+- relation: ranked_by
+  to: policy:support-tiers
+history:
+  zero-copy-removed-2026-10-13:
+    summary: 'After asking how the other backends manage frame memory (CPU copies in a per-decoder pool, no GPU hand-over
+      anywhere), the author decided to drop the direct upload from ebitenvideo. The player takes RGBA frames again
+      on every platform; the Native frame format stays in the core, and a game-loop test in the browser stays in
+      ebitenvideo.'
+  zero-copy-2026-10-13:
+    summary: 'The author asked for zero-copy display. The core gained the Native frame format (the decoder''s VideoFrame
+      behind Frame.Native) and ebitenvideo uploads those frames straight into the texture of its image in Chrome
+      and Safari, found from outside Ebitengine and verified by reading back; Player.ZeroCopy tells. Measured,
+      it pays from 1080p up in Chrome and in Safari, not in Firefox, which keeps RGBA frames; where the texture
+      cannot be found the player restarts the stream with RGBA frames.'
+  safari-nv12-2026-10-13:
+    summary: 'The author asked for the Safari NV12 difference to be dealt with and, where the output is in another
+      form, for tests against a fixture in that form. The form was measured (full range plus a quarter-line chroma
+      shift), the decoder now undoes both, and the Safari run has a fixture test in WebKit''s form that every frame
+      meets to within one step; the checksum tests skip there instead of failing.'
+  h264-clip-2026-10-13:
+    summary: 'The author chose the H.264 copy of the bundled clip (over a <video>-element player, whose drawbacks
+      were discussed: a player rather than a decoder, no frame-exact Send/Receive, its own clock) and asked for
+      automated tests. examples/assets now embeds waterfall-720p-h264.mp4 (High@3.1, 2 Mbit/s, 2.5 MB, same 293
+      frames and audio; the ffmpeg command is in assets.go) and lists both in assets.Clips; examples/internal/bundled
+      opens the first one that decodes (HEVC, then H.264; in a browser a second round with software decoders)
+      and is what player and texture use. The codec is never given by the caller for MP4 - the demuxer reads
+      it from the sample entry (avc1/avc3, hvc1/hev1, av01); only raw Annex-B streams need it stated.'
+  survey-2026-10-13:
+    summary: 'The author asked whether Safari could simply start in realtime mode, doubted that Firefox lacks HEVC,
+      and asked for a throwaway survey of codecs and colour information without touching product code. The survey
+      (backend:webcodecs facts.survey_2026-10-13) showed Firefox''s WebCodecs HEVC behind a preference, the hardware
+      hint meaning something in Chrome only, and how each browser treats colour; the encoder now prefers realtime
+      for H.264 on WebKit while the trial keeps deciding.'
+  safari-run-2026-10-13:
+    summary: 'The author pasted Firefox''s console (the HEVC clip cannot play there and the player exited silently)
+      and said Safari was running. examples/player and examples/texture now fall back to the browser''s software
+      decoder on js and show a fatal error in the page (examples/internal/fatal). The Safari run showed
+      full-range frames, an H.264 encoder that only works in realtime mode and full-range NV12 input, each
+      handled in the backend; diagnostic tests (TestSupportMatrix, TestEncoderBehaviour, TestDecoderBehaviour,
+      HWMEDIACODEC_TEST_DIAGNOSE=1) log what a browser does.'
+  firefox-run-2026-10-13:
+    summary: The author ran the script with Firefox, which hung; a Firefox started by its binary path cannot
+      start content processes on macOS, so the wrapper now starts it through "open". The run that followed
+      showed Firefox's own limits (RGB frames, colour description, quality mode) and led to ErrUnsupported
+      for NV12 there and to the encoder confirming its configuration.
+  implemented-2026-10-12:
+    summary: Backend, registration, browser test wrapper, README browser notes and knowledge written; verified
+      in headless Chrome on an Apple M3 and with the Ebitengine player in a browser; other browsers and
+      operating systems not run.
+facts:
+  options_discussed:
+    gopherjs: Go to JavaScript; syscall/js exists, but it trails the Go releases (a search on 2026-10-12
+      found v1.21.0 from June 2026 without the Go version it supports; the module needs go 1.27); not
+      targeted, not tried
+    go_js_wasm: the standard toolchain's browser target and Ebitengine's; chosen
+    go_wasip1: no syscall/js; reaching WebCodecs would need a hand-written JavaScript host through go:wasmimport;
+      not targeted
+    tinygo: -target wasm is GOOS=js with a syscall/js of its own (the option missing from the author's
+      list); wasip1/wasip2 as for Go; untested, a later check
+  zero_copy:
+    state: 'tried and taken out on 2026-10-13 (commit 543e25b has the implementation, the one after it removes it):
+      the core keeps the Native frame format, ebitenvideo is back to RGBA frames and WritePixels in the browser too'
+    why_removed: the author's decision after the measurements and the memory model of the other backends were on
+      the table - the upload had to find Ebitengine's texture from outside, it paid only from 1080p up in Chrome,
+      it was slower in Firefox, and no native backend can do the same. Revisit when Ebitengine offers a way to
+      write an image source into an image's texture.
+    core: hwmediacodec.Native output format; see backend:webcodecs facts.native_frames_2026-10-13
+    ebitengine_internals: 'Ebitengine 2.10.4 on js creates a WebGL2 context on its canvas, copies the context''s
+      functions with bind when it starts, allocates one texture per unmanaged image with texImage2D(TEXTURE_2D,
+      0, RGBA, w, h, 0, RGBA, UNSIGNED_BYTE, null) at the next power of two (16 at least), no padding, and writes
+      pixels with texSubImage2D at flush time. It exposes none of it.'
+    how_it_worked: 'an init function wrapped texImage2D on WebGL2RenderingContext.prototype (before Ebitengine binds
+      it) and recorded allocations; the player wrote its first frames with WritePixels (read back through an OffscreenCanvas),
+      then took the allocation of the right size that read those pixels back (temporary framebuffer + readPixels),
+      and from then on called texSubImage2D(TEXTURE_2D, 0, 0, 0, RGBA, UNSIGNED_BYTE, videoFrame) with the previous
+      texture binding restored. When the texture was not found it reopened the source with RGBA frames at the same
+      position. It worked in Chrome and Safari (the image read back was identical to the RGBA path in Chrome); Firefox
+      was left on RGBA frames.'
+    measurements_m3: 'time per frame on the page''s one thread, inside ebiten.RunGame (Chrome with a window): RGBA
+      path = copy into Go memory + WritePixels + texSubImage2D at flush = 0.9 ms at 720p, 1.7 ms at 1080p, 9.4 ms
+      at 4K; direct upload 1.1-1.7 ms at every size; a VideoFrame read back through a canvas 5.6-9 ms at 720p, 12
+      ms at 1080p, 50 ms at 4K. Firefox 720p - RGBA 1.9 ms, direct 4.5 ms. Safari 720p - RGBA 1.3-1.7 ms plus the
+      Go YUV-to-RGB conversion in the decoder, direct 3.8-5.4 ms. The RGBA path additionally makes the browser read
+      every frame back from the GPU, off the page''s thread.'
+    colour_caveat: with a direct upload the browser converts the frame; for untagged SD streams Safari and Firefox
+      take BT.709 where the RGBA path follows the library's rule (BT.601).
+  test_harness:
+    wrapper: internal/browserexec, built as go_js_wasm_exec and put first on PATH by scripts/browser_test.sh,
+      so that go test finds it without -exec
+    page: loads wasm_exec.js from GOROOT, starts the test binary with the go test flags (minus those that
+      write files), posts its output and exit code back
+    host_access: 'endpoints behind a random path token on 127.0.0.1: exec (ffmpeg, ffprobe, x265, aomenc
+      only, working directory inside the wrapper''s temporary directory), lookpath, mktemp, file (paths
+      below that directory only)'
+    browsers: Chrome, Chromium or Edge found in the usual places; HWMEDIACODEC_BROWSER names another (Firefox
+      gets Firefox flags, anything else just the URL); HWMEDIACODEC_BROWSER_HEADED, _ARGS, _LOG
+    lifetime: the wrapper stops the browser on exit and on SIGINT/SIGTERM/SIGQUIT (go test's timeout)
+  findings_2026-10-12:
+  - Headless Chrome on macOS has the hardware codecs (VideoToolbox behind WebCodecs), including the M3's
+    AV1 decoder; nothing extra is needed to get them.
+  - decodeQueueSize is the saturation signal - it stays 0 while the codec takes chunks at once - so blocking
+    while it is above zero is both the back-pressure and the moment the event loop delivers frames.
+  - VideoFrame.copyTo({format RGBA}) on Chrome is exact enough to score 86 dB and more against ffmpeg once
+    the matrix is right.
+  - A floating-point test value that rounded differently on arm64 (fused multiply-add) and wasm was replaced
+    (quantizer(0.9)).
+  next_candidates:
+  - Run scripts/browser_test.sh on the author's Windows machine.
+  - AV1 encoding through WebCodecs - all three browsers really encode it (software in Chrome and Firefox), so the
+    browser backend could be the first with an AV1 encoder when that slice comes.
+  - Firefox colours - tag the SPS/VPS VUI ourselves on encoder output, and tag untagged H.264 input for RGB
+    output, with the header writers of internal/h264 and internal/hevc.
+  - Ask Ebitengine for an API to write a browser image source (a VideoFrame) into an image's texture; with it
+    the direct upload measured in facts.zero_copy can come back without reaching into Ebitengine.
+  - TinyGo -target wasm build check.
