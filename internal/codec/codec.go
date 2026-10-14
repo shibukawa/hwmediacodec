@@ -10,13 +10,19 @@ import (
 	"sync"
 )
 
-// Codec identifies a video coding format.
+// Codec identifies a coding format: the video formats H264, HEVC and AV1,
+// and the audio formats AAC and Opus.
 type Codec uint8
 
 const (
 	H264 Codec = iota + 1
 	HEVC
 	AV1
+	// AAC is MPEG-4 AAC. A Packet holds one raw access unit (no ADTS
+	// header); see AudioFormat.Config.
+	AAC
+	// Opus is the Opus codec (RFC 6716). A Packet holds one Opus packet.
+	Opus
 )
 
 func (c Codec) String() string {
@@ -27,9 +33,17 @@ func (c Codec) String() string {
 		return "hevc"
 	case AV1:
 		return "av1"
+	case AAC:
+		return "aac"
+	case Opus:
+		return "opus"
 	}
 	return fmt.Sprintf("codec(%d)", uint8(c))
 }
+
+// IsAudio reports whether c is an audio format, which NewAudioDecoder and
+// NewAudioEncoder serve instead of NewDecoder and NewEncoder.
+func (c Codec) IsAudio() bool { return c == AAC || c == Opus }
 
 // Direction selects decoding or encoding.
 type Direction uint8
@@ -189,21 +203,25 @@ type Capability struct {
 	Direction Direction
 	// Hardware is true when the backend reports a hardware engine for this
 	// capability. Software paths are only listed when a backend exposes them.
+	// It is false for the audio codecs, which are the operating system's
+	// software codecs on every platform.
 	Hardware bool
 	// MaxWidth and MaxHeight are 0 when the backend does not report limits.
 	MaxWidth  int
 	MaxHeight int
 }
 
-// Packet is one compressed access unit (one picture). Decoders consume
-// Packets and encoders produce them.
+// Packet is one compressed access unit (one picture, or one frame of audio
+// samples). Decoders consume Packets and encoders produce them.
 //
 // For H.264 and HEVC, Data holds a complete access unit in Annex-B
 // byte-stream form (start codes). Parameter sets (SPS/PPS/VPS) may be
 // included in-band; encoders put them in front of every keyframe. For AV1,
 // Data holds one temporal unit in the low-overhead OBU format (the content
 // of an IVF frame or an ISOBMFF sample), with or without temporal delimiter
-// OBUs; the sequence header travels in-band the same way.
+// OBUs; the sequence header travels in-band the same way. For AAC, Data is
+// one raw access unit and for Opus one Opus packet; neither carries its
+// configuration in-band (see AudioFormat).
 type Packet struct {
 	Data []byte
 	// PTS is the presentation timestamp in TimeScale units (see the
@@ -216,8 +234,14 @@ type Packet struct {
 	DTS int64
 	// Keyframe reports whether the access unit is a random access point. For
 	// decoder input it is a hint only; decoders inspect the bitstream
-	// themselves. Encoders set it authoritatively.
+	// themselves. Encoders set it authoritatively. Every audio packet is
+	// one.
 	Keyframe bool
+	// Duration is the presentation duration in TimeScale units, or 0 when
+	// it is not known. Audio encoders set it (the last packet of a stream
+	// is shorter than the others by the padding it carries); the video
+	// encoders leave it 0.
+	Duration int64
 
 	order Order
 }
@@ -464,10 +488,13 @@ type EncoderOption interface {
 	ApplyEncoder(*EncoderConfig)
 }
 
-// Option is accepted by both NewDecoder and NewEncoder.
+// Option is accepted by every constructor: NewDecoder, NewEncoder,
+// NewAudioDecoder and NewAudioEncoder.
 type Option interface {
 	DecoderOption
 	EncoderOption
+	AudioDecoderOption
+	AudioEncoderOption
 }
 
 // Backend is implemented by each platform package.

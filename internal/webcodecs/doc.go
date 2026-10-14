@@ -67,6 +67,13 @@
 // hand over RGB (Firefox on macOS returns BGRX) gets ErrUnsupported from
 // Receive.
 //
+// # Audio
+//
+// AAC and Opus go through AudioDecoder and AudioEncoder the same way, with
+// the samples copied out of AudioData. What WebCodecs leaves unsaid about
+// them (how output is stamped, the delay of an encoder) and how the
+// backend settles it is described in audio.go.
+//
 // # Browsers
 //
 // Chrome on macOS passes the conformance tests. Firefox on macOS runs

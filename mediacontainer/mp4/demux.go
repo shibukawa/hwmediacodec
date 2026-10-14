@@ -1,9 +1,10 @@
 // Package mp4 reads and writes MP4 files around hwmediacodec, which
-// itself only handles Annex-B elementary streams. It is deliberately small:
+// itself only handles elementary streams. It is deliberately small:
 // progressive (non-fragmented) MP4 and MOV files with one H.264, HEVC or AV1
-// video track plus any number of other tracks that are copied through
-// untouched, and a progressive writer whose video samples come straight from
-// hwmediacodec packets. The ISOBMFF plumbing is done by
+// video track, one AAC or Opus audio track and any number of other tracks
+// that are copied through untouched, and a progressive writer whose video
+// and audio samples come straight from hwmediacodec packets. The ISOBMFF
+// plumbing is done by
 // github.com/Eyevinn/mp4ff; this package only maps between its sample tables
 // and the codec library's packets and frames.
 package mp4
@@ -81,6 +82,7 @@ type Demuxer struct {
 	closer io.Closer
 	file   *mp4ff.File
 	video  *VideoTrack
+	audio  *AudioTrack
 	others []*Track
 }
 
@@ -128,6 +130,9 @@ func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 				continue
 			}
 		}
+		if t.Handler == "soun" && d.audio == nil {
+			d.audio = d.newAudioTrack(t)
+		}
 		d.others = append(d.others, t)
 	}
 	return d, nil
@@ -144,6 +149,11 @@ func (d *Demuxer) Close() error {
 // Video returns the decodable video track, or nil when the file has none
 // that hwmediacodec understands.
 func (d *Demuxer) Video() *VideoTrack { return d.video }
+
+// Audio returns the first audio track hwmediacodec can decode (AAC or
+// Opus), or nil when the file has none. The track is also one of Others,
+// for copying it through instead of decoding it.
+func (d *Demuxer) Audio() *AudioTrack { return d.audio }
 
 // Others returns every track that is not the video track, in file order.
 func (d *Demuxer) Others() []*Track { return d.others }

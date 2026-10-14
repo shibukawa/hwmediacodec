@@ -70,12 +70,18 @@ func (g *game) open() {
 		return
 	}
 	var parts []string
-	for _, c := range caps {
-		parts = append(parts, fmt.Sprintf("%s %s", c.Codec, c.Direction))
-	}
 	backend := "no hardware codec"
-	if len(caps) > 0 {
-		backend = caps[0].Backend + ": " + strings.Join(parts, ", ")
+	for _, c := range caps {
+		if c.Codec.IsAudio() {
+			continue // the summary is about the video engines
+		}
+		parts = append(parts, fmt.Sprintf("%s %s", c.Codec, c.Direction))
+		if len(parts) == 1 {
+			backend = c.Backend
+		}
+	}
+	if len(parts) > 0 {
+		backend += ": " + strings.Join(parts, ", ")
 	}
 	g.info = fmt.Sprintf("%s/%s  %s", runtime.GOOS, runtime.GOARCH, backend)
 

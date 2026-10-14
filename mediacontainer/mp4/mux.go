@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
@@ -44,6 +45,9 @@ type trackWriter struct {
 	chunkN    []uint32
 	build     func(stbl *mp4ff.StblBox) (*mp4ff.TrakBox, error)
 	edts      *mp4ff.EdtsBox // copied from a source track
+	// skip is the media time after the first presented sample at which
+	// the presentation really starts: the delay of an audio encoder.
+	skip int64
 }
 
 // Create creates the file at path.
@@ -225,10 +229,23 @@ func newTrak(t *trackWriter, hdlr *mp4ff.HdlrBox, mediaHeader mp4ff.Box, stsd *m
 // finish normalises the timing of a track and builds its sample table.
 // Decode times are shifted so that the first sample decodes at 0;
 // composition offsets stay PTS-DTS. The presentation start (the smallest
-// PTS) is returned so that an edit list can hide the decoder delay.
-func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presStart, presEnd int64, err error) {
+// PTS, plus the encoder delay of an audio track) is returned so that an
+// edit list can hide what lies before it, and origin is the time the
+// writer of the packets gave that moment, for lining the tracks up.
+func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presStart, presEnd, origin int64, err error) {
+	stbl, mediaDuration, presStart, presEnd, base, err := t.sampleTable()
+	presStart += t.skip
+	if presEnd < presStart {
+		presEnd = presStart
+	}
+	return stbl, mediaDuration, presStart, presEnd, base + presStart, err
+}
+
+// sampleTable is finish without the encoder delay; base is the decode time
+// of the first sample as written, which the table moves to 0.
+func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, presStart, presEnd, base int64, err error) {
 	if len(t.samples) == 0 {
-		return nil, 0, 0, 0, fmt.Errorf("mp4: track %d has no samples", t.id)
+		return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d has no samples", t.id)
 	}
 	n := len(t.samples)
 	// Some encoders (VideoToolbox with B-frames) number decode times from
@@ -245,7 +262,7 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 	for i := range t.samples {
 		t.samples[i].dts -= lag
 	}
-	base := t.samples[0].dts
+	base = t.samples[0].dts
 	// Durations: explicit when given (passthrough), otherwise the DTS gap to
 	// the next sample; the last sample repeats the previous duration.
 	for i := range t.samples {
@@ -257,7 +274,7 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 		case i+1 < n:
 			d := t.samples[i+1].dts - s.dts
 			if d <= 0 {
-				return nil, 0, 0, 0, fmt.Errorf("mp4: track %d: decode time does not increase at sample %d", t.id, i)
+				return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: decode time does not increase at sample %d", t.id, i)
 			}
 			s.dur = uint32(d)
 		case i > 0:
@@ -284,7 +301,7 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 		}
 		cto := s.pts - s.dts
 		if cto < 0 {
-			return nil, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d has PTS before DTS", t.id, i)
+			return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d has PTS before DTS", t.id, i)
 		}
 		if ctts == nil && cto != 0 {
 			ctts = &mp4ff.CttsBox{}
@@ -319,7 +336,7 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 		offsets := ctts.SampleOffset
 		ctts = &mp4ff.CttsBox{}
 		if err := ctts.AddSampleCountsAndOffset(counts, offsets); err != nil {
-			return nil, 0, 0, 0, err
+			return nil, 0, 0, 0, 0, err
 		}
 		stbl.AddChild(ctts)
 	}
@@ -332,7 +349,7 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 			continue
 		}
 		if err := stsc.AddEntry(uint32(i+1), cnt, 1); err != nil {
-			return nil, 0, 0, 0, err
+			return nil, 0, 0, 0, 0, err
 		}
 	}
 	stbl.AddChild(stsc)
@@ -346,7 +363,19 @@ func (t *trackWriter) finish() (stbl *mp4ff.StblBox, mediaDuration uint64, presS
 	} else {
 		stbl.AddChild(&mp4ff.Co64Box{ChunkOffset: t.chunkOff})
 	}
-	return stbl, mediaDuration, presStart, presEnd, nil
+	return stbl, mediaDuration, presStart, presEnd, base, nil
+}
+
+// timeBetween returns the time from the moment a (in units of 1/as second)
+// to the moment b (in units of 1/bs second) in units of 1/scale second,
+// rounded towards zero. The moments may be far from zero (timestamps taken
+// from a wall clock), so the products are not left to int64.
+func timeBetween(a int64, as uint32, b int64, bs uint32, scale int64) *big.Int {
+	x := new(big.Int).Mul(big.NewInt(b), big.NewInt(int64(as)))
+	y := new(big.Int).Mul(big.NewInt(a), big.NewInt(int64(bs)))
+	x.Sub(x, y)
+	x.Mul(x, big.NewInt(scale))
+	return x.Quo(x, new(big.Int).Mul(big.NewInt(int64(as)), big.NewInt(int64(bs))))
 }
 
 // Close finishes the mdat box, writes moov and closes the file when the
@@ -387,12 +416,18 @@ func (m *Muxer) writeMoov() error {
 	mvhd.Timescale = movieTimeScale
 	mvhd.NextTrackID = uint32(len(m.tracks) + 1)
 	moov.AddChild(mvhd)
-	var movieDuration uint64
+	type finished struct {
+		t                  *trackWriter
+		trak               *mp4ff.TrakBox
+		presStart, presEnd int64
+		origin             int64
+	}
+	var done []finished
 	for _, t := range m.tracks {
 		if len(t.samples) == 0 {
 			continue // a track that never received a sample is dropped
 		}
-		stbl, mediaDur, presStart, presEnd, err := t.finish()
+		stbl, mediaDur, presStart, presEnd, origin, err := t.finish()
 		if err != nil {
 			return err
 		}
@@ -401,22 +436,49 @@ func (m *Muxer) writeMoov() error {
 			return err
 		}
 		trak.Mdia.Mdhd.Duration = mediaDur
-		presDur := uint64(presEnd-presStart) * movieTimeScale / uint64(t.timeScale)
+		done = append(done, finished{t: t, trak: trak, presStart: presStart, presEnd: presEnd, origin: origin})
+	}
+	// The tracks written from packets share a clock: the one that starts
+	// first starts the movie and the others wait with an empty edit.
+	// Copied tracks bring the edit list of their source instead.
+	var first *finished
+	for i := range done {
+		f := &done[i]
+		if f.t.edts == nil && (first == nil || timeBetween(first.origin, first.t.timeScale, f.origin, f.t.timeScale, 1e9).Sign() < 0) {
+			first = f
+		}
+	}
+	var movieDuration uint64
+	for _, f := range done {
+		t, trak := f.t, f.trak
+		// Rounded up: a player that cuts the track at the end of the edit
+		// must not lose the last samples to the coarser movie time scale
+		// (the sample durations bound it exactly).
+		presDur := (uint64(f.presEnd-f.presStart)*movieTimeScale + uint64(t.timeScale) - 1) / uint64(t.timeScale)
 		trak.Tkhd.Duration = presDur
+		var wait uint64
+		if t.edts == nil {
+			wait = timeBetween(first.origin, first.t.timeScale, f.origin, t.timeScale, movieTimeScale).Uint64()
+		}
 		switch {
 		case t.edts != nil:
 			trak.AddChild(t.edts)
 			if len(t.edts.Elst) > 0 && len(t.edts.Elst[0].Entries) > 0 {
 				trak.Tkhd.Duration = t.edts.Elst[0].Entries[0].SegmentDuration
 			}
-		case presStart > 0:
-			// Hide the decoder delay of a B-frame stream: presentation
-			// starts at the first PTS, not at decode time 0.
+		case f.presStart > 0 || wait > 0:
+			// Hide what lies before the presentation: the decoder delay of
+			// a B-frame stream (it starts at the first PTS, not at decode
+			// time 0) and the delay of an audio encoder.
 			elst := &mp4ff.ElstBox{Version: 1}
-			elst.Entries = []mp4ff.ElstEntry{{SegmentDuration: presDur, MediaTime: presStart, MediaRateInteger: 1}}
+			if wait > 0 {
+				elst.Entries = append(elst.Entries, mp4ff.ElstEntry{SegmentDuration: wait, MediaTime: -1, MediaRateInteger: 1})
+			}
+			elst.Entries = append(elst.Entries, mp4ff.ElstEntry{SegmentDuration: presDur, MediaTime: f.presStart, MediaRateInteger: 1})
 			edts := &mp4ff.EdtsBox{}
 			edts.AddChild(elst)
 			trak.AddChild(edts)
+			trak.Tkhd.Duration = wait + presDur
 		}
 		if trak.Tkhd.Duration > movieDuration {
 			movieDuration = trak.Tkhd.Duration

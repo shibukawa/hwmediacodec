@@ -67,10 +67,11 @@ func TestProbe(t *testing.T) {
 			}
 		}
 	case runtime.GOOS == "js":
-		// What the browser reports a hardware codec for; nothing under
-		// Node.js, which has no WebCodecs.
+		// What the browser reports a hardware video codec for, and its
+		// audio codecs, which are software; nothing under Node.js, which
+		// has no WebCodecs.
 		for _, c := range caps {
-			if c.Backend != "webcodecs" || !c.Hardware {
+			if c.Backend != "webcodecs" || c.Hardware == c.Codec.IsAudio() {
 				t.Errorf("unexpected capability in the browser: %+v", c)
 			}
 		}

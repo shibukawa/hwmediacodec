@@ -13,4 +13,6 @@ func init() {
 	// and on a page that is not a secure context the backend reports no
 	// capability.
 	codec.Register(webcodecs.Backend{})
+	// Audio goes the same way: AudioDecoder and AudioEncoder.
+	codec.RegisterAudio(webcodecs.Backend{})
 }

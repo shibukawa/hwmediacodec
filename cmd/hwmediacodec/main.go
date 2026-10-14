@@ -72,7 +72,7 @@ func probe() error {
 		return err
 	}
 	if len(caps) == 0 {
-		fmt.Println("no hardware codec backend available on this machine")
+		fmt.Println("no codec backend available on this machine")
 		return nil
 	}
 	for _, c := range caps {

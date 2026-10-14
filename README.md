@@ -1,6 +1,7 @@
 # hwmediacodec
 
-Hardware video decoding and encoding from Go, without cgo.
+Hardware video decoding and encoding from Go, without cgo, and the
+operating system's audio codecs (AAC, Opus) through the same API.
 
 The library loads the operating system's codec engines at run time
 (VideoToolbox on macOS, NVDEC/NVENC, Intel VPL and VA-API on Linux, and
@@ -21,9 +22,10 @@ web) the engine is the WebCodecs API, reached through `syscall/js`; see
 
 | Import path | What it is |
 | --- | --- |
-| `github.com/shibukawa/hwmediacodec` | The codec API: `Probe`, `NewDecoder`, `NewEncoder`, packets and frames |
+| `github.com/shibukawa/hwmediacodec` | The codec API: `Probe`, `NewDecoder`, `NewEncoder`, `NewAudioDecoder`, `NewAudioEncoder`, packets and frames |
 | `.../encoding/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
-| `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets, fMP4 segmenter |
+| `.../encoding/adts` | AAC in ADTS framing (`.aac` files): reader and writer around the codec's packets |
+| `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets (video, AAC and Opus audio), fMP4 segmenter |
 | `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
 | `.../image/heif` | HEIC still images (HEVC), registered with the standard `image` package |
 | `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
@@ -57,6 +59,19 @@ AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
 decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
 has no AV1 encoder; on the other platforms the encoders exist in newer GPUs
 and are not wired up).
+
+Audio goes through the codecs the operating system or the browser ships,
+which run in software everywhere (`Probe` lists them with `Hardware`
+false):
+
+| Platform | Backend | Decode | Encode |
+| --- | --- | --- | --- |
+| macOS, iOS | AudioToolbox (`AudioConverter`) | AAC-LC from mono to 5.1, HE-AAC and HE-AAC v2 (with the band replication and parametric stereo, at the full sample rate); Opus mono and stereo, any packet length; 16-bit or float samples | AAC-LC and Opus (48 kHz), mono and stereo; bitrate with VBR or CBR; **compared with ffmpeg on macOS, round trips verified in the iOS Simulator** |
+| Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
+| Android, Windows, Linux | none yet | `ErrUnsupported` | `ErrUnsupported` |
+
+See [Audio](#audio) for the API and for what using the system's codecs
+means for AAC licensing.
 
 Decoded frames come back in display order: the slice headers are parsed in
 Go to derive picture order counts, and frames are held back no longer than
@@ -483,6 +498,53 @@ Foundation, VA-API or MediaCodec behind it.
   take BT.709 (measured on 320x240 streams), where the pixel formats
   follow the library's one rule. The Ebitengine player does not use
   these frames; see [Ebitengine](#ebitengine) for why.
+- **Audio** goes through `AudioDecoder` and `AudioEncoder`, with the
+  same API and the same timestamps as on the other platforms. WebCodecs
+  leaves a few things unsaid that the backend settles itself:
+  - A decoder stamps its output on its own (the first chunk's timestamp
+    plus the samples so far), so frames are matched to packets by order.
+    Every packet still yields one frame with its PTS and all its samples.
+    An Opus decoder that is given the identification header drops the
+    pre-skip itself, so the header is kept from it.
+  - An encoder's chunks are stamped from 0, with no word about the
+    samples the encoder starts early by. `NewAudioEncoder` therefore runs
+    a trial the first time a configuration is asked for: a short signal is
+    encoded, an Opus encoder's delay is read from the identification
+    header it reports, and an AAC encoder's is measured by decoding the
+    trial in the same page and looking for the signal (2112 samples in
+    Chrome and Safari on macOS, the figure of AudioToolbox). The trial
+    takes some tens of milliseconds and its result is kept for the page.
+  - The trial also shows whether the encoder works: Chrome's AAC encoder
+    on macOS says yes to 64 kbit/s stereo at 48 kHz in `isConfigSupported`
+    and then fails on the first packets, which the backend reports as
+    `ErrUnsupported` from `NewAudioEncoder` (80 kbit/s and above work).
+  - A bitrate the browser's encoder does not offer is not refused: Chrome
+    encodes at its default instead (32 kbit/s asked, 138 kbit/s made), and
+    nothing in the API tells. Chrome's AAC encoder gives the same packets
+    for VBR and CBR.
+  - **Safari** (27 on macOS): its AAC encoder ignores the bitrate in its
+    variable mode, so a bitrate is passed with the constant mode there,
+    which holds it on average. It replaces the first 1024 samples of
+    every signal with silence; the trial notices, and that much silence
+    is sent ahead of the signal (the delay it reports is 3136, not 2112).
+    It hands out the stream description as a whole ES_Descriptor, from
+    which the AudioSpecificConfig is taken. Its decoder returns AAC with
+    more than two channels in the order of the bitstream (centre first),
+    which is put into the order of a WAV file. Its Opus encoder runs in
+    the mode for telephony, as AudioToolbox's does by default, and a page
+    cannot change that: Opus encoded in Safari is good for speech and
+    loses low frequencies of music (17 dB against the input where the
+    other browsers reach 38 dB on the test signal).
+  - **Firefox** (157 on macOS) has no AAC encoder and refuses HE-AAC and
+    4.0 AAC streams after saying yes to their configuration (an
+    `ErrInvalidData` from a later call). Opus in both directions and
+    AAC-LC decoding in mono, stereo, 3.0, 5.0 and 5.1 pass.
+  - HE-AAC in Chrome comes out 962 samples (20 ms) later than on macOS
+    and in Safari: the decoder Chrome uses leaves the delay of the band
+    replication in its output and AudioToolbox takes it out.
+  - Sample rates and channel counts the browser accepts for encoding
+    beyond the library's own rules (Opus at 48 kHz, mono or stereo) are
+    the browser's business; an odd rate may be resampled without notice.
 - **Not done.** No AV1 encoding, as on every backend.
 
 **Verification (2026-10-12).** `scripts/browser_test.sh` builds a `go
@@ -516,6 +578,20 @@ keyframe, profile, bitrate and low-latency tests and encodes H.264 at
 decode tests pass bit-exact in a page where Safari offers AV1 and skip
 where it does not. Chrome on Windows,
 Linux and Android has not been run.
+
+**Audio (2026-10-13).** The audio tests of the root package run through
+the same script: Chrome 153, Firefox 157 and Safari 27 on an Apple M3.
+In Chrome all of them pass: AAC (ADTS and MP4, mono to 5.1) and Opus
+(10, 20 and 60 ms packets) decode to ffmpeg's samples in place (75 dB),
+HE-AAC and HE-AAC v2 decode at the full rate, AAC and Opus encoded in the
+page decode with ffmpeg to the input in place (47 dB and 39 dB), from an
+ADTS file and from an MP4 file with the delay in its edit list, and the
+bitrate, flush, error and garbage tests pass; the 64 kbit/s stereo AAC
+cases skip as unsupported. In Safari the same tests pass with the workarounds
+above (AAC round trips at 51 to 56 dB once the lost first samples are
+compensated, Opus at 17 dB in its telephony mode). In Firefox the Opus
+tests and the AAC decoding tests pass and the tests that need an AAC
+encoder, HE-AAC or 4.0 skip.
 
 ### AV1 on Linux and Windows
 
@@ -776,6 +852,118 @@ err = out.Flush(ctx)                                          // the frames the 
   convert between Annex-B and the length-prefixed samples of MP4 and HEIF
   (AVCC, HVCC).
 
+## Audio
+
+`NewAudioDecoder` and `NewAudioEncoder` are the audio counterparts of the
+video constructors, with the same Send/Receive/Flush loop. Packets are the
+same `Packet` type; samples travel in an `AudioFrame`, which is plain Go
+memory (interleaved 16-bit or float samples in `Data`) and needs no
+`Release`.
+
+```go
+// Decode the audio track of a file.
+d, _ := mp4.Open("movie.mp4")
+a := d.Audio()                                  // AAC or Opus; nil when there is none
+dec, _ := hwmediacodec.NewAudioDecoder(ctx, a.Format())
+src := a.PacketSource()
+for {
+	p, err := src.ReadPacket()
+	if err == io.EOF { break }
+	dec.Send(ctx, p)
+	f, _ := dec.Receive(ctx)                    // one frame per packet
+	play(f.Int16s(), f.SampleRate, f.Channels)  // interleaved samples
+}
+
+// Encode PCM and write it next to a video track.
+enc, _ := hwmediacodec.NewAudioEncoder(ctx, hwmediacodec.AAC, 48000, 2,
+	hwmediacodec.WithBitrate(128_000))
+m, _ := mp4.Create("out.mp4")
+aw, _ := m.AddAudioTrack(enc.Format(), 48000)   // time scale: the sample rate
+enc.Send(ctx, hwmediacodec.S16Frame(samples, 48000, 2, 0))
+for {
+	p, err := enc.Receive(ctx)
+	if errors.Is(err, hwmediacodec.ErrAgain) { break }
+	aw.WritePacket(p)
+}
+enc.Flush(ctx)                                  // then Receive until io.EOF
+m.Close()
+```
+
+- **`AudioFormat`** describes a compressed stream: codec, sample rate,
+  channels, the codec configuration (`Config`: the AudioSpecificConfig of
+  AAC, the `OpusHead` of Opus) and the encoder's delay. Containers report
+  it (`mp4.AudioTrack.Format`, `adts.Reader.Format`), an encoder reports
+  the one of its output (`AudioEncoder.Format`), and decoders and muxers
+  take it. For a stream from elsewhere it is enough to fill in the codec,
+  the sample rate and the channel count; an AAC decoder then assumes
+  AAC-LC.
+- **Packets** are raw: one AAC access unit without ADTS header, one Opus
+  packet. `encoding/adts` adds and removes the ADTS header for `.aac`
+  files.
+- **Time.** An audio decoder hands each packet's PTS on to its frame.
+  An encoder counts PTS and `Packet.Duration` in samples (the time scale
+  defaults to the sample rate; `WithTimeScale` changes it), takes the PTS
+  of the first frame as the start and treats everything sent after it as
+  one continuous signal, in frames of any length.
+- **Delay.** Encoders start early: the first packets of a stream code
+  samples that are not part of the recording (2112 for AudioToolbox's AAC,
+  312 for its Opus; `AudioFormat.Delay`), and the last packet is padded to
+  full length. Timestamps account for this: a stream whose first sample
+  is at 0 starts with a packet at PTS `-Delay`, and the last packet's
+  `Duration` ends at the last real sample. The decoder returns every
+  sample a packet codes, so a player drops what lies before the start of
+  the presentation and after its end. The MP4 muxer records both in the
+  track's edit list and sample table; ffmpeg then plays the samples that
+  went in from the first one on (for AAC to the last one exactly; for Opus
+  it also plays the padding of the last packet, as it does with files of
+  its own).
+- **Flush** resets a decoder (after a seek) and ends a signal on an
+  encoder; both can be used again afterwards. After a jump a decoder
+  needs a moment to run in: `mp4.AudioPacketSource.SeekKeyframe`
+  positions itself one packet (AAC) or 80 ms (Opus) before the target for
+  that reason, and the samples up to the target are to be dropped.
+- **Channels** come out in the order of a WAV file (left, right, centre,
+  LFE, surrounds), up to 5.1. Encoding takes mono and stereo.
+- **Sample rate.** The decoder returns the stream's rate (48 kHz for Opus,
+  whatever the recording had) and the encoder takes what it is given
+  (Opus: 48 kHz only). The library does not resample.
+- **No device.** The library neither plays nor records sound: it stops at
+  PCM, like the video side stops at pixels.
+
+What the backend does on macOS and iOS:
+
+- AudioToolbox's Opus encoder starts in its telephony mode (the Opus
+  "VoIP" application), which filters the low end. The backend switches it
+  to the mode for general audio: the test signal (two tones and a sweep
+  from 200 Hz up) comes back with a signal-to-noise ratio of 17 dB in the
+  default mode and of 36 dB in this one.
+- HE-AAC is decoded with its extensions when the AudioSpecificConfig
+  signals them (as the files of `afconvert` and of most encoders do). A
+  stream that leaves them out (implicit signalling, as ADTS files do) is
+  decoded as the AAC-LC core at half the sample rate.
+- Only an edit list gives `AudioFormat.Delay` for a track. Files that
+  record the delay in iTunes metadata alone (`iTunSMPB`, as `afconvert`
+  writes) report 0.
+
+In a browser the same API sits on `AudioDecoder` and `AudioEncoder`; what
+differs there (the delay of an encoder has to be measured, each browser
+has codecs of its own) is in the [browser notes](#browser-notes).
+
+### AAC and licences
+
+AAC is covered by patents that are licensed per unit to whoever ships an
+encoder or decoder. This library ships neither: it contains no AAC code
+(or Opus code) and bundles no codec library. It calls the codec that is
+part of the operating system, whose vendor is the licensee, in the same
+way it calls the system's H.264 and HEVC engines; that the codec runs on
+the CPU rather than in hardware makes no difference to that. For the same
+reason there is no pure Go fallback for AAC and there will not be one.
+Opus is royalty-free and the safe choice where a codec has to be picked.
+On Linux, where no vendor ships a codec with the system, an AAC backend
+will only ever use a library the user has installed. This is how the
+situation is commonly understood, not legal advice; a product that ships
+commercially should have it checked.
+
 ## MP4 files
 
 The codec API stops at the elementary stream: packets in, frames out,
@@ -800,6 +988,10 @@ aw.WriteSample(s)                   // audio copied as is
 m.Close()                           // writes moov
 ```
 
+`d.Audio()` is the audio track for decoding (AAC in `mp4a`, Opus) and
+`m.AddAudioTrack(enc.Format(), timeScale)` the track for an audio
+encoder's packets; see [Audio](#audio).
+
 What the package takes care of:
 
 - `Track.MediaTimeOffset` carries the edit list. A B-frame stream's first
@@ -813,6 +1005,13 @@ What the package takes care of:
   muxer shifts every DTS back by the largest lag; durations are unchanged and
   the edit list absorbs the start delay. The tests check that ffprobe sees
   the same presentation times as in the source.
+- An audio track's edit list starts at the encoder's delay, so players
+  begin at the first real sample, and the last sample is as short as the
+  signal's end makes it. The tracks written from packets share a clock:
+  when one starts later than the other (sound that begins half a second
+  into the picture), it gets an empty edit of that length in front.
+  Tracks copied with `AddPassthroughTrack` keep the edit list of their
+  source.
 - Progressive output only (`ftyp`, `mdat`, `moov` at the end), `stco` or
   `co64` as the size requires, one chunk per run of samples of the same
   track. Fragmented input is rejected.
@@ -1236,6 +1435,25 @@ container of the fake VA driver below has all the encoders). The AV1 decode
 conformance tests need libdav1d as well: every NV12 frame of an 8-bit
 stream with hidden frames and `show_existing_frame` must equal dav1d's
 output exactly, and a 10-bit stream is compared by PSNR.
+
+The audio codecs are checked against ffmpeg in both directions. Decoding:
+AAC streams from ffmpeg's encoder (mono, stereo, 5.1; ADTS and MP4) and
+Opus streams from libopus (10, 20 and 60 ms packets) must give the samples
+ffmpeg's decoders give, in the same place, within the rounding of two
+implementations (the tests ask for 50 dB; AAC measures 57 to 86 dB against
+ffmpeg's decoder and Opus 107 dB against libopus), and the part
+the edit list presents must be the signal that was encoded. Encoding: what
+ffmpeg decodes from the encoder's packets (through an ADTS file and through
+an MP4 file) must be the input in place, which checks the reported delay to
+the sample, and ffprobe must see the stream parameters, the packet count
+and the duration; a second track that starts later must start later in the
+file by the same amount. HE-AAC files come from `afconvert`, since ffmpeg
+has no free HE-AAC encoder, so that test runs on macOS only
+(`scripts/browser_test.sh` lends it to the browser like ffmpeg). The test
+signal is a tone per channel plus a sweep that never repeats, so that a
+shift by one sample or two swapped channels show up. The header code in
+`internal/aac`, `internal/opus` and `encoding/adts` is plain Go and tested
+on every platform.
 
 The VA-API backend itself runs without a GPU against a fake VA driver
 (`internal/vaapi/testdata/fakedriver`, about 1,600 lines of C).

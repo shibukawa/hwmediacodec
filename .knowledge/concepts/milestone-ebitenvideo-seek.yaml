@@ -155,7 +155,7 @@ verification:
     - path: mediacontainer/mp4/packetsource.go
       input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: mediacontainer/mp4/packetsource_test.go
       input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
   annexb-offset-test:

@@ -94,11 +94,11 @@ verification:
         bf=2 hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go
-      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
   container-mux-test:
     state: passed
     method: integration
@@ -112,13 +112,13 @@ verification:
       note: no hardware needed; H.264 bf=2 with audio, H.264 bf=0, HEVC bf=2 with audio; run 2026-10-09
     basis:
     - path: mediacontainer/mp4/mux.go
-      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go
-      input_hash: 2965e4855f856f0fa43dfeb1914f2870d0db51983d7f644e64e67813f400644a
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
   convert-test:
     state: passed
     method: integration
@@ -137,9 +137,9 @@ verification:
     - path: examples/convert/main.go
       input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
     - path: mediacontainer/mp4/mux.go
-      input_hash: 11b270a474fd591798f8717f4e8aea696f9b71646832ff2c9f21629477ae1a04
+      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: examples/convert/main_test.go
       input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   convert-1080p-run:
@@ -179,7 +179,7 @@ verification:
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: mediacontainer/mp4/demux.go
-      input_hash: 62b7d2bfa773e89bca245ff3bc328e091a63501d4bd7f1a6fe4ea068b15b75a2
+      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
     - path: examples/thumbnails/main_test.go
       input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
 open_questions:

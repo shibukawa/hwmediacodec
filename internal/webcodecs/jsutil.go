@@ -245,6 +245,11 @@ func webKit() bool {
 	return strings.Contains(s, "AppleWebKit") && !strings.Contains(s, "Chrome/") && !strings.Contains(s, "Chromium/") && !strings.Contains(s, "Edg/")
 }
 
+// WebKit reports whether the page runs in a WebKit browser. The tests ask
+// where a WebKit codec is known to do less than the others (its Opus
+// encoder runs in the mode for telephony, and a page cannot change that).
+func WebKit() bool { return webKit() }
+
 // acceleration is the hardwareAcceleration member of a configuration.
 func acceleration(allowSoftware bool) string {
 	if accelerationOverride != "" {

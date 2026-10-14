@@ -196,11 +196,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: ef6a8592ac583a7e6af588d6a503c394b45ae71b0dedb49a646c13b93ab83637
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: hwmediacodec.go
-      input_hash: cab6b0f105cf6f1def50e801d1bff58d3283d655e60b68850ef867d98da1f0ae
+      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
   windows-loader-run:
     state: not_run
     method: integration

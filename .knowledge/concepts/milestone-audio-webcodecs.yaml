@@ -1,0 +1,273 @@
+id: milestone:audio-webcodecs
+type: milestone
+title: Audio codecs (AAC, Opus) in the browser through WebCodecs
+summary: 'Requested on 2026-10-13 after the browser video backend was merged ("mainが更新されたのでrebaseして
+  ください。ブラウザ向けの動画再生が入りました。音声側もブラウザ対応をお願いします"): the audio branch was rebased
+  onto main and internal/webcodecs gained the audio half of the API on AudioDecoder, AudioEncoder, AudioData
+  and EncodedAudioChunk, registered by backends_js.go. Same public API and the same timestamp rules as
+  the AudioToolbox backend; the encoder delay, which WebCodecs does not report, is measured in the page.
+  The root package''s audio tests run in the browser through scripts/browser_test.sh and pass in Chrome,
+  Safari and Firefox on macOS with the limits each browser has.'
+lifecycle: active
+authority: authored
+aliases:
+- browser audio
+- ブラウザ音声対応
+- AudioDecoder
+- AudioEncoder
+- WebCodecs audio
+- encoder delay calibration
+scope:
+  platform: js
+  milestone: audio-webcodecs
+constraints:
+- 'A browser''s AudioDecoder stamps its output itself (first chunk timestamp plus samples so far; chunk
+  timestamps 0, 1000, 2000 us came back as 0, 21333, 42666 in Chrome), so frames are matched to packets
+  by order: a queue of (PTS, samples per packet) and a queue of decoded samples, one frame per packet.
+  Samples per packet come from the AudioSpecificConfig (1024, 2048 with SBR) or the Opus TOC; when the
+  first AudioData has another sample rate than the configuration (implicitly signalled SBR) the frame
+  size is scaled with it.'
+- 'An Opus decoder is configured without description: given the OpusHead, Chrome drops the pre-skip itself
+  (first AudioData 648 samples instead of 960, timestamps shifted), which would break "every packet yields
+  all its samples". An AAC decoder gets the AudioSpecificConfig as description (bare access units; without
+  it browsers expect ADTS). Codec strings: mp4a.40.2, mp4a.40.5 with SBR, mp4a.40.29 with PS, opus.'
+- 'Samples are copied with AudioData.copyTo in the interleaved target format (s16 or f32), which Chrome,
+  Firefox and Safari convert to; if a browser throws, planar float (the one conversion the specification
+  requires) is interleaved and converted in Go from then on.'
+- 'An AudioEncoder''s chunks are stamped from 0 in steps of the packet duration with no word about priming,
+  so the backend stamps packets itself like AudioToolbox''s: packet k has PTS base + (k*FrameSamples -
+  Delay), Duration cut at the last sample sent. Arbitrary frame lengths go to the browser as they are
+  (AudioData s16 or f32 interleaved); the browser cuts the packets.'
+- 'encoderTraits runs a trial per (codec, rate, channels, bitrate, mode), cached for the page: 6144 samples
+  of low-passed noise plus 8192 of silence are encoded and flushed. It yields the description (the config),
+  the packet length (chunk duration) and whether the encoder works at all. Delay: Opus from the OpusHead
+  the encoder reports as description (pre-skip 312 in Chrome, also in the "opus" format); AAC by decoding
+  the trial with the browser''s AudioDecoder and taking the lag with the best normalised correlation
+  of signal[2048:4096] (accepted from 0.6 up, and only when the decoder returned chunks*frame samples).
+  The delay and the lead are cached per (codec, rate, channels). Assumed when not measurable: 2112 for
+  AAC, 312 for Opus.'
+- 'The trial also measures how many leading samples came back as silence (energy below 1/16 of the input
+  in 64-sample blocks, rounded up to 128): WebKit''s AAC encoder zeroes the first 1024 samples of every
+  signal. That many zeros are sent ahead of each signal and added to Delay (3136 in Safari).'
+- 'Flush sends Delay + 2 frames of silence before AudioEncoder.flush and drops the packets that start
+  at or after the last real sample, so the tail comes out whether or not a browser flushes its lookahead;
+  the packet count then equals AudioToolbox''s ceil((N + Delay) / frame). The AudioEncoder is closed
+  after a Flush and a new one is opened for the next signal.'
+- 'Send blocks while decodeQueueSize or encodeQueueSize is above 0 (dequeue event), Flush awaits the browser''s
+  flush promise, Receive never blocks: the rules of the video half. Errors arrive in the error callback
+  and are reported by the next call; EncodingError and DataError from a decoder match ErrInvalidData,
+  NotSupportedError matches ErrUnsupported; the codec object is dropped and reopened by the next Send.'
+- 'Rules kept from the other backends rather than taken from the browser: Opus encoding at 48 kHz only
+  (a browser would resample), encoding in mono and stereo only, decoding up to 5.1.'
+- 'Measured browser behaviour (2026-10-13, Apple M3, macOS 27; Chrome 153.0.8010.53, Firefox 157.0.1, Safari
+  27.0.1). Chrome - AAC through AudioToolbox, delay 2112; isConfigSupported says yes to 64 kbit/s stereo
+  48 kHz and to 32 kbit/s mono and the encoder then fails with EncodingError within the first packets
+  (reported as ErrUnsupported from NewAudioEncoder by the trial); 32 and 48 kbit/s stereo are accepted
+  and encoded at the default (138 kbit/s); bitrateMode constant gives the same packets as variable; Opus
+  through libopus, CBR exact; AAC decoding by ffmpeg''s decoder (75 dB against ffmpeg after the s16 conversion),
+  channels in WAV order, HE-AAC 962 samples later than AudioToolbox (SBR delay left in).'
+- 'Safari - AAC description is the whole ES_Descriptor (parsed with aac.ConfigFromESDescriptor); variable
+  mode ignores the bitrate (64k and 160k both gave 137 kbit/s) while constant holds it on average, so
+  a bitrate is sent with bitrateMode constant on WebKit; first 1024 input samples zeroed (see above);
+  decoder output for 3.0/4.0/5.0/5.1 AAC in bitstream order (C L R [Ls Rs] [LFE]), permuted to WAV
+  order when webKit() says so; Opus encoder in the VoIP application regardless of opus.application
+  (17 dB with a lead of 2 to 5 samples on the test signal, like native AudioToolbox before its cookie
+  is rewritten); HE-AAC aligned as on macOS; an odd sample rate (12345 Hz) accepted.'
+- 'Firefox - no AAC encoder (isConfigSupported false, reported as ErrUnsupported); HE-AAC and 4.0 AAC
+  accepted by isConfigSupported and refused with EncodingError some packets in, after a flush had already
+  resolved; Opus both ways and AAC-LC decoding in mono, stereo, 3.0, 5.0, 5.1 pass.'
+- 'Tests: internal/testutil/audio.go and the audio tests use testutil.Command, TempDir, WriteFile and
+  ReadFile (the browser has no file system or processes); MP4 files are parsed from memory and muxed
+  into a memory io.WriteSeeker; afconvert was added to the tools internal/browserexec may run. exact_js_test.go
+  has telephonyOpus() for the WebKit Opus limit; decodeAudioOrSkip skips streams a browser refuses mid-way.'
+non_goals:
+- Synchronised playback with sound in the browser (the playback slice, see decision:audio-codecs).
+- Chrome on Windows, Linux and Android, where the AAC encoder is another one or missing (not run; the
+  delay measurement is what is meant to cover them).
+- Changing Safari's Opus application or Chrome's handling of bitrates, which a page cannot.
+- Compensating the 962-sample SBR delay of Chrome's HE-AAC decoder (the page cannot tell which decoder
+  it has).
+- Detecting a channel order from the stream instead of from the user agent for WebKit.
+acceptance:
+  chrome-audio:
+    text: scripts/browser_test.sh -run 'TestAudio|TestProbeAudio' . passes in headless Chrome - the tests
+      of milestone:audio-audiotoolbox for AAC and Opus decoding against ffmpeg, encoding checked by ffmpeg
+      through ADTS and MP4, round trips, bitrate control, flush and reuse, errors, garbage, surround order
+      and HE-AAC (at shift 0 or 962); only the 64 kbit/s stereo AAC cases skip.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - chrome-audio-run
+  safari-audio:
+    text: The same run in Safari passes, with AAC encoding at delay 3136, surround in WAV order, HE-AAC
+      at shift 0 and the Opus round trips accepted at 12 dB or more with a lead of up to 8 samples.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - safari-audio-run
+  firefox-audio:
+    text: The same run in Firefox passes for Opus in both directions and AAC-LC decoding; the tests that
+      need an AAC encoder skip with ErrUnsupported and HE-AAC and 4.0 skip because the decoder refuses the
+      packets.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - firefox-audio-run
+  whole-suite-in-chrome:
+    text: scripts/browser_test.sh . ./internal/webcodecs (the video conformance tests included) passes
+      in Chrome after the change, and Probe in the browser lists the audio codecs with Hardware false next
+      to the hardware video codecs.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - chrome-full-run
+  native-unchanged:
+    text: go test ./... on macOS, scripts/crossbuild.sh (js/wasm included) and scripts/mobilebuild.sh pass
+      after the rebase onto main and the change.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - native-suites
+  other-platforms:
+    text: The audio tests pass in Chrome on Windows, Linux and Android.
+    scope:
+      milestone: audio-webcodecs
+    verified_by:
+    - chrome-elsewhere
+verification:
+  chrome-audio-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-webcodecs
+    test: scripts/browser_test.sh -run 'TestAudio|TestProbeAudio' -v .
+    evidence:
+      path: internal/webcodecs/audioencoder.go
+      note: '2026-10-13, Chrome 153.0.8010.53 headless on an Apple M3: AAC decode 74.9 dB against ffmpeg
+        at shift 0, Opus from libopus 75 dB, AAC encoded in the page 47.0 / 45.5 dB and Opus 39.4 / 38.6
+        dB through ffmpeg at shift 0 (delay 2112 measured, 312 from the OpusHead), HE-AAC 32.8 dB at shift
+        962; skips - aac_vbr_64000 and aac_cbr_64000 (encoder fails, reported unsupported)'
+    basis:
+    - path: internal/webcodecs/audio.go
+      input_hash: 6e240cbb9fe1e9be571788fe1d9ef6e69626ac8c8b9322edefaf55e09ddbcf37
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+    - path: internal/webcodecs/audioencoder.go
+      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+    - path: audio_test.go
+      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+    - path: audio_mp4_test.go
+      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
+    - path: internal/testutil/audio.go
+      input_hash: baa6dc8d92fd85a5fdbda40d94c2238f3c681c3a776d012affc1e48794523219
+    - path: backends_js.go
+      input_hash: 2cec5ee0cd89552bc2b5263453a9a4360899de1df3a90c4c2ef79868bd1b4978
+  safari-audio-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-webcodecs
+    test: HWMEDIACODEC_BROWSER=open HWMEDIACODEC_BROWSER_ARGS="-a Safari" scripts/browser_test.sh -run 'TestAudio|TestProbeAudio'
+      -v .
+    evidence:
+      path: internal/webcodecs/audioencoder.go
+      note: '2026-10-13, Safari 27.0.1 with its window visible on an Apple M3: AAC encoded in the page 55.9
+        / 53.5 dB through ffmpeg at shift 0 with delay 3136 (19.9 dB before the lost first 1024 samples were
+        compensated), AAC round trip 51.4 dB, Opus 16.8 to 18.3 dB at shift -2 to -5 (telephony mode), HE-AAC
+        32.8 dB at shift 0, surround order correct after the permutation'
+    basis:
+    - path: internal/webcodecs/audio.go
+      input_hash: 6e240cbb9fe1e9be571788fe1d9ef6e69626ac8c8b9322edefaf55e09ddbcf37
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+    - path: internal/webcodecs/audioencoder.go
+      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+    - path: internal/aac/esds.go
+      input_hash: bc6fdd3d330a601907dfceef4eed6a29425d696d70abb52d1ae55e01cf6bbbe9
+    - path: exact_js_test.go
+      input_hash: 8ff2ee41c9e4a7aaf562c0abd225a06f0356a66ff6c6bdb87c7fb18ff217c227
+  firefox-audio-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-webcodecs
+    test: HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox scripts/browser_test.sh
+      -run 'TestAudio|TestProbeAudio' -v .
+    evidence:
+      path: internal/webcodecs/audiodecoder.go
+      note: '2026-10-13, Firefox 157.0.1 on an Apple M3: Opus encoded in the page 40.2 / 39.0 dB through
+        ffmpeg at shift 0, Opus round trip 38.9 dB, Opus CBR exact, AAC decode 59.9 to 75.0 dB against
+        ffmpeg; skipped - every test that opens an AAC encoder, HE-AAC, HE-AAC v2 and 4.0 AAC'
+    basis:
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+    - path: internal/webcodecs/audioencoder.go
+      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+    - path: audio_test.go
+      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+  chrome-full-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-webcodecs
+    test: scripts/browser_test.sh . ./internal/webcodecs
+    evidence:
+      path: probe_test.go
+      note: 2026-10-13, Chrome 153 headless on an Apple M3; root package 26.5 s, internal/webcodecs 7.5 s
+    basis:
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/browserexec/main.go
+      input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
+    - path: internal/webcodecs/jsutil.go
+      input_hash: 1936032ef5664f279d336f3fbfa7cad15023da56cb1b8c9386938b837d340a56
+  native-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-webcodecs
+    test: go test ./... ; scripts/crossbuild.sh ; scripts/mobilebuild.sh ; go build, go vet and go test
+      in ebitenvideo, examples and net/webrtc
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-13 on an Apple M3, macOS 27, go1.27.0, after the rebase onto 6dfd532; GOOS=js builds
+        of net/webrtc and examples/webrtc fail in pion as they did before the change
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+    - path: internal/audiotoolbox/decoder.go
+      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
+    - path: internal/audiotoolbox/encoder.go
+      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
+  chrome-elsewhere:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: audio-webcodecs
+    test: scripts/browser_test.sh -run 'TestAudio|TestProbeAudio' . on Windows, Linux and Android
+    evidence:
+      path: scripts/browser_test.sh
+      note: only macOS was available; AAC encoders differ per platform (Media Foundation on Windows, none
+        in Chrome on Linux), which is what the delay measurement is for
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: extends
+  to: milestone:browser-webcodecs
+- relation: follows
+  to: milestone:audio-audiotoolbox
+- relation: extends
+  to: backend:webcodecs
+history:
+  implemented-2026-10-13:
+    summary: Branch rebased onto main (conflicts in the knowledge hash entries only), audio half of internal/webcodecs
+      written and run in Chrome, Firefox and Safari; the browser differences found on the way are in the
+      constraints.
