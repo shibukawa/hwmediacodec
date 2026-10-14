@@ -472,8 +472,9 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 		return fmt.Errorf("hwmediacodec: the frame is %s but the encoder was opened for %s: %w", f.Format, e.cfg.SampleFormat, codec.ErrInvalidData)
 	case f.SampleRate != e.cfg.SampleRate || f.Channels != e.cfg.Channels:
 		return fmt.Errorf("hwmediacodec: the frame is %d Hz with %d channels but the encoder was opened for %d Hz with %d: %w", f.SampleRate, f.Channels, e.cfg.SampleRate, e.cfg.Channels, codec.ErrInvalidData)
-	case len(f.Data)%e.unit != 0:
-		return fmt.Errorf("hwmediacodec: %d bytes are not a whole number of samples: %w", len(f.Data), codec.ErrInvalidData)
+	}
+	if err := f.Validate(); err != nil {
+		return err
 	}
 	if err := e.takeFailure(); err != nil {
 		return err

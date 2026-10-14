@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"unsafe"
@@ -203,8 +204,12 @@ func (e *encoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 		return fmt.Errorf("hwmediacodec: the frame is %s but the encoder was opened for %s: %w", f.Format, e.cfg.SampleFormat, codec.ErrInvalidData)
 	case f.SampleRate != e.cfg.SampleRate || f.Channels != e.cfg.Channels:
 		return fmt.Errorf("hwmediacodec: the frame is %d Hz with %d channels but the encoder was opened for %d Hz with %d: %w", f.SampleRate, f.Channels, e.cfg.SampleRate, e.cfg.Channels, codec.ErrInvalidData)
-	case len(f.Data)%e.in.unit != 0:
-		return fmt.Errorf("hwmediacodec: %d bytes are not a whole number of samples: %w", len(f.Data), codec.ErrInvalidData)
+	}
+	if err := f.Validate(); err != nil {
+		return err
+	}
+	if uint64(len(f.Data)) > math.MaxUint32 {
+		return fmt.Errorf("hwmediacodec: audio frame exceeds AudioToolbox's buffer size: %w", codec.ErrInvalidData)
 	}
 	if len(e.pending) >= maxPending {
 		return codec.ErrAgain
@@ -234,6 +239,9 @@ func (e *encoder) pump() error {
 		n := uint32(1)
 		var desc sys.AudioStreamPacketDescription
 		st := sys.AudioConverterFillComplexBuffer(e.conv, inputCallback(), e.handle, &n, &list, &desc)
+		if n > 1 || uint64(list.Buffer.DataByteSize) > uint64(len(e.outBuf)) {
+			return backendError("AudioConverterFillComplexBuffer(output size)", sys.StatusInvalidOutputSize)
+		}
 		if n > 0 {
 			e.emit(e.outBuf[:list.Buffer.DataByteSize])
 		}
@@ -271,6 +279,9 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	if e.closed {
 		return codec.Packet{}, codec.ErrClosed
 	}
+	if err := ctx.Err(); err != nil {
+		return codec.Packet{}, err
+	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
 		e.pending[0] = codec.Packet{}
@@ -288,6 +299,9 @@ func (e *encoder) Flush(ctx context.Context) error {
 	defer e.mu.Unlock()
 	if e.closed {
 		return codec.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	var err error
 	if e.started {
@@ -318,5 +332,6 @@ func (e *encoder) Close() error {
 		unregisterInput(e.handle)
 	}
 	e.pending = nil
+	e.in.chunks, e.in.held = nil, nil
 	return nil
 }

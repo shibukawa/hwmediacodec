@@ -134,6 +134,12 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	d.outMu.Lock()
+	n := len(d.pending) + len(d.inflight)
+	d.outMu.Unlock()
+	if n >= maxPendingPackets {
+		return codec.ErrAgain
+	}
 	d.flushed = false
 	if d.cfg.Codec == codec.AV1 {
 		return d.sendAV1(p)
@@ -378,6 +384,7 @@ func (d *decoder) Receive(ctx context.Context) (*codec.Frame, error) {
 	}
 	pf := d.pending[0]
 	copy(d.pending, d.pending[1:])
+	d.pending[len(d.pending)-1] = pendingFrame{}
 	d.pending = d.pending[:len(d.pending)-1]
 	d.outMu.Unlock()
 

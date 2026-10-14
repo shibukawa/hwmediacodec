@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // Segment is one fragmented-MP4 media segment (styp + moof + mdat) that
@@ -102,7 +104,7 @@ func (s *Segmenter) WritePacket(p hwmediacodec.Packet) error {
 }
 
 func (s *Segmenter) toDuration(ts int64) time.Duration {
-	return time.Duration(ts) * time.Second / time.Duration(s.timeScale)
+	return time.Duration(codec.RescaleTrunc(ts, int64(s.timeScale), int64(time.Second)))
 }
 
 func (s *Segmenter) writeInit() error {
@@ -149,6 +151,9 @@ func (s *Segmenter) emit(nextDTS int64) error {
 		if dur <= 0 {
 			dur = 1
 		}
+		if dur > math.MaxUint32 {
+			return errors.New("mp4: segment sample duration exceeds the 32-bit field")
+		}
 		s.lastDur = dur
 		total += dur
 		flags := uint32(mp4ff.NonSyncSampleFlags)
@@ -168,6 +173,9 @@ func (s *Segmenter) emit(nextDTS int64) error {
 		return err
 	}
 	out := Segment{Seq: s.seq, Data: buf.Bytes(), Start: s.toDuration(s.pending[0].pts - s.base), Duration: s.toDuration(total)}
+	// pending's backing array survives between segments: clear pointers to
+	// encoded packets so a short later segment does not retain old frames.
+	clear(s.pending)
 	s.pending = s.pending[:0]
 	if s.onSegment != nil {
 		return s.onSegment(out)

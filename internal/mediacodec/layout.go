@@ -64,6 +64,9 @@ func parseMediaImage2(b []byte) (layout, error) {
 	if l.width <= 0 || l.height <= 0 {
 		return l, fmt.Errorf("image-data size %dx%d", l.width, l.height)
 	}
+	if _, err := l.checkedSize(); err != nil {
+		return l, err
+	}
 	return l, nil
 }
 
@@ -83,40 +86,71 @@ func layoutFromColorFormat(colorFormat int32, width, height, stride, sliceHeight
 	}
 	l.width, l.height = width, height
 	l.y = plane{offset: 0, colInc: 1, rowInc: stride}
-	cw := (width + 1) / 2
-	ch := (sliceHeight + 1) / 2
+	maxInt := int(^uint(0) >> 1)
+	ch := sliceHeight/2 + sliceHeight%2
+	if colorFormat == sys.ColorFormatYUV420SemiPlanar {
+		cw := width/2 + width%2
+		if cw > maxInt/2 {
+			return l, fmt.Errorf("chroma row size overflows int")
+		}
+		stride = max(stride, cw*2)
+		l.y.rowInc = stride
+	}
+	if stride > maxInt/sliceHeight {
+		return l, fmt.Errorf("buffer size overflows int")
+	}
+	ySize := stride * sliceHeight
 	switch colorFormat {
 	case sys.ColorFormatYUV420SemiPlanar:
-		l.u = plane{offset: stride * sliceHeight, colInc: 2, rowInc: stride}
-		l.v = plane{offset: stride*sliceHeight + 1, colInc: 2, rowInc: stride}
+		if ySize == maxInt {
+			return l, fmt.Errorf("chroma offset overflows int")
+		}
+		l.u = plane{offset: ySize, colInc: 2, rowInc: stride}
+		l.v = plane{offset: ySize + 1, colInc: 2, rowInc: stride}
 	case sys.ColorFormatYUV420Planar:
-		cs := (stride + 1) / 2
-		l.u = plane{offset: stride * sliceHeight, colInc: 1, rowInc: cs}
-		l.v = plane{offset: stride*sliceHeight + cs*ch, colInc: 1, rowInc: cs}
+		cs := stride/2 + stride%2
+		if ch > (maxInt-ySize)/cs {
+			return l, fmt.Errorf("chroma offset overflows int")
+		}
+		l.u = plane{offset: ySize, colInc: 1, rowInc: cs}
+		l.v = plane{offset: ySize + cs*ch, colInc: 1, rowInc: cs}
 	default:
-		_ = cw
 		return l, fmt.Errorf("colour format %d (%#x) is neither YUV420Planar nor YUV420SemiPlanar", colorFormat, colorFormat)
+	}
+	if _, err := l.checkedSize(); err != nil {
+		return l, err
 	}
 	return l, nil
 }
 
 // size is the number of bytes the layout needs for a picture of its size.
 func (l layout) size() int {
-	cw, ch := (l.width+1)/2, (l.height+1)/2
-	end := func(p plane, w, h int) int {
-		if w == 0 || h == 0 {
-			return p.offset
-		}
-		return p.offset + (h-1)*p.rowInc + (w-1)*p.colInc + 1
-	}
-	n := end(l.y, l.width, l.height)
-	if e := end(l.u, cw, ch); e > n {
-		n = e
-	}
-	if e := end(l.v, cw, ch); e > n {
-		n = e
-	}
+	n, _ := l.checkedSize() // constructors reject invalid layouts
 	return n
+}
+
+func (l layout) checkedSize() (int, error) {
+	if l.width <= 0 || l.height <= 0 {
+		return 0, fmt.Errorf("picture size %dx%d", l.width, l.height)
+	}
+	cw, ch := l.width/2+l.width%2, l.height/2+l.height%2
+	maxInt := int(^uint(0) >> 1)
+	n := 0
+	for i, item := range []struct {
+		p    plane
+		w, h int
+	}{{l.y, l.width, l.height}, {l.u, cw, ch}, {l.v, cw, ch}} {
+		p, w, h := item.p, item.w, item.h
+		if p.offset < 0 || p.colInc <= 0 || p.rowInc <= 0 || w-1 > (maxInt-1)/p.colInc {
+			return 0, fmt.Errorf("plane %d has invalid offset or increments", i)
+		}
+		row := (w-1)*p.colInc + 1
+		if p.rowInc < row || p.offset > maxInt-row || h-1 > (maxInt-p.offset-row)/p.rowInc {
+			return 0, fmt.Errorf("plane %d exceeds its stride or buffer size", i)
+		}
+		n = max(n, p.offset+(h-1)*p.rowInc+row)
+	}
+	return n, nil
 }
 
 // isNV12 reports whether the chroma planes are interleaved CbCr with Cb

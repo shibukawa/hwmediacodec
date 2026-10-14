@@ -7,6 +7,8 @@ package mediafoundation
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // nv12Image describes an NV12 picture in memory: luma row r starts at
@@ -26,24 +28,23 @@ func (r rect) empty() bool { return r.w <= 0 || r.h <= 0 }
 
 // clampTo limits r to a surface of the given size.
 func (r rect) clampTo(width, height int) rect {
+	if width <= 0 || height <= 0 {
+		return rect{}
+	}
 	if r.x < 0 {
 		r.x = 0
 	}
 	if r.y < 0 {
 		r.y = 0
 	}
-	if r.x+r.w > width {
-		r.w = width - r.x
-	}
-	if r.y+r.h > height {
-		r.h = height - r.y
-	}
+	r.x, r.y = min(r.x, width), min(r.y, height)
+	r.w, r.h = max(0, min(r.w, width-r.x)), max(0, min(r.h, height-r.y))
 	return r
 }
 
 // nv12Size is the number of bytes of a tightly packed NV12 frame.
 func nv12Size(w, h int) int {
-	return w*h + ((w+1)/2*2)*((h+1)/2)
+	return codec.NV12.FrameSize(w, h)
 }
 
 // copyNV12 copies the visible area r of src into dst as a tightly packed
@@ -54,21 +55,29 @@ func copyNV12(dst []byte, src nv12Image, r rect) (planes [][]byte, strides []int
 	if r.empty() || r.x < 0 || r.y < 0 {
 		return nil, nil, fmt.Errorf("mediafoundation: invalid picture area %+v", r)
 	}
-	if src.pitch <= 0 || r.x+r.w > src.pitch || r.y+r.h > src.allocHeight {
+	if src.pitch <= 0 || src.allocHeight <= 0 || r.x > src.pitch || r.y > src.allocHeight || r.w > src.pitch-r.x || r.h > src.allocHeight-r.y {
 		return nil, nil, fmt.Errorf("mediafoundation: picture area %+v exceeds surface (pitch %d, %d rows)", r, src.pitch, src.allocHeight)
 	}
-	chromaRows := (r.h + 1) / 2
+	chromaRows, chromaRowBytes := codec.NV12.PlaneLayout(1, r.w, r.h)
 	chromaX := r.x &^ 1
-	chromaRowBytes := (r.w + 1) / 2 * 2
-	chromaBase := src.pitch*src.allocHeight + (r.y/2)*src.pitch
-	need := chromaBase + (chromaRows-1)*src.pitch + chromaX + chromaRowBytes
-	if need > len(src.data) {
-		return nil, nil, fmt.Errorf("mediafoundation: surface too small: need %d bytes, have %d", need, len(src.data))
+	size := nv12Size(r.w, r.h)
+	if size == 0 || chromaRowBytes > src.pitch-chromaX || src.allocHeight > len(src.data)/src.pitch {
+		return nil, nil, fmt.Errorf("mediafoundation: invalid NV12 surface layout")
+	}
+	chromaBase := src.pitch * src.allocHeight
+	available := len(src.data) - chromaBase
+	if r.y/2 > available/src.pitch {
+		return nil, nil, fmt.Errorf("mediafoundation: chroma origin exceeds surface")
+	}
+	chromaBase += (r.y / 2) * src.pitch
+	available = len(src.data) - chromaBase
+	if chromaX > available || chromaRowBytes > available-chromaX || chromaRows-1 > (available-chromaX-chromaRowBytes)/src.pitch {
+		return nil, nil, fmt.Errorf("mediafoundation: surface too small for chroma plane")
 	}
 	ySize := r.w * r.h
 	cSize := chromaRowBytes * chromaRows
-	if len(dst) < ySize+cSize {
-		return nil, nil, fmt.Errorf("mediafoundation: destination too small: need %d bytes, have %d", ySize+cSize, len(dst))
+	if len(dst) < size {
+		return nil, nil, fmt.Errorf("mediafoundation: destination too small: need %d bytes, have %d", size, len(dst))
 	}
 	y := dst[:ySize]
 	for row := 0; row < r.h; row++ {

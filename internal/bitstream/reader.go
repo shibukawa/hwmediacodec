@@ -39,6 +39,9 @@ func New(data []byte) *Reader { return &Reader{data: data} }
 // are available, or the input is exhausted. It reports whether the bits are
 // available.
 func (r *Reader) fill(nbits int) bool {
+	if nbits < 0 || nbits > int(^uint(0)>>1)-r.pos {
+		return false
+	}
 	need := r.pos + nbits
 	for len(r.data)*8 < need && len(r.raw) > 0 {
 		b := r.raw[0]
@@ -96,10 +99,13 @@ func (r *Reader) ReadBits(n int) (uint64, error) {
 		return 0, ErrEOF
 	}
 	var v uint64
-	for i := 0; i < n; i++ {
-		b := (r.data[r.pos>>3] >> (7 - uint(r.pos&7))) & 1
-		v = v<<1 | uint64(b)
-		r.pos++
+	for n > 0 {
+		take := min(n, 8-(r.pos&7))
+		shift := 8 - (r.pos & 7) - take
+		b := r.data[r.pos>>3] >> uint(shift)
+		v = v<<uint(take) | uint64(b)&(1<<uint(take)-1)
+		r.pos += take
+		n -= take
 	}
 	return v, nil
 }

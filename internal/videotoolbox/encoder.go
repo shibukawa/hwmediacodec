@@ -39,8 +39,8 @@ func encodeCallback() uintptr {
 	return encCallbackPtr
 }
 
-// onEncodedFrame is the VTCompressionOutputCallback. sourceRefCon carries the
-// input frame's PTS.
+// onEncodedFrame is the VTCompressionOutputCallback. sourceRefCon identifies
+// the input frame, including frames that have the same PTS.
 func onEncodedFrame(refCon, sourceRefCon uintptr, status int32, infoFlags uint32, sample uintptr) uintptr {
 	encRegistryMu.Lock()
 	e := encRegistry[refCon]
@@ -50,6 +50,11 @@ func onEncodedFrame(refCon, sourceRefCon uintptr, status int32, infoFlags uint32
 	}
 	e.outMu.Lock()
 	defer e.outMu.Unlock()
+	pts, ok := e.inflight[sourceRefCon]
+	delete(e.inflight, sourceRefCon)
+	if !ok {
+		return 0
+	}
 	if status != 0 {
 		e.cbErr = &codec.BackendError{Backend: Name, Op: "encode callback", Status: int64(status), Message: sys.StatusString(status)}
 		return 0
@@ -59,7 +64,7 @@ func onEncodedFrame(refCon, sourceRefCon uintptr, status int32, infoFlags uint32
 		return 0
 	}
 	sys.CFRetain(sample)
-	e.pending = append(e.pending, pendingSample{sample: sample, pts: int64(sourceRefCon)})
+	e.pending = append(e.pending, pendingSample{sample: sample, pts: pts})
 	return 0
 }
 
@@ -102,14 +107,16 @@ type encoder struct {
 	nalLength int
 
 	// outMu guards state shared with the output callback.
-	outMu   sync.Mutex
-	pending []pendingSample
-	cbErr   error
-	dropped int
+	outMu     sync.Mutex
+	pending   []pendingSample
+	inflight  map[uintptr]int64
+	nextFrame uintptr
+	cbErr     error
+	dropped   int
 }
 
 func newEncoder(cfg codec.EncoderConfig, vtCodec uint32) (*encoder, error) {
-	e := &encoder{cfg: cfg, vtCodec: vtCodec, forceNext: true, bufFormat: cfg.InputFormat}
+	e := &encoder{cfg: cfg, vtCodec: vtCodec, forceNext: true, bufFormat: cfg.InputFormat, inflight: map[uintptr]int64{}}
 	if cfg.InputFormat == codec.RGBA {
 		// The hardware encoders take BGRA (and NV12) pixel buffers; RGBA
 		// input is swapped into BGRA while it is copied into the buffer.
@@ -314,7 +321,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 		return err
 	}
 	e.outMu.Lock()
-	n := len(e.pending)
+	n := len(e.pending) + len(e.inflight)
 	e.outMu.Unlock()
 	if n >= maxPendingPackets {
 		return codec.ErrAgain
@@ -339,7 +346,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	}
 	pts := sys.CMTime{Value: f.PTS, Timescale: e.cfg.TimeScale, Flags: sys.CMTimeFlagsValid}
 	var info uint32
-	st := sys.VTCompressionSessionEncodeFrame(e.session, pb, pts, e.duration, props, uintptr(f.PTS), &info)
+	st := e.submitFrame(pb, pts, props, &info)
 	if st == sys.StatusVTInvalidSession {
 		// The session was torn down behind the encoder's back (iOS does
 		// this while the application is in the background): open a new
@@ -347,7 +354,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 		if err := e.reopenSession(); err != nil {
 			return err
 		}
-		st = sys.VTCompressionSessionEncodeFrame(e.session, pb, pts, e.duration, e.keyProps, uintptr(f.PTS), &info)
+		st = e.submitFrame(pb, pts, e.keyProps, &info)
 	}
 	if st != 0 {
 		return &codec.BackendError{Backend: Name, Op: "VTCompressionSessionEncodeFrame", Status: int64(st), Message: sys.StatusString(st)}
@@ -367,6 +374,27 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	return err
 }
 
+// submitFrame reserves output capacity before calling VideoToolbox: its
+// callback may run before EncodeFrame returns or on another thread later.
+func (e *encoder) submitFrame(pb uintptr, pts sys.CMTime, props uintptr, info *uint32) int32 {
+	e.outMu.Lock()
+	e.nextFrame++
+	seq := e.nextFrame
+	e.inflight[seq] = pts.Value
+	e.outMu.Unlock()
+	st := sys.VTCompressionSessionEncodeFrame(e.session, pb, pts, e.duration, props, seq, info)
+	dropped := info != nil && *info&sys.EncodeInfoFrameDropped != 0
+	if st != 0 || dropped {
+		e.outMu.Lock()
+		if _, waiting := e.inflight[seq]; waiting && st == 0 && dropped {
+			e.dropped++
+		}
+		delete(e.inflight, seq)
+		e.outMu.Unlock()
+	}
+	return st
+}
+
 func (e *encoder) checkFrame(f *codec.Frame) error {
 	n := e.cfg.InputFormat.PlaneCount()
 	switch {
@@ -379,16 +407,7 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 	case len(f.Planes) != n || len(f.Strides) != n:
 		return fmt.Errorf("%w: %s frame needs %d planes and %d strides, got %d and %d", codec.ErrInvalidData, f.Format, n, n, len(f.Planes), len(f.Strides))
 	}
-	for i := range f.Planes {
-		rows, rowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
-		if f.Strides[i] < rowBytes {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes)
-		}
-		if need := (rows-1)*f.Strides[i] + rowBytes; len(f.Planes[i]) < need {
-			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 func (e *encoder) newPixelBuffer() (uintptr, error) {
@@ -477,6 +496,7 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	}
 	ps := e.pending[0]
 	copy(e.pending, e.pending[1:])
+	e.pending[len(e.pending)-1] = pendingSample{}
 	e.pending = e.pending[:len(e.pending)-1]
 	e.outMu.Unlock()
 
@@ -665,6 +685,7 @@ func (e *encoder) Close() error {
 		sys.Release(ps.sample)
 	}
 	e.pending = nil
+	clear(e.inflight)
 	e.outMu.Unlock()
 	return nil
 }

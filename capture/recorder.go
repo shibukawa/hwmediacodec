@@ -17,11 +17,13 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // TimeScale is the unit of the packets a Recorder produces.
@@ -123,12 +125,29 @@ type Recorder struct {
 	mu     sync.Mutex
 	err    error
 	closed bool
+	// Serializes capture state and prevents Close from closing frames while
+	// CaptureAt is sending to it. Encoder error reporting uses mu separately.
+	captureMu sync.Mutex
 }
 
 // New opens the encoder for pictures of the given size. Capture must then
 // be called with images of exactly that size.
 func New(width, height int, sink hwmediacodec.PacketWriteCloser, opts Options) (*Recorder, error) {
 	opts.defaults()
+	if sink == nil {
+		return nil, fmt.Errorf("capture: sink is nil")
+	}
+	if math.IsNaN(opts.FPS) || math.IsInf(opts.FPS, 0) || opts.FPS > TimeScale || float64(TimeScale)/opts.FPS >= float64(math.MaxInt64) {
+		return nil, fmt.Errorf("capture: frame rate %g has an unrepresentable %d Hz timestamp step", opts.FPS, TimeScale)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if width <= 0 || height <= 0 || width > maxInt/4/height {
+		return nil, fmt.Errorf("capture: invalid picture size %dx%d", width, height)
+	}
+	frameBytes := 4 * width * height
+	if opts.Queue >= maxInt || opts.Queue+1 > maxInt/frameBytes {
+		return nil, fmt.Errorf("capture: frame queue is too large")
+	}
 	ctx := context.Background()
 	enc, err := hwmediacodec.NewEncoder(ctx, opts.Codec, width, height, opts.encoderOptions()...)
 	if err != nil {
@@ -147,7 +166,7 @@ func New(width, height int, sink hwmediacodec.PacketWriteCloser, opts Options) (
 		lastPTS: -1,
 	}
 	for range opts.Queue + 1 {
-		r.free <- make([]byte, 4*width*height)
+		r.free <- make([]byte, frameBytes)
 	}
 	go r.run(ctx)
 	return r, nil
@@ -164,7 +183,9 @@ func (r *Recorder) Capture(src Source) {
 
 // CaptureAt is Capture with an explicit time stamp for the frame.
 func (r *Recorder) CaptureAt(src Source, now time.Time) {
-	if r.Err() != nil {
+	r.captureMu.Lock()
+	defer r.captureMu.Unlock()
+	if r.closed || r.Err() != nil {
 		return
 	}
 	b := src.Bounds()
@@ -189,11 +210,15 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 	}
 	src.ReadPixels(pix)
 	r.lastPTS = pts
+	key := r.wantKey.Swap(false)
 	select {
-	case r.frames <- frame{pix: pix, pts: pts, key: r.wantKey.Swap(false)}:
+	case r.frames <- frame{pix: pix, pts: pts, key: key}:
 		r.captured.Add(1)
 	default:
 		// The queue filled up between the buffer check and now.
+		if key {
+			r.wantKey.Store(true)
+		}
 		r.dropped.Add(1)
 		r.free <- pix
 	}
@@ -226,7 +251,9 @@ func (r *Recorder) run(ctx context.Context) {
 			r.fail(err)
 		}
 	}
-	r.enc.Close()
+	if err := r.enc.Close(); err != nil {
+		r.fail(err)
+	}
 	if err := r.sink.Close(); err != nil {
 		r.fail(err)
 	}
@@ -263,23 +290,23 @@ func (r *Recorder) Encoded() int64 { return r.encoded.Load() }
 
 // Duration is the recording time covered so far.
 func (r *Recorder) Duration() time.Duration {
+	r.captureMu.Lock()
+	defer r.captureMu.Unlock()
 	if r.lastPTS < 0 {
 		return 0
 	}
-	return time.Duration(r.lastPTS+r.step) * time.Second / TimeScale
+	return time.Duration(codec.RescaleTrunc(r.lastPTS+r.step, TimeScale, int64(time.Second)))
 }
 
 // Close stops capturing, flushes the encoder, closes the sink and returns
 // the first error that occurred.
 func (r *Recorder) Close() error {
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
-		return r.err
+	r.captureMu.Lock()
+	if !r.closed {
+		r.closed = true
+		close(r.frames)
 	}
-	r.closed = true
-	r.mu.Unlock()
-	close(r.frames)
+	r.captureMu.Unlock()
 	<-r.done
 	return r.Err()
 }

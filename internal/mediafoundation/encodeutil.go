@@ -22,17 +22,7 @@ func checkFrame(cfg *codec.EncoderConfig, f *codec.Frame) error {
 	case len(f.Planes) != 2 || len(f.Strides) != 2:
 		return fmt.Errorf("%w: NV12 frame needs 2 planes and 2 strides, got %d and %d", codec.ErrInvalidData, len(f.Planes), len(f.Strides))
 	}
-	rows := [2]int{f.Height, (f.Height + 1) / 2}
-	rowBytes := [2]int{f.Width, (f.Width + 1) / 2 * 2}
-	for i := range f.Planes {
-		if f.Strides[i] < rowBytes[i] {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes[i])
-		}
-		if need := (rows[i]-1)*f.Strides[i] + rowBytes[i]; len(f.Planes[i]) < need {
-			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 // finishPacket turns an Annex-B access unit produced by the encoder into a

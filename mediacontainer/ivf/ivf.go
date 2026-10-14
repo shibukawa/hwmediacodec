@@ -99,9 +99,11 @@ func (r *Reader) Next() (frame []byte, pts uint64, err error) {
 	}
 	size := binary.LittleEndian.Uint32(h[0:4])
 	pts = binary.LittleEndian.Uint64(h[4:12])
-	frame = make([]byte, size)
-	if _, err := io.ReadFull(r.r, frame); err != nil {
-		if err == io.EOF {
+	// Grow as bytes arrive instead of trusting the 32-bit declared size:
+	// a truncated frame header must not cause a multi-gigabyte allocation.
+	frame, err = io.ReadAll(io.LimitReader(r.r, int64(size)))
+	if err != nil || uint64(len(frame)) != uint64(size) {
+		if err == nil {
 			err = io.ErrUnexpectedEOF
 		}
 		r.err = fmt.Errorf("ivf: truncated frame of %d bytes: %w", size, err)
@@ -148,8 +150,7 @@ func (w *Writer) writeHeader() error {
 		}
 	}
 	w.wrote = true
-	_, err := w.w.Write(w.header())
-	return err
+	return write(w.w, w.header())
 }
 
 func (w *Writer) header() []byte {
@@ -171,6 +172,10 @@ func (w *Writer) WriteFrame(data []byte, pts uint64) error {
 	if w.err != nil {
 		return w.err
 	}
+	if uint64(len(data)) > uint64(^uint32(0)) {
+		w.err = errors.New("ivf: frame size exceeds the 32-bit field")
+		return w.err
+	}
 	if err := w.writeHeader(); err != nil {
 		w.err = err
 		return err
@@ -178,11 +183,11 @@ func (w *Writer) WriteFrame(data []byte, pts uint64) error {
 	var h [frameHeaderSize]byte
 	binary.LittleEndian.PutUint32(h[0:4], uint32(len(data)))
 	binary.LittleEndian.PutUint64(h[4:12], pts)
-	if _, err := w.w.Write(h[:]); err != nil {
+	if err := write(w.w, h[:]); err != nil {
 		w.err = err
 		return err
 	}
-	if _, err := w.w.Write(data); err != nil {
+	if err := write(w.w, data); err != nil {
 		w.err = err
 		return err
 	}
@@ -212,9 +217,17 @@ func (w *Writer) Close() error {
 	if _, err := ws.Seek(w.start, io.SeekStart); err != nil {
 		return err
 	}
-	if _, err := ws.Write(w.header()); err != nil {
+	if err := write(ws, w.header()); err != nil {
 		return err
 	}
 	_, err = ws.Seek(end, io.SeekStart)
+	return err
+}
+
+func write(w io.Writer, p []byte) error {
+	n, err := w.Write(p)
+	if err == nil && n != len(p) {
+		return io.ErrShortWrite
+	}
 	return err
 }

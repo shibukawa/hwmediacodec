@@ -1,6 +1,20 @@
 package mediafoundation
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
+
+func TestHNSConversionOverflow(t *testing.T) {
+	for _, v := range []int64{math.MaxInt64, math.MinInt64} {
+		if got := toHNS(v, 1); got != v {
+			t.Errorf("toHNS(%d, 1) = %d, want saturation at %d", v, got, v)
+		}
+		if got := fromHNS(v, math.MaxInt32); got != v {
+			t.Errorf("fromHNS(%d, MaxInt32) = %d, want saturation at %d", v, got, v)
+		}
+	}
+}
 
 func TestHNSConversion(t *testing.T) {
 	cases := []struct {

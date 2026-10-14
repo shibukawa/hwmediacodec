@@ -269,11 +269,11 @@ func ParseSPS(nal []byte) (*SPS, error) {
 		if s.BitDepthChroma, err = r.ReadUE(); err != nil {
 			return nil, err
 		}
-		s.BitDepthLuma += 8
-		s.BitDepthChroma += 8
-		if s.BitDepthLuma > 14 || s.BitDepthChroma > 14 {
+		if s.BitDepthLuma > 6 || s.BitDepthChroma > 6 {
 			return nil, syntaxErr("bit depth out of range")
 		}
+		s.BitDepthLuma += 8
+		s.BitDepthChroma += 8
 		if s.QpprimeYZeroTransformBypass, err = r.ReadFlag(); err != nil {
 			return nil, err
 		}

@@ -394,7 +394,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	if err := e.takeFailure(); err != nil {
 		return err
 	}
-	if len(e.pending) >= maxPending {
+	if len(e.pending)+len(e.inflight) >= maxPending {
 		return codec.ErrAgain
 	}
 	if err := e.open(ctx); err != nil {

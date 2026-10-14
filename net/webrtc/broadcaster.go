@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // h264Codec is what the track offers. Constrained Baseline with
@@ -45,6 +47,7 @@ type peer struct {
 	pc      *pion.PeerConnection
 	track   *pion.TrackLocalStaticSample
 	started bool // true once a keyframe has been sent
+	closed  bool // guarded by Broadcaster.mu, including during Accept
 }
 
 // Broadcaster fans one encoded H.264 stream out to every connected
@@ -61,15 +64,23 @@ type Broadcaster struct {
 	peers   map[*peer]struct{}
 	lastPTS int64
 	closed  bool
+	writeMu sync.Mutex // preserves packet ordering across concurrent writers
 }
 
 // NewBroadcaster creates a broadcaster for a stream of fps frames per
 // second. requestKeyframe is called when a new viewer joins or a viewer
 // reports a picture loss; wire it to Recorder.RequestKeyframe (a viewer
 // only starts at a keyframe). iceServers lists STUN/TURN URLs, empty for
-// LAN use.
+// LAN use. Invalid or unrepresentable frame rates use 60 fps.
 func NewBroadcaster(fps float64, iceServers []string, requestKeyframe func()) *Broadcaster {
-	return &Broadcaster{fps: fps, iceServers: iceServers, requestKeyframe: requestKeyframe, peers: map[*peer]struct{}{}, lastPTS: -1}
+	period := float64(time.Second) / fps
+	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) || period < 1 || period >= float64(math.MaxInt64) {
+		fps = 60
+	}
+	if requestKeyframe == nil {
+		requestKeyframe = func() {}
+	}
+	return &Broadcaster{fps: fps, iceServers: append([]string(nil), iceServers...), requestKeyframe: requestKeyframe, peers: map[*peer]struct{}{}, lastPTS: -1}
 }
 
 // Viewers is the number of connected peers.
@@ -107,6 +118,12 @@ func (b *Broadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // answer once ICE candidates are gathered (so no trickle ICE is needed).
 // It is what ServeHTTP does, for programs with their own signalling.
 func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescription, error) {
+	b.mu.Lock()
+	closed := b.closed
+	b.mu.Unlock()
+	if closed {
+		return nil, errors.New("broadcaster is closed")
+	}
 	cfg := pion.Configuration{}
 	if len(b.iceServers) > 0 {
 		cfg.ICEServers = []pion.ICEServer{{URLs: b.iceServers}}
@@ -172,7 +189,7 @@ func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescri
 	}
 
 	b.mu.Lock()
-	if b.closed {
+	if b.closed || p.closed {
 		b.mu.Unlock()
 		pc.Close()
 		return nil, errors.New("broadcaster is closed")
@@ -185,10 +202,11 @@ func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescri
 
 func (b *Broadcaster) remove(p *peer) {
 	b.mu.Lock()
-	_, ok := b.peers[p]
+	wasClosed := p.closed
+	p.closed = true
 	delete(b.peers, p)
 	b.mu.Unlock()
-	if ok {
+	if !wasClosed {
 		p.pc.Close()
 	}
 }
@@ -199,10 +217,17 @@ func (b *Broadcaster) remove(p *peer) {
 // times are in 90 kHz units (capture.TimeScale). A viewer whose track
 // fails is dropped.
 func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
+	b.writeMu.Lock()
+	defer b.writeMu.Unlock()
 	dur := time.Duration(float64(time.Second) / b.fps)
 	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return hwmediacodec.ErrClosed
+	}
 	if b.lastPTS >= 0 && pkt.PTS > b.lastPTS {
-		dur = time.Duration(pkt.PTS-b.lastPTS) * time.Second / 90000
+		delta := pkt.PTS - b.lastPTS
+		dur = time.Duration(codec.RescaleTrunc(delta, 90000, int64(time.Second)))
 	}
 	b.lastPTS = pkt.PTS
 	peers := make([]*peer, 0, len(b.peers))

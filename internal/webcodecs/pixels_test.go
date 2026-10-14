@@ -16,6 +16,28 @@ func ramp(b []byte, seed int) {
 	}
 }
 
+func TestPlaneFitsRejectsOverflow(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, tc := range []struct {
+		l           planeLayout
+		rows, bytes int
+	}{
+		{planeLayout{offset: maxInt - 1, stride: 4}, 2, 4},
+		{planeLayout{stride: maxInt}, 3, 1},
+		{planeLayout{stride: 1}, 1, 0},
+	} {
+		if planeFits(tc.l, tc.rows, tc.bytes, 16) {
+			t.Errorf("overflowing plane was accepted: %+v", tc)
+		}
+	}
+	if _, err := packedRGB(make([]byte, 16), []planeLayout{{stride: 4}}, maxInt, 2); err == nil {
+		t.Fatal("overflowing RGB dimensions were accepted")
+	}
+	if err := i420ToNV12(nil, nil, make([]planeLayout, 3), maxInt, 2); err == nil {
+		t.Fatal("overflowing NV12 dimensions were accepted")
+	}
+}
+
 func TestI420ToNV12(t *testing.T) {
 	for _, size := range [][2]int{{8, 6}, {7, 5}, {1, 1}, {16, 2}} {
 		w, h := size[0], size[1]

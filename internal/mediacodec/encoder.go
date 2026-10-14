@@ -27,8 +27,8 @@ type encoder struct {
 
 	ps       *paramSets      // from the codec-config buffer, prepended to keyframes
 	inflight map[int64]int64 // presentationTimeUs -> caller PTS
-	sent     []int64         // PTS of every frame given to the encoder, in order
-	taken    int             // packets produced so far (decode order)
+	sent     []int64         // PTS of frames whose output has not been received
+	firstPTS int64           // first frame's PTS, to infer frameDur
 	frameDur int64           // one frame in TimeScale units, for DTS with B-frames
 	pending  []codec.Packet
 
@@ -234,7 +234,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 			return err
 		}
 	}
-	if len(e.pending) >= maxPending {
+	if len(e.pending)+len(e.inflight) >= maxPending {
 		return codec.ErrAgain
 	}
 
@@ -273,10 +273,14 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 		return backendErr("AMediaCodec_queueInputBuffer", st)
 	}
 	e.inflight[us] = f.PTS
-	if e.frameDur == 0 && len(e.sent) == 1 && f.PTS > e.sent[0] {
-		e.frameDur = f.PTS - e.sent[0]
+	if e.frameIndex == 0 {
+		e.firstPTS = f.PTS
+	} else if e.frameDur == 0 && e.frameIndex == 1 && f.PTS > e.firstPTS {
+		e.frameDur = f.PTS - e.firstPTS
 	}
-	e.sent = append(e.sent, f.PTS)
+	if e.cfg.BFrames && !e.cfg.LowLatency {
+		e.sent = append(e.sent, f.PTS)
+	}
 	e.frameIndex++
 	e.forceNext = false
 	return e.drainReady()
@@ -294,16 +298,7 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 	case len(f.Planes) != n || len(f.Strides) != n:
 		return fmt.Errorf("%w: %s frame needs %d planes and %d strides, got %d and %d", codec.ErrInvalidData, f.Format, n, n, len(f.Planes), len(f.Strides))
 	}
-	for i := range f.Planes {
-		rows, rowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
-		if f.Strides[i] < rowBytes {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes)
-		}
-		if need := (rows-1)*f.Strides[i] + rowBytes; len(f.Planes[i]) < need {
-			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 // restart makes an encoder that has delivered its end of stream take new
@@ -318,7 +313,6 @@ func (e *encoder) restart() error {
 	e.frameIndex = 0
 	clear(e.inflight)
 	e.sent = e.sent[:0]
-	e.taken = 0
 	return nil
 }
 
@@ -361,10 +355,11 @@ func (e *encoder) takeOutput(idx int, info *sys.BufferInfo) error {
 	}
 	var size uintptr
 	p := sys.AMediaCodec_getOutputBuffer(e.codec, uintptr(idx), &size)
-	if p == nil || int(size) < int(info.Offset)+int(info.Size) {
+	start, end, ok := outputRange(size, info.Offset, info.Size)
+	if p == nil || !ok {
 		return &codec.BackendError{Backend: Name, Op: "AMediaCodec_getOutputBuffer", Message: fmt.Sprintf("buffer of %d bytes, sample at %d+%d", size, info.Offset, info.Size)}
 	}
-	data := append([]byte(nil), unsafe.Slice(p, size)[info.Offset:info.Offset+info.Size]...)
+	data := append([]byte(nil), unsafe.Slice(p, end)[start:end]...)
 	pinfo := e.ps.inspect(data)
 	if info.Flags&sys.BufferFlagCodecConfig != 0 {
 		// The parameter sets, delivered once ahead of the first keyframe
@@ -385,16 +380,16 @@ func (e *encoder) takeOutput(idx int, info *sys.BufferInfo) error {
 		pts = fromMicros(info.PresentationTimeUs, e.cfg.TimeScale)
 	}
 	dts := pts
-	if e.cfg.BFrames && !e.cfg.LowLatency && e.taken < len(e.sent) {
+	if e.cfg.BFrames && !e.cfg.LowLatency && len(e.sent) > 0 {
 		// Packets come in decode order; with one B-frame of reordering
 		// the decode time of the k-th packet is one frame before the
 		// presentation time of the k-th frame given to the encoder.
-		dts = e.sent[e.taken] - e.frameDur
+		dts = e.sent[0] - e.frameDur
+		e.sent = e.sent[1:]
 		if dts > pts {
 			dts = pts
 		}
 	}
-	e.taken++
 	e.pending = append(e.pending, codec.Packet{Data: data, PTS: pts, DTS: dts, Keyframe: keyframe})
 	return nil
 }

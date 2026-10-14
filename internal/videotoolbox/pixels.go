@@ -53,6 +53,9 @@ func bufferPlanes(pb uintptr, f codec.PixelFormat) ([]bufferPlane, bool) {
 	}
 	width := int(sys.CVPixelBufferGetWidth(pb))
 	height := int(sys.CVPixelBufferGetHeight(pb))
+	if f.FrameSize(width, height) == 0 {
+		return nil, false
+	}
 	n := f.PlaneCount()
 	planes := make([]bufferPlane, n)
 	if f == codec.NV12 {
@@ -80,7 +83,7 @@ func bufferPlanes(pb uintptr, f codec.PixelFormat) ([]bufferPlane, bool) {
 		}
 	}
 	for _, pl := range planes {
-		if pl.base == nil || pl.stride < pl.width || pl.rows <= 0 {
+		if pl.base == nil || pl.width <= 0 || pl.stride < pl.width || pl.rows <= 0 || pl.rows-1 > (int(^uint(0)>>1)-pl.width)/pl.stride {
 			return nil, false
 		}
 	}
@@ -88,7 +91,7 @@ func bufferPlanes(pb uintptr, f codec.PixelFormat) ([]bufferPlane, bool) {
 }
 
 func (pl bufferPlane) bytes() []byte {
-	return unsafe.Slice(pl.base, pl.stride*pl.rows)
+	return unsafe.Slice(pl.base, (pl.rows-1)*pl.stride+pl.width)
 }
 
 // copyRows copies rows of rowBytes from src (stride sstride) to dst (stride

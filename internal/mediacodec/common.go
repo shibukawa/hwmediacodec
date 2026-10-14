@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/mediacodec/sys"
 )
 
@@ -25,13 +26,25 @@ const (
 
 // toMicros converts a timestamp in TimeScale units to microseconds.
 func toMicros(ts int64, timeScale int32) int64 {
-	scale := int64(timeScale)
-	return (ts*1_000_000 + scale/2) / scale
+	return codec.Rescale(ts, int64(timeScale), 1_000_000)
 }
 
 // fromMicros converts microseconds back to TimeScale units.
 func fromMicros(us int64, timeScale int32) int64 {
-	return (us*int64(timeScale) + 500_000) / 1_000_000
+	return codec.Rescale(us, 1_000_000, int64(timeScale))
+}
+
+// outputRange checks offsets before they are used to form an unsafe slice.
+// BufferInfo uses signed 32-bit values even on 64-bit Android.
+func outputRange(size uintptr, offset, length int32) (int, int, bool) {
+	if offset < 0 || length < 0 || uintptr(offset) > size || uintptr(length) > size-uintptr(offset) {
+		return 0, 0, false
+	}
+	end := uint64(offset) + uint64(length)
+	if end > uint64(^uint(0)>>1) {
+		return 0, 0, false
+	}
+	return int(offset), int(end), true
 }
 
 // dequeueInput waits for an input buffer, draining the output side in

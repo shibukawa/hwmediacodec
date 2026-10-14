@@ -53,23 +53,34 @@ func Encode(w io.Writer, img image.Image, o Options) error {
 	if o.Rotation%90 != 0 {
 		return fmt.Errorf("rotation must be a multiple of 90, got %d", o.Rotation)
 	}
-	rgba := toRGBA(img)
-	width, height := rgba.Rect.Dx(), rgba.Rect.Dy()
-	if width == 0 || height == 0 {
-		return errors.New("empty image")
+	if img == nil {
+		return errors.New("nil image")
+	}
+	b := img.Bounds()
+	width, height := b.Dx(), b.Dy()
+	maxInt := int(^uint(0) >> 1)
+	if width <= 0 || height <= 0 || width > maxInt/4/height || uint64(width) >= 1<<32 || uint64(height) >= 1<<32 {
+		return errors.New("image dimensions are invalid or too large")
 	}
 	// The hardware encoders work on 4:2:0 pictures with even dimensions
 	// (VideoToolbox silently rounds an odd request down), so odd pictures
 	// are padded by one replicated row or column and a clean-aperture
 	// (clap) property tells readers the real size.
 	codedW, codedH := width+width%2, height+height%2
+	if uint64(codedW) >= 1<<32 || uint64(codedH) >= 1<<32 {
+		return errors.New("padded image dimensions exceed the 32-bit fields")
+	}
 
 	// Tiles (one when the picture fits).
 	tileW, tileH, cols, rows := codedW, codedH, 1, 1
 	if o.TileSize > 0 && (codedW > o.TileSize || codedH > o.TileSize) {
 		tileW, tileH = o.TileSize+o.TileSize%2, o.TileSize+o.TileSize%2
-		cols, rows = (codedW+tileW-1)/tileW, (codedH+tileH-1)/tileH
+		cols, rows = 1+(codedW-1)/tileW, 1+(codedH-1)/tileH
 	}
+	if cols > 256 || rows > 256 || cols*rows > 65534 {
+		return errors.New("tile grid exceeds the container's 16-bit item IDs or 8-bit dimensions")
+	}
+	rgba := toRGBA(img)
 	var tiles []*image.RGBA
 	for r := 0; r < rows; r++ {
 		for c := 0; c < cols; c++ {
@@ -216,27 +227,32 @@ func av1Item(tu []byte) (codedItem, error) {
 		start := off
 		off++
 		if hasExt {
+			if off == len(tu) {
+				return codedItem{}, errors.New("truncated AV1 OBU extension")
+			}
 			off++
 		}
 		if !hasSize {
 			return codedItem{}, errors.New("AV1 OBU without a size field")
 		}
-		size, n := 0, 0
+		size, n := uint64(0), 0
+		terminated := false
 		for n < 8 && off+n < len(tu) {
 			b := tu[off+n]
-			size |= int(b&0x7f) << (7 * n)
+			size |= uint64(b&0x7f) << (7 * n)
 			n++
 			if b&0x80 == 0 {
+				terminated = true
 				break
 			}
 		}
 		off += n
-		if off+size > len(tu) {
+		if !terminated || size > uint64(len(tu)-off) {
 			return codedItem{}, errors.New("truncated AV1 OBU")
 		}
 		if typ == 1 {
-			seqHdr = tu[start : off+size]
-			sh, err := av1.ParseSequenceHeader(tu[off : off+size])
+			seqHdr = tu[start : off+int(size)]
+			sh, err := av1.ParseSequenceHeader(tu[off : off+int(size)])
 			if err != nil {
 				return codedItem{}, fmt.Errorf("AV1 sequence header: %w", err)
 			}
@@ -247,7 +263,7 @@ func av1Item(tu []byte) (codedItem, error) {
 			}
 			return codedItem{config: buf.Bytes(), data: tu}, nil
 		}
-		off += size
+		off += int(size)
 	}
 	return codedItem{}, errors.New("the encoded AV1 picture carries no sequence header")
 }
@@ -458,6 +474,9 @@ func writeFile(w io.Writer, coded []codedItem, cols, rows, width, height, codedW
 	out.raw(ftyp)
 	out.raw(meta)
 	out.box("mdat", mdat)
-	_, err := w.Write(out.buf)
+	nWritten, err := w.Write(out.buf)
+	if err == nil && nWritten != len(out.buf) {
+		return io.ErrShortWrite
+	}
 	return err
 }

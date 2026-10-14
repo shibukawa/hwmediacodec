@@ -222,9 +222,5 @@ const timestampStep = 10_000
 
 // toMicros converts a timestamp in TimeScale units to microseconds.
 func toMicros(ts int64, timeScale int32) int64 {
-	scale := int64(timeScale)
-	if ts < 0 {
-		return -((-ts*1_000_000 + scale/2) / scale)
-	}
-	return (ts*1_000_000 + scale/2) / scale
+	return codec.Rescale(ts, int64(timeScale), 1_000_000)
 }

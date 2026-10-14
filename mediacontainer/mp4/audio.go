@@ -3,6 +3,7 @@ package mp4
 import (
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
@@ -159,12 +160,12 @@ func (s *AudioPacketSource) SeekKeyframe(t time.Duration) (time.Duration, error)
 	if a.format.Codec == hwmediacodec.Opus {
 		t -= opusPreroll
 	}
-	ts := int64(t)*int64(a.TimeScale)/int64(time.Second) + a.MediaTimeOffset
-	// The last sample that starts at or before ts.
+	// The last sample that starts at or before t. Compare durations so
+	// converting a long-running stream does not overflow t * TimeScale.
 	lo, hi := 0, len(a.samples)
 	for lo < hi {
 		mid := (lo + hi) / 2
-		if a.samples[mid].dts <= ts {
+		if a.PresentationTime(a.samples[mid].dts) <= t {
 			lo = mid + 1
 		} else {
 			hi = mid
@@ -200,7 +201,7 @@ func (m *Muxer) AddAudioTrack(format hwmediacodec.AudioFormat, timeScale uint32)
 	if format.Codec != hwmediacodec.AAC && format.Codec != hwmediacodec.Opus {
 		return nil, fmt.Errorf("mp4: cannot write %s samples", format.Codec)
 	}
-	if format.SampleRate <= 0 || format.Channels <= 0 || timeScale == 0 {
+	if format.SampleRate <= 0 || format.Channels <= 0 || timeScale == 0 || timeScale > math.MaxInt32 {
 		return nil, fmt.Errorf("mp4: an audio track needs a sample rate, a channel count and a time scale, got %d Hz, %d channels and %d", format.SampleRate, format.Channels, timeScale)
 	}
 	a := &AudioWriter{format: format}
@@ -216,6 +217,9 @@ func (m *Muxer) AddAudioTrack(format hwmediacodec.AudioFormat, timeScale uint32)
 
 // WritePacket writes one packet from an audio encoder.
 func (a *AudioWriter) WritePacket(p hwmediacodec.Packet) error {
+	if p.Duration > math.MaxUint32 {
+		return fmt.Errorf("mp4: audio sample duration exceeds the 32-bit field")
+	}
 	dur := uint32(p.Duration)
 	if p.Duration <= 0 {
 		dur = a.frame

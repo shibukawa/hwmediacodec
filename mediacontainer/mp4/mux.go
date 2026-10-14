@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"os"
 
@@ -26,6 +27,7 @@ type Muxer struct {
 	mdat   int64 // offset of the mdat box header
 	last   *trackWriter
 	closed bool
+	err    error
 }
 
 type outSample struct {
@@ -67,6 +69,7 @@ func Create(path string) (*Muxer, error) {
 
 // NewMuxer starts writing a file to w.
 func NewMuxer(w io.WriteSeeker) (*Muxer, error) {
+	w = checkedWriteSeeker{w}
 	m := &Muxer{w: w}
 	ftyp := mp4ff.NewFtyp("isom", 512, []string{"isom", "iso2", "avc1", "mp41"})
 	if err := ftyp.Encode(w); err != nil {
@@ -95,6 +98,9 @@ type VideoWriter struct {
 // always emit them in-band). The time scale is the unit of Packet.PTS and
 // Packet.DTS.
 func (m *Muxer) AddVideoTrack(c hwmediacodec.Codec, timeScale uint32) (*VideoWriter, error) {
+	if timeScale == 0 || timeScale > math.MaxInt32 {
+		return nil, errors.New("mp4: video track needs a positive 32-bit time scale")
+	}
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
 		return nil, fmt.Errorf("mp4: cannot write %s samples", c)
 	}
@@ -125,8 +131,14 @@ func (m *Muxer) addTrack(timeScale uint32, build func(*mp4ff.StblBox) (*mp4ff.Tr
 }
 
 func (m *Muxer) write(t *trackWriter, data []byte, s outSample) error {
+	if m.err != nil {
+		return m.err
+	}
 	if m.closed {
 		return errors.New("mp4: muxer is closed")
+	}
+	if uint64(len(data)) > math.MaxUint32 {
+		return errors.New("mp4: sample size exceeds the 32-bit field")
 	}
 	if m.last != t {
 		t.chunkOff = append(t.chunkOff, uint64(m.pos))
@@ -136,6 +148,7 @@ func (m *Muxer) write(t *trackWriter, data []byte, s outSample) error {
 	n, err := m.w.Write(data)
 	m.pos += int64(n)
 	if err != nil {
+		m.err = err
 		return err
 	}
 	s.size = uint32(len(data))
@@ -273,7 +286,7 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 		switch {
 		case i+1 < n:
 			d := t.samples[i+1].dts - s.dts
-			if d <= 0 {
+			if d <= 0 || d > math.MaxUint32 {
 				return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: decode time does not increase at sample %d", t.id, i)
 			}
 			s.dur = uint32(d)
@@ -302,6 +315,9 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 		cto := s.pts - s.dts
 		if cto < 0 {
 			return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d has PTS before DTS", t.id, i)
+		}
+		if cto > math.MaxInt32 {
+			return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d composition offset exceeds the 32-bit field", t.id, i)
 		}
 		if ctts == nil && cto != 0 {
 			ctts = &mp4ff.CttsBox{}
@@ -385,13 +401,28 @@ func (m *Muxer) Close() error {
 		return nil
 	}
 	m.closed = true
-	err := m.writeMoov()
+	err := m.err
+	if err == nil {
+		err = m.writeMoov()
+	}
 	if m.closer != nil {
 		if cerr := m.closer.Close(); err == nil {
 			err = cerr
 		}
 	}
 	return err
+}
+
+// Encode implementations in mp4ff expect Writer's contract: a partial
+// write must include an error. Enforce it at the container boundary too.
+type checkedWriteSeeker struct{ io.WriteSeeker }
+
+func (w checkedWriteSeeker) Write(p []byte) (int, error) {
+	n, err := w.WriteSeeker.Write(p)
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	return n, err
 }
 
 func (m *Muxer) writeMoov() error {

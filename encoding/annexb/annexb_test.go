@@ -2,6 +2,7 @@ package annexb
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 	"testing/iotest"
@@ -11,6 +12,54 @@ import (
 
 func h264NAL(t uint8, payload ...byte) []byte {
 	return append([]byte{0x60 | t}, payload...)
+}
+
+func TestReaderAccessUnitLimit(t *testing.T) {
+	for name, nals := range map[string][][]byte{
+		"single NAL": {h264NAL(H264NALSliceIDR, append([]byte{0x80}, bytes.Repeat([]byte{0xaa}, 100)...)...)},
+		"many NALs":  {h264NAL(H264NALSPS, 1), h264NAL(H264NALSPS, 2), h264NAL(H264NALSPS, 3)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := NewReader(bytes.NewReader(buildStream(nals...)), codec.H264)
+			r.MaxAccessUnitSize = 12
+			if _, err := r.Next(); !errors.Is(err, ErrAccessUnitTooLarge) {
+				t.Fatalf("limit: %v, want ErrAccessUnitTooLarge", err)
+			}
+			if _, err := r.Next(); !errors.Is(err, ErrAccessUnitTooLarge) {
+				t.Fatalf("subsequent call: %v", err)
+			}
+		})
+	}
+	stream := buildStream(h264NAL(H264NALSliceIDR, 0x80, 0xaa))
+	r := NewReader(iotest.OneByteReader(bytes.NewReader(stream)), codec.H264)
+	r.MaxAccessUnitSize = len(stream)
+	if got, err := r.Next(); err != nil || !bytes.Equal(got, stream) {
+		t.Fatalf("exact limit: %x, %v", got, err)
+	}
+}
+
+func TestReaderLargeNALAfterCompaction(t *testing.T) {
+	first := h264NAL(H264NALSliceIDR, append([]byte{0x80}, bytes.Repeat([]byte{0xaa}, readChunk+9)...)...)
+	second := h264NAL(H264NALSlice, append([]byte{0x80}, bytes.Repeat([]byte{0xbb}, 3*readChunk+7)...)...)
+	r := NewReader(iotest.HalfReader(bytes.NewReader(buildStream(first, second))), codec.H264)
+	for _, nal := range [][]byte{first, second} {
+		got, err := r.Next()
+		if err != nil || !bytes.Equal(got, buildStream(nal)) {
+			t.Fatalf("NAL of %d bytes: got %d bytes, %v", len(nal), len(got), err)
+		}
+	}
+}
+
+func BenchmarkReaderLargeNAL(b *testing.B) {
+	stream := buildStream(h264NAL(H264NALSliceIDR, append([]byte{0x80}, bytes.Repeat([]byte{0xaa}, 4<<20)...)...))
+	b.SetBytes(int64(len(stream)))
+	b.ReportAllocs()
+	for b.Loop() {
+		r := NewReader(bytes.NewReader(stream), codec.H264)
+		if _, err := r.Next(); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func TestSplit(t *testing.T) {

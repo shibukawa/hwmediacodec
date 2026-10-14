@@ -324,7 +324,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := d.takeFailure(); err != nil {
 		return err
 	}
-	if len(d.slots) >= d.pendingLimit() {
+	if len(d.slots) >= d.pendingLimit() || len(d.slots)+len(d.inflight) >= maxPending {
 		return codec.ErrAgain
 	}
 	d.flushed = false

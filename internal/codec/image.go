@@ -9,11 +9,11 @@ import (
 // pixels, so the frame can be released afterwards. Frames in another
 // format are refused: open the decoder with WithOutputFormat(RGBA).
 func (f *Frame) RGBAImage() (*image.RGBA, error) {
+	if err := f.Validate(); err != nil {
+		return nil, err
+	}
 	if f.Format != RGBA && f.Format != BGRA {
 		return nil, fmt.Errorf("hwmediacodec: a %s frame is not an RGB picture: %w", f.Format, ErrInvalidData)
-	}
-	if len(f.Planes) < 1 || len(f.Strides) < 1 || len(f.Planes[0]) < (f.Height-1)*f.Strides[0]+4*f.Width {
-		return nil, fmt.Errorf("hwmediacodec: frame has no pixel data (released?): %w", ErrInvalidData)
 	}
 	img := image.NewRGBA(image.Rect(0, 0, f.Width, f.Height))
 	src, stride := f.Planes[0], f.Strides[0]
@@ -32,6 +32,9 @@ func (f *Frame) RGBAImage() (*image.RGBA, error) {
 // frame shares the image's pixels, which must stay untouched until
 // Encoder.Send has returned. The alpha channel is ignored by the encoders.
 func RGBAFrame(img *image.RGBA, pts int64) *Frame {
+	if img == nil {
+		return nil
+	}
 	w, h := img.Rect.Dx(), img.Rect.Dy()
 	pix := img.Pix
 	if off := img.PixOffset(img.Rect.Min.X, img.Rect.Min.Y); off > 0 && off <= len(pix) {

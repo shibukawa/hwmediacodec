@@ -167,7 +167,7 @@ func (d *audioDecoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := d.takeFailure(); err != nil {
 		return err
 	}
-	if len(d.out) >= maxAudioPending {
+	if len(d.out)+len(d.waiting) >= maxAudioPending {
 		return codec.ErrAgain
 	}
 	samples := d.frame

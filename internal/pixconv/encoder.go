@@ -45,6 +45,9 @@ func (e *Encoder) Send(ctx context.Context, f *codec.Frame) error {
 	if e.closed {
 		return codec.ErrClosed
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.check(f); err != nil {
 		return err
 	}
@@ -67,14 +70,7 @@ func (e *Encoder) check(f *codec.Frame) error {
 	case len(f.Planes) != 1 || len(f.Strides) != 1:
 		return fmt.Errorf("%w: %s frame needs 1 plane and 1 stride, got %d and %d", codec.ErrInvalidData, e.format, len(f.Planes), len(f.Strides))
 	}
-	rowBytes := 4 * e.width
-	if f.Strides[0] < rowBytes {
-		return fmt.Errorf("%w: plane 0 stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, f.Strides[0], rowBytes)
-	}
-	if need := (e.height-1)*f.Strides[0] + rowBytes; len(f.Planes[0]) < need {
-		return fmt.Errorf("%w: plane 0 holds %d bytes, need %d", codec.ErrInvalidData, len(f.Planes[0]), need)
-	}
-	return nil
+	return f.Validate()
 }
 
 // Receive implements codec.Encoder.

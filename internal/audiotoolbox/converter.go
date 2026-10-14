@@ -79,6 +79,11 @@ func onInput(converter uintptr, ioPackets *uint32, ioData *sys.AudioBufferList, 
 	inputsMu.Lock()
 	in := inputs[user]
 	inputsMu.Unlock()
+	if *ioPackets == 0 {
+		ioData.Buffer.Data = nil
+		ioData.Buffer.DataByteSize = 0
+		return 0
+	}
 	if in == nil || len(in.chunks) == 0 {
 		*ioPackets = 0
 		ioData.Buffer.Data = nil
@@ -90,7 +95,8 @@ func onInput(converter uintptr, ioPackets *uint32, ioData *sys.AudioBufferList, 
 	}
 	chunk := in.chunks[0]
 	if in.unit > 0 {
-		if want := int(*ioPackets) * in.unit; want < len(chunk) {
+		packets := min(uint64(*ioPackets), uint64(len(chunk)/in.unit))
+		if want := int(packets) * in.unit; want < len(chunk) {
 			in.chunks[0] = chunk[want:]
 			chunk = chunk[:want]
 		} else {
@@ -107,7 +113,7 @@ func onInput(converter uintptr, ioPackets *uint32, ioData *sys.AudioBufferList, 
 	}
 	in.held = chunk
 	ioData.NumberBuffers = 1
-	ioData.Buffer.Data = unsafe.Pointer(&chunk[0])
+	ioData.Buffer.Data = unsafe.Pointer(unsafe.SliceData(chunk))
 	ioData.Buffer.DataByteSize = uint32(len(chunk))
 	return 0
 }

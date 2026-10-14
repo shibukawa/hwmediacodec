@@ -38,18 +38,31 @@ func (d *Decoder) Send(ctx context.Context, p codec.Packet) error {
 	if d.closed {
 		return codec.ErrClosed
 	}
-	d.flushing = false
-	d.drained = false
 	nals := annexb.Split(p.Data)
 	if len(nals) == 0 {
-		return d.inner.Send(ctx, p) // the backend reports ErrInvalidData
+		if err := d.inner.Send(ctx, p); err != nil {
+			return err // the backend reports ErrInvalidData
+		}
+		d.flushing = false
+		d.drained = false
+		return nil
 	}
-	order, forward := d.tracker.Classify(nals)
+	next := d.tracker.tentative(nals)
+	order, forward := next.Classify(nals)
 	if !forward {
+		*d.tracker = next
+		d.flushing = false
+		d.drained = false
 		return nil
 	}
 	codec.SetPacketOrder(&p, order)
-	return d.inner.Send(ctx, p)
+	if err := d.inner.Send(ctx, p); err != nil {
+		return err
+	}
+	*d.tracker = next
+	d.flushing = false
+	d.drained = false
+	return nil
 }
 
 // Receive implements codec.Decoder.
@@ -99,10 +112,12 @@ func (d *Decoder) Flush(ctx context.Context) error {
 	if d.closed {
 		return codec.ErrClosed
 	}
-	err := d.inner.Flush(ctx)
+	if err := d.inner.Flush(ctx); err != nil {
+		return err
+	}
 	d.flushing = true
 	d.tracker.Reset()
-	return err
+	return nil
 }
 
 // Close implements codec.Decoder.

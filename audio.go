@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
@@ -70,6 +71,8 @@ func NewAudioDecoder(ctx context.Context, format AudioFormat, opts ...AudioDecod
 		return nil, &UnsupportedError{Codec: format.Codec, Direction: Decode, Reason: "not an audio codec; use NewDecoder"}
 	case format.SampleRate < 0 || format.Channels < 0:
 		return nil, fmt.Errorf("hwmediacodec: sample rate and channel count must not be negative, got %d Hz and %d channels", format.SampleRate, format.Channels)
+	case format.SampleRate > math.MaxInt32 || format.Channels > math.MaxInt32 || format.FrameSamples < 0 || format.FrameSamples > math.MaxInt32 || format.Delay < 0 || format.Delay > math.MaxInt32:
+		return nil, fmt.Errorf("hwmediacodec: audio stream format is out of range")
 	}
 	var unsupported error
 	for _, b := range codec.AudioBackends() {
@@ -119,10 +122,12 @@ func NewAudioEncoder(ctx context.Context, c Codec, sampleRate, channels int, opt
 		return nil, &UnsupportedError{Codec: c, Direction: Encode, Reason: "not an audio codec; use NewEncoder"}
 	case sampleRate <= 0 || channels <= 0:
 		return nil, fmt.Errorf("hwmediacodec: sample rate and channel count must be positive, got %d Hz and %d channels", sampleRate, channels)
+	case sampleRate > math.MaxInt32 || channels > math.MaxInt32:
+		return nil, fmt.Errorf("hwmediacodec: audio stream format is out of range")
 	case cfg.TimeScale < 0:
 		return nil, fmt.Errorf("hwmediacodec: time scale must be positive, got %d", cfg.TimeScale)
-	case cfg.Bitrate < 0:
-		return nil, fmt.Errorf("hwmediacodec: bitrate must not be negative, got %d", cfg.Bitrate)
+	case cfg.Bitrate < 0 || cfg.Bitrate > math.MaxInt32:
+		return nil, fmt.Errorf("hwmediacodec: bitrate is out of range, got %d", cfg.Bitrate)
 	case cfg.RateControl != VBR && cfg.RateControl != CBR:
 		return nil, fmt.Errorf("hwmediacodec: unknown rate control %s", cfg.RateControl)
 	}

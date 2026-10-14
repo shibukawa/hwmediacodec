@@ -119,16 +119,23 @@ func (p PixelFormat) PlaneCount() int {
 // per row of plane i of a picture of the given size, or (0, 0) when the
 // plane does not exist.
 func (p PixelFormat) PlaneLayout(i, width, height int) (rows, rowBytes int) {
+	if width <= 0 || height <= 0 {
+		return 0, 0
+	}
 	switch p {
 	case NV12:
 		switch i {
 		case 0:
 			return height, width
 		case 1:
-			return (height + 1) / 2, (width + 1) / 2 * 2
+			chromaWidth := width/2 + width%2
+			if chromaWidth > int(^uint(0)>>1)/2 {
+				return 0, 0
+			}
+			return height/2 + height%2, chromaWidth * 2
 		}
 	case RGBA, BGRA:
-		if i == 0 {
+		if i == 0 && width <= int(^uint(0)>>1)/4 {
 			return height, width * 4
 		}
 	}
@@ -136,11 +143,15 @@ func (p PixelFormat) PlaneLayout(i, width, height int) (rows, rowBytes int) {
 }
 
 // FrameSize returns the number of bytes of a tightly packed picture of the
-// given size in format p.
+// given size in format p, or 0 for an invalid size, an unknown format, or
+// a size that cannot be represented as an int.
 func (p PixelFormat) FrameSize(width, height int) int {
 	n := 0
 	for i := 0; i < p.PlaneCount(); i++ {
 		rows, rowBytes := p.PlaneLayout(i, width, height)
+		if rows <= 0 || rowBytes <= 0 || rows > (int(^uint(0)>>1)-n)/rowBytes {
+			return 0
+		}
 		n += rows * rowBytes
 	}
 	return n
