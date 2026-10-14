@@ -247,10 +247,12 @@ func TestMuxAudioWithVideo(t *testing.T) {
 				t.Errorf("read back: pictures from %v, sound from %v; one of them should start the presentation", firstV, firstA)
 			}
 
-			// The sound itself is untouched by the offset.
+			// The sound itself is untouched by the offset. (What ffmpeg
+			// plays beyond it is the padding of the last packet: behind
+			// an empty edit, and in ffmpeg 7 and older always.)
 			heard := testutil.DecodeAudio(t, path, false, "")
 			extra := len(heard) - len(pcm)
-			if shift, snr := testutil.AudioAlignment(pcm, heard, channels, 8); extra < 0 || (extra > 0 && c.lead <= 0) || extra >= 1024*channels || shift != 0 || snr < 20 {
+			if shift, snr := testutil.AudioAlignment(pcm, heard, channels, 8); extra < 0 || extra >= 1024*channels || shift != 0 || snr < 20 {
 				t.Errorf("ffmpeg plays %d samples for %d: best SNR %.1f dB at a shift of %d samples", len(heard)/channels, len(pcm)/channels, snr, shift)
 			}
 		})

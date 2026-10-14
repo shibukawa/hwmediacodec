@@ -26,6 +26,7 @@ type Frames struct {
 	waiting []packet
 	pcm     []byte
 	out     []*codec.AudioFrame
+	skip    int // samples still to drop from what is appended
 }
 
 type packet struct {
@@ -54,9 +55,20 @@ func (f *Frames) Scale(num, den int) {
 // Append adds decoded samples (interleaved, in Format) and cuts the frames
 // that are complete with them.
 func (f *Frames) Append(data []byte) {
+	if f.skip > 0 {
+		n := min(f.skip, len(data)/f.unit())
+		f.skip -= n
+		data = data[n*f.unit():]
+	}
 	f.pcm = append(f.pcm, data...)
 	f.cut()
 }
+
+// Skip drops the next samples that are appended, for a decoder that runs
+// behind: its output starts with samples that belong to no packet. What
+// the last packet lacks in the end is for the caller to append (the
+// decoder's tail, or silence with Pad) before End.
+func (f *Frames) Skip(samples int) { f.skip += samples }
 
 // Pad adds silence in front of the samples still to come, for a decoder
 // that withholds the first samples of a stream for good.
@@ -100,11 +112,11 @@ func (f *Frames) End() {
 	if len(f.waiting) > 0 && len(f.pcm) > 0 {
 		f.push(f.pcm)
 	}
-	f.waiting, f.pcm = nil, nil
+	f.waiting, f.pcm, f.skip = nil, nil, 0
 }
 
 // Reset drops the packets and samples that have not become frames.
-func (f *Frames) Reset() { f.waiting, f.pcm = nil, nil }
+func (f *Frames) Reset() { f.waiting, f.pcm, f.skip = nil, nil, 0 }
 
 // Ready is the number of frames waiting for Next.
 func (f *Frames) Ready() int { return len(f.out) }
