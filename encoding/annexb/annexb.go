@@ -173,6 +173,11 @@ func beginsAccessUnit(c codec.Codec, t int, nal []byte) bool {
 
 // Reader groups the NAL units of an Annex-B stream into access units.
 type Reader struct {
+	// MaxAccessUnitSize limits the size in bytes of an assembled access
+	// unit, including start codes. Zero uses DefaultMaxAccessUnitSize.
+	// Set this before calling Next to allow larger pictures.
+	MaxAccessUnitSize int
+
 	src   io.Reader
 	codec codec.Codec
 	buf   []byte
@@ -190,7 +195,23 @@ type Reader struct {
 	lastOff int64 // stream offset of the access unit Next returned last
 }
 
-const readChunk = 64 << 10
+const (
+	readChunk = 64 << 10
+	// DefaultMaxAccessUnitSize bounds buffering for streams that do not
+	// contain a complete NAL unit or picture boundary.
+	DefaultMaxAccessUnitSize = 64 << 20
+)
+
+// ErrAccessUnitTooLarge reports a NAL unit or access unit exceeding the
+// reader's MaxAccessUnitSize.
+var ErrAccessUnitTooLarge = errors.New("annexb: access unit too large")
+
+func (r *Reader) maxAccessUnitSize() int {
+	if r.MaxAccessUnitSize > 0 {
+		return r.MaxAccessUnitSize
+	}
+	return DefaultMaxAccessUnitSize
+}
 
 // NewReader returns a Reader for c over r.
 func NewReader(r io.Reader, c codec.Codec) *Reader {
@@ -232,11 +253,17 @@ func (r *Reader) Next() ([]byte, error) {
 			r.lastOff = r.auOff
 			r.au = nil
 			r.hasVCL = false
-			r.appendNAL(nal)
+			if err := r.appendNAL(nal); err != nil {
+				r.err = err
+				return nil, err
+			}
 			r.hasVCL = IsVCL(r.codec, t)
 			return au, nil
 		}
-		r.appendNAL(nal)
+		if err := r.appendNAL(nal); err != nil {
+			r.err = err
+			return nil, err
+		}
 		if IsVCL(r.codec, t) {
 			r.hasVCL = true
 		}
@@ -251,12 +278,17 @@ func (r *Reader) Next() ([]byte, error) {
 // index for seeking.
 func (r *Reader) Offset() int64 { return r.lastOff }
 
-func (r *Reader) appendNAL(nal []byte) {
+func (r *Reader) appendNAL(nal []byte) error {
+	limit := r.maxAccessUnitSize()
+	if len(r.au) > limit-4 || len(nal) > limit-4-len(r.au) {
+		return ErrAccessUnitTooLarge
+	}
 	if len(r.au) == 0 {
 		r.auOff = r.nalOff
 	}
 	r.au = append(r.au, 0, 0, 0, 1)
 	r.au = append(r.au, nal...)
+	return nil
 }
 
 // nextNAL returns the next NAL unit (aliasing the internal buffer, valid
@@ -279,25 +311,37 @@ func (r *Reader) nextNAL() ([]byte, error) {
 			}
 			continue
 		}
-		start := r.off + i + 3
-		r.nalOff = r.base + int64(r.off+i)
-		j := bytes.Index(r.buf[start:], startCode)
-		if j < 0 {
-			if !r.eof {
-				if err := r.fill(); err != nil {
-					return nil, err
-				}
-				continue
+		r.off += i
+		start := r.off + 3
+		r.nalOff = r.base + int64(r.off)
+		scan := start
+		var nal []byte
+		for {
+			j := bytes.Index(r.buf[scan:], startCode)
+			if j >= 0 {
+				end := scan + j
+				nal = trimZeros(r.buf[start:end])
+				r.off = end
+				break
 			}
-			nal := trimZeros(r.buf[start:])
-			r.off = len(r.buf)
-			if len(nal) == 0 {
-				return nil, io.EOF
+			if r.eof {
+				nal = trimZeros(r.buf[start:])
+				r.off = len(r.buf)
+				break
 			}
-			return nal, nil
+			// Leave two bytes of lookahead for a start code split across
+			// reads. A complete NAL is checked again when it is appended.
+			if len(r.buf)-start > r.maxAccessUnitSize() {
+				return nil, ErrAccessUnitTooLarge
+			}
+			oldLen, oldOff := len(r.buf), r.off
+			if err := r.fill(); err != nil {
+				return nil, err
+			}
+			consumed := oldOff - r.off
+			start -= consumed
+			scan = max(start, oldLen-consumed-2)
 		}
-		nal := trimZeros(r.buf[start : start+j])
-		r.off = start + j
 		if len(nal) == 0 {
 			continue
 		}
@@ -313,11 +357,17 @@ func (r *Reader) fill() error {
 		r.off = 0
 	}
 	if cap(r.buf)-len(r.buf) < readChunk {
-		nb := make([]byte, len(r.buf), len(r.buf)+readChunk)
+		capacity := max(2*cap(r.buf), len(r.buf)+readChunk)
+		nb := make([]byte, len(r.buf), capacity)
 		copy(nb, r.buf)
 		r.buf = nb
 	}
-	n, err := r.src.Read(r.buf[len(r.buf):cap(r.buf)])
+	// Keep reads bounded even when geometric growth leaves ample capacity.
+	end := len(r.buf) + min(readChunk, cap(r.buf)-len(r.buf))
+	n, err := r.src.Read(r.buf[len(r.buf):end])
+	if n < 0 || n > end-len(r.buf) {
+		return errors.New("annexb: reader returned an invalid byte count")
+	}
 	r.buf = r.buf[:len(r.buf)+n]
 	if err == io.EOF {
 		r.eof = true

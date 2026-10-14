@@ -47,22 +47,27 @@ func NewPlaylist(window int, target time.Duration) *Playlist {
 	if window < 3 {
 		window = 3
 	}
+	if target <= 0 {
+		target = time.Second
+	}
 	return &Playlist{window: window, target: target}
 }
 
-// SetInit stores the init segment; it is the Segmenter's onInit.
+// SetInit copies the init segment; it is the Segmenter's onInit.
 func (p *Playlist) SetInit(data []byte) error {
 	p.mu.Lock()
-	p.init = data
+	p.init = append([]byte(nil), data...)
 	p.mu.Unlock()
 	return nil
 }
 
-// Add appends a media segment; it is the Segmenter's onSegment.
+// Add copies and appends a media segment; it is the Segmenter's onSegment.
 func (p *Playlist) Add(s mp4.Segment) error {
+	s.Data = append([]byte(nil), s.Data...)
 	p.mu.Lock()
 	p.segs = append(p.segs, s)
 	if len(p.segs) > p.window {
+		clear(p.segs[:len(p.segs)-p.window])
 		p.segs = p.segs[len(p.segs)-p.window:]
 	}
 	p.mu.Unlock()

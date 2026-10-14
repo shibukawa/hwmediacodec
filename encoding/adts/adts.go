@@ -91,6 +91,10 @@ func (r *Reader) Next() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("adts: frame %d: %w: %w", r.next, err, codec.ErrInvalidData)
 	}
+	if h.SampleRate != r.format.SampleRate || h.ChannelConfig != int(r.format.Config[1]>>3&0xf) ||
+		h.ObjectType != int(r.format.Config[0]>>3) {
+		return nil, fmt.Errorf("adts: frame %d changes the stream format: %w", r.next, codec.ErrInvalidData)
+	}
 	if h.Blocks != 1 {
 		return nil, fmt.Errorf("adts: frame %d holds %d access units, which is not supported: %w", r.next, h.Blocks, codec.ErrInvalidData)
 	}
@@ -161,6 +165,9 @@ func (w *Writer) WritePacket(p codec.Packet) error {
 		return fmt.Errorf("adts: %w", err)
 	}
 	w.buf = append(buf, p.Data...)
-	_, err = w.w.Write(w.buf)
+	n, err := w.w.Write(w.buf)
+	if err == nil && n != len(w.buf) {
+		return io.ErrShortWrite
+	}
 	return err
 }

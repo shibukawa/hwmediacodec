@@ -3,6 +3,7 @@ package codec
 import (
 	"context"
 	"fmt"
+	"math/bits"
 	"sync"
 	"time"
 	"unsafe"
@@ -87,19 +88,34 @@ type AudioFrame struct {
 
 // Samples is the number of samples per channel in the frame.
 func (f *AudioFrame) Samples() int {
-	n := f.Channels * f.Format.BytesPerSample()
-	if n == 0 {
+	if f == nil || f.Channels <= 0 || f.Format.BytesPerSample() == 0 {
 		return 0
 	}
-	return len(f.Data) / n
+	return len(f.Data) / f.Format.BytesPerSample() / f.Channels
+}
+
+// Validate checks the sample format, rate, channel count and interleaved
+// data length. An empty frame is valid.
+func (f *AudioFrame) Validate() error {
+	if f == nil {
+		return fmt.Errorf("%w: nil audio frame", ErrInvalidData)
+	}
+	size := f.Format.BytesPerSample()
+	if f.SampleRate <= 0 || f.Channels <= 0 || size == 0 || f.Channels > int(^uint(0)>>1)/size {
+		return fmt.Errorf("%w: invalid audio format", ErrInvalidData)
+	}
+	if len(f.Data)%(size*f.Channels) != 0 {
+		return fmt.Errorf("%w: %d bytes are not a whole number of interleaved samples", ErrInvalidData, len(f.Data))
+	}
+	return nil
 }
 
 // Duration is the play time of the frame.
 func (f *AudioFrame) Duration() time.Duration {
-	if f.SampleRate <= 0 {
+	if f == nil || f.SampleRate <= 0 {
 		return 0
 	}
-	return time.Duration(f.Samples()) * time.Second / time.Duration(f.SampleRate)
+	return time.Duration(RescaleTrunc(int64(f.Samples()), int64(f.SampleRate), int64(time.Second)))
 }
 
 // Int16s returns the samples of an S16 frame as numbers, and nil for a
@@ -298,13 +314,47 @@ func AudioBackends() []AudioBackend {
 
 // Rescale converts v from units of 1/from to units of 1/to, rounding to
 // the nearest unit (halves away from zero).
+// Results outside the int64 range saturate at its nearest endpoint.
 func Rescale(v, from, to int64) int64 {
+	return rescale(v, from, to, true)
+}
+
+// RescaleTrunc converts timestamp units like Rescale, truncating toward
+// zero. Results outside the int64 range saturate at its nearest endpoint.
+func RescaleTrunc(v, from, to int64) int64 {
+	return rescale(v, from, to, false)
+}
+
+func rescale(v, from, to int64, round bool) int64 {
 	if from == to || from <= 0 {
 		return v
 	}
-	n := v * to
-	if n >= 0 {
-		return (n + from/2) / from
+	negative := (v < 0) != (to < 0)
+	abs := func(n int64) uint64 {
+		if n < 0 {
+			return uint64(-(n + 1)) + 1
+		}
+		return uint64(n)
 	}
-	return -((-n + from/2) / from)
+	hi, lo := bits.Mul64(abs(v), abs(to))
+	limit := uint64(1<<63 - 1)
+	if negative {
+		limit++
+	}
+	var q uint64
+	if hi >= uint64(from) {
+		q = limit
+	} else {
+		var rem uint64
+		q, rem = bits.Div64(hi, lo, uint64(from))
+		if q >= limit {
+			q = limit
+		} else if round && rem >= uint64(from)/2+uint64(from)%2 {
+			q++
+		}
+	}
+	if negative {
+		return -int64(q)
+	}
+	return int64(q)
 }

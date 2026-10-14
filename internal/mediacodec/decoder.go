@@ -101,7 +101,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 			return err
 		}
 	}
-	if len(d.pending) >= maxPending {
+	if len(d.pending)+len(d.inflight) >= maxPending {
 		return codec.ErrAgain
 	}
 
@@ -376,10 +376,11 @@ func (d *decoder) takeOutput(idx int, info *sys.BufferInfo) error {
 	if p == nil {
 		return &codec.BackendError{Backend: Name, Op: "AMediaCodec_getOutputBuffer", Message: "no buffer"}
 	}
-	if int(size) < int(info.Offset)+int(info.Size) {
+	start, end, ok := outputRange(size, info.Offset, info.Size)
+	if !ok {
 		return &codec.BackendError{Backend: Name, Op: "AMediaCodec_getOutputBuffer", Message: fmt.Sprintf("buffer of %d bytes, sample at %d+%d", size, info.Offset, info.Size)}
 	}
-	buf := unsafe.Slice(p, size)[info.Offset : info.Offset+info.Size]
+	buf := unsafe.Slice(p, end)[start:end]
 	if need := d.out.size(); len(buf) < need {
 		return &codec.BackendError{Backend: Name, Op: "output buffer", Message: fmt.Sprintf("%d bytes, the %dx%d layout needs %d", len(buf), d.out.width, d.out.height, need)}
 	}

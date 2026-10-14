@@ -2,6 +2,7 @@ package mediafoundation
 
 import (
 	"bytes"
+	"math"
 	"testing"
 )
 
@@ -77,6 +78,10 @@ func TestCopyNV12Errors(t *testing.T) {
 		{0, 0, 17, 8},  // wider than pitch
 		{0, 0, 16, 17}, // taller than surface
 		{-1, 0, 4, 4},  // negative offset
+		{math.MaxInt, 0, 4, 4},
+		{0, math.MaxInt, 4, 4},
+		{1, 0, math.MaxInt, 4},
+		{0, 1, 4, math.MaxInt},
 	}
 	for _, r := range cases {
 		if _, _, err := copyNV12(make([]byte, 1024), src, r); err == nil {
@@ -89,6 +94,15 @@ func TestCopyNV12Errors(t *testing.T) {
 	short := nv12Image{data: src.data[:len(src.data)-1], pitch: 16, allocHeight: 16}
 	if _, _, err := copyNV12(make([]byte, 1024), short, rect{0, 0, 16, 16}); err == nil {
 		t.Error("short source: expected an error")
+	}
+	for _, image := range []nv12Image{
+		{data: make([]byte, 8), pitch: math.MaxInt/2 + 1, allocHeight: 4},
+		{data: make([]byte, 8), pitch: 4, allocHeight: math.MaxInt/2 + 1},
+		{data: make([]byte, 8), pitch: 3, allocHeight: 1}, // chroma row needs 4 bytes
+	} {
+		if _, _, err := copyNV12(make([]byte, 16), image, rect{0, 0, 3, 1}); err == nil {
+			t.Errorf("invalid surface %+v: expected an error", image)
+		}
 	}
 }
 

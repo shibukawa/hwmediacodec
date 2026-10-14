@@ -451,20 +451,7 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 	case f.Width != e.cfg.Width || f.Height != e.cfg.Height:
 		return fmt.Errorf("%w: frame size %dx%d, encoder expects %dx%d", codec.ErrInvalidData, f.Width, f.Height, e.cfg.Width, e.cfg.Height)
 	}
-	n := f.Format.PlaneCount()
-	if len(f.Planes) != n || len(f.Strides) != n {
-		return fmt.Errorf("%w: %s frame needs %d planes and strides, got %d and %d", codec.ErrInvalidData, f.Format, n, len(f.Planes), len(f.Strides))
-	}
-	for i := 0; i < n; i++ {
-		rows, rowBytes := f.Format.PlaneLayout(i, f.Width, f.Height)
-		if f.Strides[i] < rowBytes {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes)
-		}
-		if need := (rows-1)*f.Strides[i] + rowBytes; len(f.Planes[i]) < need {
-			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {

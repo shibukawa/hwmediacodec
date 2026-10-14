@@ -34,6 +34,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
@@ -92,8 +93,9 @@ type Player struct {
 // can loop and Seek (the stream is scanned once for keyframes on the first
 // seek).
 func NewStream(r io.Reader, c hwmediacodec.Codec, fps float64, opts ...Option) (*Player, error) {
-	if fps <= 0 {
-		return nil, fmt.Errorf("playback: frame rate must be positive, got %g", fps)
+	period := float64(time.Second) / fps
+	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) || period < 1 || period >= float64(math.MaxInt64) {
+		return nil, fmt.Errorf("playback: frame rate must have a finite, representable frame period, got %g", fps)
 	}
 	ss, err := newStreamSource(r, c, fps)
 	if err != nil {

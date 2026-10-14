@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/hevc"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // Sample is one sample of a track: a video access unit (already converted
@@ -84,6 +87,7 @@ type Demuxer struct {
 	video  *VideoTrack
 	audio  *AudioTrack
 	others []*Track
+	mu     sync.Mutex // sample reads share the seek position of rs
 }
 
 // Open opens the file at path.
@@ -104,6 +108,17 @@ func Open(path string) (*Demuxer, error) {
 // NewDemuxer parses the movie header of rs. Sample data is read on demand,
 // so rs must stay open while the Demuxer is used.
 func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
+	start, err := rs.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, fmt.Errorf("mp4: reader position: %w", err)
+	}
+	end, err := rs.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, fmt.Errorf("mp4: reader size: %w", err)
+	}
+	if _, err := rs.Seek(start, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("mp4: restore reader position: %w", err)
+	}
 	file, err := mp4ff.DecodeFile(rs, mp4ff.WithDecodeMode(mp4ff.DecModeLazyMdat))
 	if err != nil {
 		return nil, fmt.Errorf("mp4: parse: %w", err)
@@ -113,6 +128,14 @@ func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 	}
 	if file.Moov == nil || file.Mdat == nil {
 		return nil, errors.New("mp4: file has no moov or mdat box")
+	}
+	mdatStart := file.Mdat.PayloadAbsoluteOffset()
+	mdatSize := file.Mdat.GetLazyDataSize()
+	if !file.Mdat.IsLazy() {
+		mdatSize = file.Mdat.DataLength()
+	}
+	if end < 0 || mdatStart > uint64(end) || mdatSize > uint64(end)-mdatStart {
+		return nil, errors.New("mp4: mdat extends beyond the file")
 	}
 	d := &Demuxer{rs: rs, file: file}
 	for _, trak := range file.Moov.Traks {
@@ -140,8 +163,12 @@ func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 
 // Close closes the file when the Demuxer was created with Open.
 func (d *Demuxer) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.closer != nil {
-		return d.closer.Close()
+		err := d.closer.Close()
+		d.closer = nil
+		return err
 	}
 	return nil
 }
@@ -164,11 +191,16 @@ func (d *Demuxer) Duration() time.Duration {
 	if mvhd == nil || mvhd.Timescale == 0 {
 		return 0
 	}
-	return time.Duration(mvhd.Duration) * time.Second / time.Duration(mvhd.Timescale)
+	seconds, remainder := mvhd.Duration/uint64(mvhd.Timescale), mvhd.Duration%uint64(mvhd.Timescale)
+	if seconds > math.MaxInt64/uint64(time.Second) {
+		return time.Duration(math.MaxInt64)
+	}
+	ns := seconds*uint64(time.Second) + remainder*uint64(time.Second)/uint64(mvhd.Timescale)
+	return time.Duration(min(ns, uint64(math.MaxInt64)))
 }
 
 func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
-	if trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil || trak.Mdia.Mdhd == nil || trak.Mdia.Hdlr == nil {
+	if trak == nil || trak.Tkhd == nil || trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil || trak.Mdia.Mdhd == nil || trak.Mdia.Hdlr == nil {
 		return nil, errors.New("mp4: track is missing mandatory boxes")
 	}
 	t := &Track{
@@ -177,6 +209,9 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 		TimeScale: trak.Mdia.Mdhd.Timescale,
 		Trak:      trak,
 		d:         d,
+	}
+	if t.TimeScale == 0 || t.TimeScale > math.MaxInt32 {
+		return nil, fmt.Errorf("mp4: track %d has an unsupported time scale %d", t.ID, t.TimeScale)
 	}
 	if trak.Edts != nil {
 		for _, elst := range trak.Edts.Elst {
@@ -194,6 +229,36 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 		return nil, fmt.Errorf("mp4: track %d has an incomplete sample table", t.ID)
 	}
 	n := stbl.Stsz.GetNrSamples()
+	if len(stbl.Stts.SampleCount) != len(stbl.Stts.SampleTimeDelta) {
+		return nil, fmt.Errorf("mp4: track %d has an invalid decoding time table", t.ID)
+	}
+	var timedSamples, timedDuration uint64
+	for i, count := range stbl.Stts.SampleCount {
+		timedSamples += uint64(count)
+		duration := uint64(count) * uint64(stbl.Stts.SampleTimeDelta[i])
+		if duration > math.MaxInt64-timedDuration {
+			return nil, fmt.Errorf("mp4: track %d decoding duration overflows", t.ID)
+		}
+		timedDuration += duration
+	}
+	if timedSamples != uint64(n) {
+		return nil, fmt.Errorf("mp4: track %d: time table covers %d of %d samples", t.ID, timedSamples, n)
+	}
+	// Even a uniform-size stsz stores n in four bytes. Verify that its
+	// samples fit in the actual media data before allocating an n-entry index.
+	mdatSize := d.file.Mdat.GetLazyDataSize()
+	if !d.file.Mdat.IsLazy() {
+		mdatSize = d.file.Mdat.DataLength()
+	}
+	if uint64(n) > uint64(int(^uint(0)>>1))/40 {
+		return nil, fmt.Errorf("mp4: track %d sample count exceeds the media data", t.ID)
+	}
+	if stbl.Stsz.SampleUniformSize == 0 && uint64(len(stbl.Stsz.SampleSize)) != uint64(n) {
+		return nil, fmt.Errorf("mp4: track %d has an invalid sample size table", t.ID)
+	}
+	if stbl.Stsz.SampleUniformSize > 0 && uint64(n)*uint64(stbl.Stsz.SampleUniformSize) > mdatSize {
+		return nil, fmt.Errorf("mp4: track %d sample sizes exceed the media data", t.ID)
+	}
 	t.samples = make([]sampleInfo, n)
 	for i := uint32(0); i < n; i++ {
 		t.samples[i].size = stbl.Stsz.GetSampleSize(int(i + 1))
@@ -243,6 +308,12 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 	sample := 0
 	entries := stbl.Stsc.Entries
 	for ei, e := range entries {
+		if e.FirstChunk == 0 || e.SamplesPerChunk == 0 || (ei == 0 && e.FirstChunk != 1) ||
+			(ei > 0 && e.FirstChunk <= entries[ei-1].FirstChunk) || uint64(e.FirstChunk) > uint64(len(chunkOffsets)) {
+			return nil, fmt.Errorf("mp4: track %d has an invalid chunk table entry %d", t.ID, ei+1)
+		}
+	}
+	for ei, e := range entries {
 		last := uint32(len(chunkOffsets))
 		if ei+1 < len(entries) {
 			last = entries[ei+1].FirstChunk - 1
@@ -253,6 +324,10 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 			}
 			off := chunkOffsets[chunk-1]
 			for s := uint32(0); s < e.SamplesPerChunk && sample < int(n); s++ {
+				mdatStart := d.file.Mdat.PayloadAbsoluteOffset()
+				if off < mdatStart || off-mdatStart > mdatSize || uint64(t.samples[sample].size) > mdatSize-(off-mdatStart) {
+					return nil, fmt.Errorf("mp4: track %d sample %d is outside the media data", t.ID, sample)
+				}
 				t.samples[sample].offset = off
 				off += uint64(t.samples[sample].size)
 				sample++
@@ -330,7 +405,7 @@ func (t *Track) PresentationLength() time.Duration {
 
 // TimeOf converts a track time to a duration.
 func (t *Track) TimeOf(ts int64) time.Duration {
-	return time.Duration(ts) * time.Second / time.Duration(t.TimeScale)
+	return time.Duration(codec.RescaleTrunc(ts, int64(t.TimeScale), int64(time.Second)))
 }
 
 // PresentationTime is the moment a player shows a sample with the given
@@ -345,6 +420,8 @@ func (t *Track) Sample(i int) (Sample, error) {
 		return Sample{}, fmt.Errorf("mp4: sample %d out of range [0, %d)", i, len(t.samples))
 	}
 	s := t.samples[i]
+	t.d.mu.Lock()
+	defer t.d.mu.Unlock()
 	data, err := t.d.file.Mdat.ReadData(int64(s.offset), int64(s.size), t.d.rs)
 	if err != nil {
 		return Sample{}, fmt.Errorf("mp4: read sample %d: %w", i, err)
@@ -382,13 +459,12 @@ func (v *VideoTrack) Keyframes() []int {
 // presentation time is not after t, or the first sync sample when t lies
 // before it.
 func (v *VideoTrack) KeyframeAtOrBefore(t time.Duration) int {
-	ts := int64(t)*int64(v.TimeScale)/int64(time.Second) + v.MediaTimeOffset
 	best := -1
 	for i, s := range v.samples {
 		if !s.sync {
 			continue
 		}
-		if s.dts+int64(s.cto) > ts && best >= 0 {
+		if v.PresentationTime(s.dts+int64(s.cto)) > t && best >= 0 {
 			break
 		}
 		best = i

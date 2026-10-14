@@ -84,10 +84,10 @@ func AppendADTS(dst []byte, c Config, payloadSize int) ([]byte, error) {
 	if c.ChannelConfig < 1 || c.ChannelConfig > 7 {
 		return dst, fmt.Errorf("aac: ADTS cannot carry channel configuration %d", c.ChannelConfig)
 	}
-	size := payloadSize + ADTSHeaderSize
-	if payloadSize < 0 || size > maxADTSFrame {
+	if payloadSize < 0 || payloadSize > maxADTSFrame-ADTSHeaderSize {
 		return dst, fmt.Errorf("aac: an access unit of %d bytes does not fit an ADTS frame", payloadSize)
 	}
+	size := payloadSize + ADTSHeaderSize
 	return append(dst,
 		0xFF,
 		0xF1, // MPEG-4, layer 0, no CRC

@@ -3,6 +3,7 @@ package annexb
 import (
 	"testing"
 
+	"github.com/shibukawa/hwmediacodec/internal/bitstream"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
@@ -39,5 +40,32 @@ func TestParameterSetID(t *testing.T) {
 				t.Fatalf("got kind=%d id=%d ok=%v, want kind=%d id=%d ok=%v", kind, id, ok, tt.kind, tt.id, tt.ok)
 			}
 		})
+	}
+}
+
+func TestParameterSetIDRange(t *testing.T) {
+	for _, tc := range []struct {
+		c      codec.Codec
+		typ    int
+		header []byte
+		maxID  uint32
+	}{
+		{codec.H264, H264NALSPS, []byte{0x67, 0x64, 0, 0x1e}, 31},
+		{codec.H264, H264NALPPS, []byte{0x68}, 255},
+		{codec.HEVC, HEVCNALSPS, append([]byte{0x42, 1, 1}, make([]byte, 12)...), 15},
+		{codec.HEVC, HEVCNALPPS, []byte{0x44, 1}, 63},
+	} {
+		for _, id := range []uint32{tc.maxID, tc.maxID + 1, 1<<31 - 1} {
+			w := bitstream.NewWriter()
+			w.WriteUE(id)
+			nal := append(append([]byte{}, tc.header...), w.Bytes()...)
+			_, got, ok := ParameterSetID(tc.c, tc.typ, nal)
+			if ok != (id <= tc.maxID) || ok && got != id {
+				t.Fatalf("codec %s NAL type %d ID %d: got %d, %v", tc.c, tc.typ, id, got, ok)
+			}
+		}
+	}
+	if _, _, ok := ParameterSetID(codec.HEVC, HEVCNALSPS, []byte{0x42, 1, 0x0f}); ok {
+		t.Fatal("accepted seven sublayers")
 	}
 }

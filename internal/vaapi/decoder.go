@@ -560,26 +560,28 @@ func (d *decoder) copySurface(s *surface) (*codec.Frame, error) {
 	width, height := s.width, s.height
 	rowBytes := [2]int{width, (width + 1) / 2 * 2}
 	rows := [2]int{height, (height + 1) / 2}
-	total := rowBytes[0]*rows[0] + rowBytes[1]*rows[1]
+	total := codec.NV12.FrameSize(width, height)
+	if total == 0 {
+		return nil, imageLayoutError("copy frame")
+	}
 	buf := d.getBuffer(total)
 	planes := make([][]byte, 2)
 	strides := make([]int, 2)
 	off := 0
 	for i := 0; i < 2; i++ {
-		pitch := int(img.Pitches[i])
-		start := int(img.Offsets[i])
 		x, y := s.cropX, s.cropY
 		if i == 1 {
 			y /= 2
 		}
+		region, pitch, err := imageRegion(src, &img, i, x, y, rows[i], rowBytes[i])
+		if err != nil {
+			d.putBuffer(buf)
+			return nil, err
+		}
 		dst := buf[off : off+rowBytes[i]*rows[i]]
 		for r := 0; r < rows[i]; r++ {
-			so := start + (y+r)*pitch + x
-			if so+rowBytes[i] > len(src) {
-				d.putBuffer(buf)
-				return nil, &codec.BackendError{Backend: Name, Op: "copy frame", Message: "image smaller than the picture"}
-			}
-			copy(dst[r*rowBytes[i]:(r+1)*rowBytes[i]], src[so:so+rowBytes[i]])
+			so := r * pitch
+			copy(dst[r*rowBytes[i]:(r+1)*rowBytes[i]], region[so:so+rowBytes[i]])
 		}
 		planes[i] = dst
 		strides[i] = rowBytes[i]

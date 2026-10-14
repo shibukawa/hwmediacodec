@@ -24,25 +24,26 @@ type box struct {
 func parseBoxes(data []byte, base int) ([]box, error) {
 	var out []box
 	for off := 0; off < len(data); {
-		if off+8 > len(data) {
+		if len(data)-off < 8 {
 			return nil, errors.New("truncated box header")
 		}
-		size := int(binary.BigEndian.Uint32(data[off:]))
+		size64 := uint64(binary.BigEndian.Uint32(data[off:]))
 		typ := string(data[off+4 : off+8])
 		hdr := 8
-		switch size {
+		switch size64 {
 		case 0:
-			size = len(data) - off
+			size64 = uint64(len(data) - off)
 		case 1:
-			if off+16 > len(data) {
+			if len(data)-off < 16 {
 				return nil, errors.New("truncated large box header")
 			}
-			size = int(binary.BigEndian.Uint64(data[off+8:]))
+			size64 = binary.BigEndian.Uint64(data[off+8:])
 			hdr = 16
 		}
-		if size < hdr || off+size > len(data) {
-			return nil, fmt.Errorf("box %q has size %d beyond the data", typ, size)
+		if size64 < uint64(hdr) || size64 > uint64(len(data)-off) {
+			return nil, fmt.Errorf("box %q has size %d beyond the data", typ, size64)
 		}
+		size := int(size64) // checked against the remaining slice before conversion
 		out = append(out, box{typ: typ, data: data[off+hdr : off+size], start: base + off + hdr})
 		off += size
 	}
@@ -78,7 +79,7 @@ func (r *reader) need(n int) bool {
 	if r.err != nil {
 		return false
 	}
-	if r.off+n > len(r.b) {
+	if n < 0 || n > len(r.b)-r.off {
 		r.err = errors.New("box payload truncated")
 		return false
 	}

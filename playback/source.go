@@ -11,6 +11,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
 // ErrNotSeekable is returned by Player.Seek when the source is not a
@@ -64,6 +65,9 @@ type source struct {
 }
 
 func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool, format hwmediacodec.PixelFormat) (*source, error) {
+	if src == nil || src.TimeScale() <= 0 {
+		return nil, errors.New("playback: source needs a positive time scale")
+	}
 	seeker, _ := src.(hwmediacodec.PacketSeeker)
 	if loop && seeker == nil {
 		return nil, errors.New("playback: looping needs a seekable source (an io.ReadSeeker or a hwmediacodec.PacketSeeker)")
@@ -226,7 +230,7 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 		outIndex = s.stream.index
 	}
 	emitFrame := func(f *hwmediacodec.Frame) (*seekRequest, error) {
-		pts := time.Duration(f.PTS) * time.Second / s.scale
+		pts := time.Duration(codec.RescaleTrunc(f.PTS, int64(s.scale), int64(time.Second)))
 		if s.stream != nil {
 			pts = s.stream.frameTime(outIndex)
 			outIndex++

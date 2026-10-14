@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"unsafe"
 
@@ -165,8 +166,13 @@ func (d *decoder) setOpusFrame(samples int) {
 	}
 }
 
-func (d *decoder) createConverter() error {
+func (d *decoder) createConverter() (err error) {
 	d.disposeConverter()
+	defer func() {
+		if err != nil {
+			d.disposeConverter()
+		}
+	}()
 	dst := pcmDescription(d.cfg.SampleFormat, d.sampleRate, d.channels)
 	var conv uintptr
 	if st := sys.AudioConverterNew(&d.source, &dst, &conv); st != 0 {
@@ -210,7 +216,10 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if len(p.Data) == 0 {
 		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
 	}
-	if len(d.out) >= maxPending {
+	if uint64(len(p.Data)) > math.MaxUint32 {
+		return fmt.Errorf("hwmediacodec: audio packet exceeds AudioToolbox's buffer size: %w", codec.ErrInvalidData)
+	}
+	if len(d.out)+len(d.pts) >= maxPending {
 		return codec.ErrAgain
 	}
 	if d.cfg.Format.Codec == codec.Opus {
@@ -218,7 +227,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 		if err != nil {
 			return fmt.Errorf("hwmediacodec: %w: %w", err, codec.ErrInvalidData)
 		}
-		if samples != d.frame {
+		if samples != d.frame || d.conv == 0 {
 			d.setOpusFrame(samples)
 			if err := d.createConverter(); err != nil {
 				return err
@@ -237,6 +246,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if st != 0 && st != statusNoData {
 		// Leave the converter usable for the packets that follow.
 		sys.AudioConverterReset(d.conv)
+		d.pts, d.pcm = nil, nil
 		return fmt.Errorf("%w: %w", backendError("AudioConverterFillComplexBuffer", st), codec.ErrInvalidData)
 	}
 	data := buf[:n*bytesPerFrame]
@@ -295,6 +305,9 @@ func (d *decoder) fill(buf []byte) (int, int32) {
 	}}
 	n := uint32(d.frame)
 	st := sys.AudioConverterFillComplexBuffer(d.conv, inputCallback(), d.handle, &n, &list, nil)
+	if n > uint32(d.frame) || uint64(list.Buffer.DataByteSize) > uint64(len(buf)) || uint64(n)*uint64(d.channels*d.cfg.SampleFormat.BytesPerSample()) > uint64(list.Buffer.DataByteSize) {
+		return 0, sys.StatusInvalidOutputSize
+	}
 	return int(n), st
 }
 
@@ -303,6 +316,9 @@ func (d *decoder) Receive(ctx context.Context) (*codec.AudioFrame, error) {
 	defer d.mu.Unlock()
 	if d.closed {
 		return nil, codec.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if len(d.out) > 0 {
 		f := d.out[0]
@@ -325,6 +341,10 @@ func (d *decoder) Flush(ctx context.Context) error {
 	if d.closed {
 		return codec.ErrClosed
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var err error
 	d.flushed = true
 	if len(d.pts) > 0 {
 		size := d.frame * d.channels * d.cfg.SampleFormat.BytesPerSample()
@@ -332,6 +352,9 @@ func (d *decoder) Flush(ctx context.Context) error {
 		for {
 			buf := make([]byte, size)
 			n, st := d.fill(buf)
+			if st != 0 && st != statusNoData {
+				err = backendError("AudioConverterFillComplexBuffer", st)
+			}
 			if st != 0 || n == 0 {
 				break
 			}
@@ -345,10 +368,10 @@ func (d *decoder) Flush(ctx context.Context) error {
 		}
 	}
 	d.pts, d.pcm = nil, nil
-	if st := sys.AudioConverterReset(d.conv); st != 0 {
+	if st := sys.AudioConverterReset(d.conv); st != 0 && err == nil {
 		return backendError("AudioConverterReset", st)
 	}
-	return nil
+	return err
 }
 
 func (d *decoder) Close() error {
@@ -363,5 +386,7 @@ func (d *decoder) Close() error {
 		unregisterInput(d.handle)
 	}
 	d.out = nil
+	d.pts, d.pcm = nil, nil
+	d.in.chunks, d.in.held = nil, nil
 	return nil
 }

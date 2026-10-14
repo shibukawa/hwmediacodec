@@ -29,6 +29,43 @@ func stream(t *testing.T, format hwmediacodec.AudioFormat, n int) ([]byte, [][]b
 	return buf.Bytes(), units
 }
 
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) { return len(p) - 1, nil }
+
+func TestWriterShortWrite(t *testing.T) {
+	w, err := adts.NewWriter(shortWriter{}, hwmediacodec.AudioFormat{Codec: hwmediacodec.AAC, SampleRate: 48000, Channels: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WritePacket(hwmediacodec.Packet{Data: []byte{1, 2, 3}}); !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("short write: %v, want io.ErrShortWrite", err)
+	}
+}
+
+func TestReaderRejectsFormatChange(t *testing.T) {
+	format := hwmediacodec.AudioFormat{Codec: hwmediacodec.AAC, SampleRate: 48000, Channels: 2}
+	first, _ := stream(t, format, 1)
+	for name, nextFormat := range map[string]hwmediacodec.AudioFormat{
+		"rate":     {Codec: hwmediacodec.AAC, SampleRate: 44100, Channels: 2},
+		"channels": {Codec: hwmediacodec.AAC, SampleRate: 48000, Channels: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			second, _ := stream(t, nextFormat, 1)
+			r, err := adts.NewReader(bytes.NewReader(append(first, second...)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Next(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Next(); !errors.Is(err, hwmediacodec.ErrInvalidData) {
+				t.Fatalf("format change: %v, want ErrInvalidData", err)
+			}
+		})
+	}
+}
+
 func TestRoundTrip(t *testing.T) {
 	format := hwmediacodec.AudioFormat{Codec: hwmediacodec.AAC, SampleRate: 44100, Channels: 2}
 	data, units := stream(t, format, 5)

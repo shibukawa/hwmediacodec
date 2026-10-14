@@ -1,9 +1,58 @@
 package codec
 
 import (
+	"errors"
+	"math"
+	"math/big"
+	"math/rand"
 	"testing"
 	"time"
 )
+
+func TestRescaleOverflow(t *testing.T) {
+	values := []int64{math.MinInt64, math.MinInt64 + 1, -1000000000000, -1, 0, 1, 1000000000000, math.MaxInt64 - 1, math.MaxInt64}
+	rng := rand.New(rand.NewSource(42))
+	for i := 0; i < 1000; i++ {
+		values = append(values, rng.Int63(), -rng.Int63())
+	}
+	for _, v := range values {
+		for _, scale := range [][2]int64{{48000, 90000}, {90000, 1000000000}, {1, math.MaxInt64}, {math.MaxInt64, math.MaxInt64 - 1}, {3, -2}, {3, math.MinInt64}} {
+			from, to := scale[0], scale[1]
+			n := new(big.Int).Mul(big.NewInt(v), big.NewInt(to))
+			negative := n.Sign() < 0
+			n.Abs(n).Add(n, big.NewInt(from/2)).Quo(n, big.NewInt(from))
+			if negative {
+				n.Neg(n)
+			}
+			want := n.Int64()
+			if n.Cmp(big.NewInt(math.MaxInt64)) > 0 {
+				want = math.MaxInt64
+			} else if n.Cmp(big.NewInt(math.MinInt64)) < 0 {
+				want = math.MinInt64
+			}
+			if got := Rescale(v, from, to); got != want {
+				t.Fatalf("Rescale(%d, %d, %d) = %d, want %d", v, from, to, got, want)
+			}
+		}
+	}
+}
+
+func TestAudioFrameInvalidLayout(t *testing.T) {
+	for _, f := range []*AudioFrame{
+		nil,
+		{SampleRate: 48000, Channels: -1, Format: S16},
+		{SampleRate: 48000, Channels: math.MaxInt/2 + 1, Format: S16, Data: make([]byte, 4)},
+		{SampleRate: 48000, Channels: 2, Format: F32, Data: make([]byte, 7)},
+		{SampleRate: 48000, Channels: 2, Format: SampleFormat(255)},
+	} {
+		if err := f.Validate(); !errors.Is(err, ErrInvalidData) {
+			t.Errorf("Validate(%+v) = %v", f, err)
+		}
+		if n := f.Samples(); n < 0 {
+			t.Errorf("Samples(%+v) = %d", f, n)
+		}
+	}
+}
 
 func TestRescale(t *testing.T) {
 	cases := []struct{ v, from, to, want int64 }{
@@ -34,6 +83,9 @@ func TestAudioFrame(t *testing.T) {
 	}
 	if f.Duration() != 3*time.Second/48000 {
 		t.Errorf("duration %v", f.Duration())
+	}
+	if got := S16Frame([]int16{1}, 44100, 1, 0).Duration(); got != time.Second/44100 {
+		t.Errorf("duration must truncate fractional nanoseconds: %v", got)
 	}
 	// The frame shares the slice, and so does the view back.
 	samples[1] = 7

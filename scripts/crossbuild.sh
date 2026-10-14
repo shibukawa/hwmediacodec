@@ -7,8 +7,10 @@ for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 wi
   os=${target%/*}
   arch=${target#*/}
   printf '%-14s ' "$target"
-  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build ./... && echo ok
+  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build ./...
+  echo ok
 done
 # The browser: the WebCodecs backend (scripts/browser_test.sh runs it).
 printf '%-14s ' "js/wasm"
-GOOS=js GOARCH=wasm go build ./... && echo ok
+GOOS=js GOARCH=wasm go build ./...
+echo ok

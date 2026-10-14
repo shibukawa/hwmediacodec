@@ -6,6 +6,8 @@
 package reorder
 
 import (
+	"maps"
+
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 	"github.com/shibukawa/hwmediacodec/internal/h264"
@@ -30,6 +32,27 @@ type Tracker struct {
 	hevcSPS map[uint32]*hevc.SPS
 	hevcPPS map[uint32]*hevc.PPS
 	hevcPOC hevc.POCState
+}
+
+// tentative copies picture-order state for a send that may be rejected by
+// the backend. Parameter maps need copying only when this access unit can
+// replace parameter sets. Lazy PPS parsing otherwise changes only caches.
+func (t *Tracker) tentative(nals [][]byte) Tracker {
+	next := *t
+	for _, nal := range nals {
+		if !annexb.IsParameterSet(t.codec, annexb.NALUnitType(t.codec, nal)) {
+			continue
+		}
+		switch t.codec {
+		case codec.H264:
+			next.h264PS = t.h264PS.Clone()
+		case codec.HEVC:
+			next.hevcSPS = maps.Clone(t.hevcSPS)
+			next.hevcPPS = maps.Clone(t.hevcPPS)
+		}
+		break
+	}
+	return next
 }
 
 // NewTracker returns a Tracker for c.

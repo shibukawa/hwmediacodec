@@ -15,9 +15,6 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/vaapi/sys"
 )
 
-// Name is the backend identifier reported in Capability.Backend.
-const Name = "vaapi"
-
 // Backend is the VA-API backend.
 type Backend struct{}
 

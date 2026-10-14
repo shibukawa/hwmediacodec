@@ -170,3 +170,23 @@ func TestLayoutFromColorFormat(t *testing.T) {
 		t.Error("the flexible format alone does not describe a layout")
 	}
 }
+
+func TestLayoutRejectsOverflowAndShortRows(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, cf := range []int32{sys.ColorFormatYUV420SemiPlanar, sys.ColorFormatYUV420Planar} {
+		if _, err := layoutFromColorFormat(cf, 2, 2, maxInt, maxInt); err == nil {
+			t.Errorf("format %d accepted overflowing geometry", cf)
+		}
+	}
+	b := mediaImage2(32, 32, [3]plane{{0, 1, 16}, {1024, 2, 32}, {1025, 2, 32}})
+	if _, err := parseMediaImage2(b); err == nil {
+		t.Fatal("image with luma row shorter than its width was accepted")
+	}
+	l, err := layoutFromColorFormat(sys.ColorFormatYUV420SemiPlanar, 7, 5, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.y.rowInc != 8 || l.u.rowInc != 8 {
+		t.Fatalf("odd NV12 width needs an eight-byte chroma stride: %+v", l)
+	}
+}

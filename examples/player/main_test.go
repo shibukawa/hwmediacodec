@@ -26,16 +26,20 @@ func TestPlaysBundledClip(t *testing.T) {
 		t.Errorf("length %v, want about 9.88 s", l)
 	}
 	p.Play()
-	run := func(ticks int, until func() bool) {
+	run := func(until func() bool) {
 		t.Helper()
-		for i := 0; i < ticks && !until(); i++ {
+		// A long-GOP seek decodes the pictures between the preceding
+		// keyframe and the target. Hardware speed and race instrumentation
+		// can make that take seconds, so bound elapsed time rather than ticks.
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) && !until() {
 			if err := p.Update(); err != nil {
 				t.Fatal(err)
 			}
 			time.Sleep(time.Millisecond)
 		}
 	}
-	run(300, func() bool { return p.Image() != nil })
+	run(func() bool { return p.Image() != nil })
 	if p.Image() == nil {
 		t.Fatal("no frame shown")
 	}
@@ -45,7 +49,7 @@ func TestPlaysBundledClip(t *testing.T) {
 	if err := p.Seek(5 * time.Second); err != nil {
 		t.Fatal(err)
 	}
-	run(600, func() bool { return p.Position() > 5*time.Second })
+	run(func() bool { return p.Position() > 5*time.Second })
 	if pos := p.Position(); pos <= 5*time.Second || pos > 5300*time.Millisecond {
 		t.Fatalf("position %v after seeking to 5 s", pos)
 	}

@@ -3,6 +3,7 @@ package pixconv
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
@@ -146,6 +147,12 @@ func (d *Decoder) Receive(ctx context.Context) (*codec.Frame, error) {
 		return nil, err
 	}
 	defer f.Release()
+	if err := f.Validate(); err != nil {
+		return nil, err
+	}
+	if f.Format != codec.NV12 || codec.RGBA.FrameSize(f.Width, f.Height) == 0 {
+		return nil, fmt.Errorf("%w: invalid NV12 conversion source", codec.ErrInvalidData)
+	}
 	return d.convert(f), nil
 }
 

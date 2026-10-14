@@ -68,6 +68,8 @@ func (e *encoder) reopenSession() error {
 	e.keyProps = 0
 	e.outMu.Lock()
 	e.cbErr = nil
+	e.dropped += len(e.inflight)
+	clear(e.inflight)
 	e.outMu.Unlock()
 	if err := e.createSession(); err != nil {
 		return err

@@ -125,6 +125,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"strings"
 
@@ -330,18 +331,20 @@ func NewEncoder(ctx context.Context, c Codec, width, height int, opts ...Encoder
 		return nil, &UnsupportedError{Codec: c, Direction: Encode, Reason: "an audio codec; use NewAudioEncoder"}
 	case width <= 0 || height <= 0:
 		return nil, fmt.Errorf("hwmediacodec: picture size must be positive, got %dx%d", width, height)
+	case width > math.MaxInt32 || height > math.MaxInt32 || cfg.InputFormat.PlaneCount() > 0 && cfg.InputFormat.FrameSize(width, height) == 0:
+		return nil, fmt.Errorf("hwmediacodec: picture size cannot be represented by the backend, got %dx%d", width, height)
 	case cfg.TimeScale <= 0:
 		return nil, fmt.Errorf("hwmediacodec: time scale must be positive, got %d", cfg.TimeScale)
-	case cfg.FrameRate < 0:
-		return nil, fmt.Errorf("hwmediacodec: frame rate must not be negative, got %g", cfg.FrameRate)
-	case cfg.Bitrate < 0:
-		return nil, fmt.Errorf("hwmediacodec: bitrate must not be negative, got %d", cfg.Bitrate)
-	case cfg.Quality < 0 || cfg.Quality > 1:
+	case cfg.FrameRate < 0 || math.IsNaN(cfg.FrameRate) || math.IsInf(cfg.FrameRate, 0) || cfg.FrameRate > math.MaxInt32 || cfg.FrameRate > 0 && float64(cfg.TimeScale)/cfg.FrameRate >= math.MaxInt64:
+		return nil, fmt.Errorf("hwmediacodec: frame rate is out of range, got %g", cfg.FrameRate)
+	case cfg.Bitrate < 0 || cfg.Bitrate > math.MaxInt32:
+		return nil, fmt.Errorf("hwmediacodec: bitrate is out of range, got %d", cfg.Bitrate)
+	case cfg.Quality < 0 || cfg.Quality > 1 || math.IsNaN(cfg.Quality):
 		return nil, fmt.Errorf("hwmediacodec: quality must be within [0, 1], got %g", cfg.Quality)
 	case cfg.Quality > 0 && cfg.Bitrate > 0:
 		return nil, errors.New("hwmediacodec: WithQuality and WithBitrate are mutually exclusive")
-	case cfg.KeyframeInterval < 0:
-		return nil, fmt.Errorf("hwmediacodec: keyframe interval must not be negative, got %d", cfg.KeyframeInterval)
+	case cfg.KeyframeInterval < 0 || cfg.KeyframeInterval > math.MaxInt32:
+		return nil, fmt.Errorf("hwmediacodec: keyframe interval is out of range, got %d", cfg.KeyframeInterval)
 	case cfg.RateControl != VBR && cfg.RateControl != CBR:
 		return nil, fmt.Errorf("hwmediacodec: unknown rate control %s", cfg.RateControl)
 	}

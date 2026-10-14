@@ -2,6 +2,7 @@ package ivf_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -13,6 +14,34 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/testutil"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/ivf"
 )
+
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) { return len(p) / 2, nil }
+
+func TestRejectsShortWrite(t *testing.T) {
+	w := ivf.NewWriter(shortWriter{}, "AV01", 1, 1, 1, 1)
+	if err := w.WriteFrame([]byte{1}, 0); !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("WriteFrame = %v", err)
+	}
+}
+
+func TestHugeTruncatedFrame(t *testing.T) {
+	var data bytes.Buffer
+	if err := ivf.NewWriter(&data, "AV01", 1, 1, 1, 1).Close(); err != nil {
+		t.Fatal(err)
+	}
+	h := make([]byte, 12)
+	binary.LittleEndian.PutUint32(h, ^uint32(0))
+	data.Write(h)
+	r, err := ivf.NewReader(&data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Next(); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("Next = %v", err)
+	}
+}
 
 var frames = [][]byte{
 	{0x12, 0x00, 0x0a, 0x01, 0x00},

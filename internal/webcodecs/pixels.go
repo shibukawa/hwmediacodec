@@ -17,15 +17,19 @@ type planeLayout struct {
 // planeFits reports whether rows rows of rowBytes meaningful bytes at the
 // given layout lie inside a buffer of size bytes.
 func planeFits(l planeLayout, rows, rowBytes, size int) bool {
-	if l.offset < 0 || l.stride < rowBytes || rows <= 0 {
+	if l.offset < 0 || l.offset > size || rowBytes <= 0 || l.stride < rowBytes || rows <= 0 {
 		return false
 	}
-	return l.offset+l.stride*(rows-1)+rowBytes <= size
+	available := size - l.offset
+	return rowBytes <= available && rows-1 <= (available-rowBytes)/l.stride
 }
 
 // nv12Planes returns the two planes of an NV12 picture that copyTo wrote
 // into buf, without copying.
 func nv12Planes(buf []byte, layout []planeLayout, width, height int) (planes [][]byte, strides []int, err error) {
+	if codec.NV12.FrameSize(width, height) == 0 {
+		return nil, nil, fmt.Errorf("invalid NV12 picture size %dx%d", width, height)
+	}
 	if len(layout) != 2 {
 		return nil, nil, fmt.Errorf("NV12 picture with %d planes", len(layout))
 	}
@@ -45,11 +49,15 @@ func nv12Planes(buf []byte, layout []planeLayout, width, height int) (planes [][
 // which is what the browser's software decoders need to become: they
 // return planar frames where hardware decoders return NV12.
 func i420ToNV12(dst, src []byte, layout []planeLayout, width, height int) error {
+	size := codec.NV12.FrameSize(width, height)
+	if size == 0 {
+		return fmt.Errorf("invalid NV12 picture size %dx%d", width, height)
+	}
 	if len(layout) < 3 {
 		return fmt.Errorf("I420 picture with %d planes", len(layout))
 	}
 	cw, ch := (width+1)/2, (height+1)/2
-	if len(dst) < width*height+2*cw*ch {
+	if len(dst) < size {
 		return fmt.Errorf("NV12 buffer of %d bytes is too small for %dx%d", len(dst), width, height)
 	}
 	if !planeFits(layout[0], height, width, len(src)) || !planeFits(layout[1], ch, cw, len(src)) || !planeFits(layout[2], ch, cw, len(src)) {
@@ -77,6 +85,9 @@ func i420ToNV12(dst, src []byte, layout []planeLayout, width, height int) error 
 // wrote into buf with rows of exactly 4*width bytes, moving the rows
 // together in place when the browser padded them.
 func packedRGB(buf []byte, layout []planeLayout, width, height int) ([]byte, error) {
+	if codec.RGBA.FrameSize(width, height) == 0 {
+		return nil, fmt.Errorf("invalid RGB picture size %dx%d", width, height)
+	}
 	if len(layout) != 1 {
 		return nil, fmt.Errorf("RGB picture with %d planes", len(layout))
 	}
@@ -164,13 +175,7 @@ func checkNV12(f *codec.Frame, width, height int) error {
 	case len(f.Planes) < 2 || len(f.Strides) < 2:
 		return fmt.Errorf("%w: NV12 frame with %d planes", codec.ErrInvalidData, len(f.Planes))
 	}
-	for i := 0; i < 2; i++ {
-		rows, rowBytes := codec.NV12.PlaneLayout(i, width, height)
-		if !planeFits(planeLayout{stride: f.Strides[i]}, rows, rowBytes, len(f.Planes[i])) {
-			return fmt.Errorf("%w: plane %d holds %d bytes with stride %d, too little for %dx%d", codec.ErrInvalidData, i, len(f.Planes[i]), f.Strides[i], width, height)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 // packNV12 copies a validated NV12 frame into dst without row padding and

@@ -10,17 +10,20 @@ func ConfigFromESDescriptor(b []byte) []byte {
 		tag := b[0]
 		b = b[1:]
 		size := 0
+		complete := false
 		for i := 0; i < 4 && len(b) > 0; i++ {
 			c := b[0]
 			b = b[1:]
 			size = size<<7 | int(c&0x7F)
 			if c&0x80 == 0 {
+				complete = true
 				break
 			}
 		}
-		if size > len(b) {
-			size = len(b)
+		if !complete || size > len(b) {
+			return nil
 		}
+		body := b[:size]
 		switch tag {
 		case 0x03: // ES_Descriptor
 			// Descend past ES_ID and the flags with their optional fields.
@@ -28,22 +31,28 @@ func ConfigFromESDescriptor(b []byte) []byte {
 				return nil
 			}
 			skip := 3
-			if flags := b[2]; flags&0x80 != 0 {
-				skip += 2
-			} else if flags&0x40 != 0 && len(b) > skip {
-				skip += 1 + int(b[skip])
-			} else if flags&0x20 != 0 {
+			flags := body[2]
+			if flags&0x80 != 0 {
 				skip += 2
 			}
-			if skip > len(b) {
+			if flags&0x40 != 0 {
+				if skip >= len(body) {
+					return nil
+				}
+				skip += 1 + int(body[skip])
+			}
+			if flags&0x20 != 0 {
+				skip += 2
+			}
+			if skip > len(body) {
 				return nil
 			}
-			b = b[skip:]
+			b = body[skip:]
 		case 0x04: // DecoderConfigDescriptor
 			if size < 13 {
 				return nil
 			}
-			b = b[13:]
+			b = body[13:]
 		case 0x05: // DecoderSpecificInfo
 			return append([]byte(nil), b[:size]...)
 		default:

@@ -1,5 +1,7 @@
 package h264
 
+import "maps"
+
 // ParameterSets stores the active SPS and PPS NAL units of a stream and
 // resolves the parameter sets a slice refers to.
 //
@@ -20,6 +22,15 @@ func NewParameterSets() *ParameterSets {
 		ppsRaw: map[uint32][]byte{},
 		pps:    map[uint32]*PPS{},
 		ppsSPS: map[uint32]*SPS{},
+	}
+}
+
+// Clone returns an independent store with the same parameter sets. Parsed
+// parameter sets and raw NAL data are immutable and shared between copies.
+func (p *ParameterSets) Clone() *ParameterSets {
+	return &ParameterSets{
+		sps: maps.Clone(p.sps), ppsRaw: maps.Clone(p.ppsRaw),
+		pps: maps.Clone(p.pps), ppsSPS: maps.Clone(p.ppsSPS),
 	}
 }
 

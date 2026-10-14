@@ -32,13 +32,13 @@ func ParameterSetID(c codec.Codec, nalType int, nal []byte) (kind int, id uint32
 				return 0, 0, false
 			}
 			id, err := r.ReadUE()
-			if err != nil {
+			if err != nil || id > 31 {
 				return 0, 0, false
 			}
 			return ParamSPS, id, true
 		case H264NALPPS:
 			id, err := r.ReadUE()
-			if err != nil {
+			if err != nil || id > 255 {
 				return 0, 0, false
 			}
 			return ParamPPS, id, true
@@ -60,7 +60,7 @@ func ParameterSetID(c codec.Codec, nalType int, nal []byte) (kind int, id uint32
 				return 0, 0, false
 			}
 			maxSubLayersMinus1, err := r.ReadBits(3)
-			if err != nil {
+			if err != nil || maxSubLayersMinus1 > 6 {
 				return 0, 0, false
 			}
 			if err := r.SkipBits(1); err != nil { // temporal_id_nesting_flag
@@ -70,13 +70,13 @@ func ParameterSetID(c codec.Codec, nalType int, nal []byte) (kind int, id uint32
 				return 0, 0, false
 			}
 			id, err := r.ReadUE()
-			if err != nil {
+			if err != nil || id > 15 {
 				return 0, 0, false
 			}
 			return ParamSPS, id, true
 		case HEVCNALPPS:
 			id, err := r.ReadUE()
-			if err != nil {
+			if err != nil || id > 63 {
 				return 0, 0, false
 			}
 			return ParamPPS, id, true

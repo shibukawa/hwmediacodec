@@ -323,6 +323,9 @@ func parse(data []byte) (*file, error) {
 		} else {
 			f.primary = r.u32()
 		}
+		if r.err != nil {
+			return nil, r.err
+		}
 	}
 	if b, ok := find(children, "idat"); ok {
 		f.idat = b.data
@@ -452,7 +455,15 @@ func (f *file) parseIloc(b box) error {
 			}
 			off := r.uint(offsetSize)
 			length := r.uint(lengthSize)
-			it.extents = append(it.extents, [2]uint64{base + off, length})
+			if r.err != nil {
+				return r.err
+			}
+			if off > ^uint64(0)-base {
+				return fmt.Errorf("item %d extent offset overflows", id)
+			}
+			if length != 0 {
+				it.extents = append(it.extents, [2]uint64{base + off, length})
+			}
 		}
 	}
 	return r.err
@@ -479,7 +490,7 @@ func (f *file) parseIref(b box) error {
 			return r.u32()
 		}
 		from := read()
-		n := int(read())
+		n := int(r.u16()) // reference_count is 16 bits in both versions
 		it := f.item(from)
 		for i := 0; i < n && r.err == nil; i++ {
 			it.dimg = append(it.dimg, read())
@@ -558,7 +569,7 @@ func (f *file) payload(it *item) ([]byte, error) {
 	} else if it.method != 0 {
 		return nil, fmt.Errorf("item %d uses construction method %d", it.id, it.method)
 	}
-	var out []byte
+	var total uint64
 	for _, e := range it.extents {
 		off, n := e[0], e[1]
 		if off > uint64(len(src)) || n > uint64(len(src))-off {
@@ -567,7 +578,17 @@ func (f *file) payload(it *item) ([]byte, error) {
 		if len(it.extents) == 1 {
 			return src[off : off+n], nil
 		}
-		out = append(out, src[off:off+n]...)
+		// Extents may overlap, so their sum is not bounded by the input
+		// length. Bound it before allocating to avoid amplification by a
+		// small malicious iloc table that repeats the same large range.
+		if n > uint64(len(src))-total {
+			return nil, fmt.Errorf("item %d extents exceed the data size", it.id)
+		}
+		total += n
+	}
+	out := make([]byte, 0, int(total))
+	for _, e := range it.extents {
+		out = append(out, src[e[0]:e[0]+e[1]]...)
 	}
 	return out, nil
 }
@@ -767,6 +788,9 @@ func (f *file) grid(grid *item) (*gridLayout, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
+	if g.outW <= 0 || g.outH <= 0 || uint64(g.outW) > uint64(^uint(0)>>1)/4/uint64(g.outH) {
+		return nil, errors.New("grid dimensions are invalid or too large")
+	}
 	if len(grid.dimg) != g.rows*g.cols {
 		return nil, fmt.Errorf("grid of %dx%d references %d tiles", g.cols, g.rows, len(grid.dimg))
 	}
@@ -792,19 +816,23 @@ func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image
 	var canvas *image.RGBA
 	var tileW, tileH int
 	place := func(i int, img *image.RGBA) error {
+		if i >= len(tiles) {
+			return errors.New("decoder returned more pictures than grid tiles")
+		}
 		if canvas == nil {
 			tileW, tileH = img.Rect.Dx(), img.Rect.Dy()
-			if tileW*cols < outW || tileH*rows < outH {
+			if tileW <= 0 || tileH <= 0 || tileW < (outW+cols-1)/cols || tileH < (outH+rows-1)/rows {
 				return fmt.Errorf("%dx%d tiles of %dx%d do not cover %dx%d", cols, rows, tileW, tileH, outW, outH)
 			}
-			canvas = image.NewRGBA(image.Rect(0, 0, tileW*cols, tileH*rows))
+			canvas = image.NewRGBA(image.Rect(0, 0, outW, outH))
 		}
 		if img.Rect.Dx() != tileW || img.Rect.Dy() != tileH {
 			return fmt.Errorf("tile %d is %dx%d, others are %dx%d", i, img.Rect.Dx(), img.Rect.Dy(), tileW, tileH)
 		}
 		x0, y0 := (i%cols)*tileW, (i/cols)*tileH
-		for y := 0; y < tileH; y++ {
-			copy(canvas.Pix[(y0+y)*canvas.Stride+x0*4:], img.Pix[y*img.Stride:y*img.Stride+tileW*4])
+		copyW, copyH := min(tileW, outW-x0), min(tileH, outH-y0)
+		for y := 0; y < copyH && copyW > 0; y++ {
+			copy(canvas.Pix[(y0+y)*canvas.Stride+x0*4:][:copyW*4], img.Pix[y*img.Stride:y*img.Stride+copyW*4])
 		}
 		return nil
 	}
@@ -812,8 +840,7 @@ func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	out := canvas.SubImage(image.Rect(0, 0, outW, outH)).(*image.RGBA)
-	return crop(out), codec, len(tiles), nil
+	return canvas, codec, len(tiles), nil
 }
 
 // cleanAperture crops img to a clap property: a width x height window
@@ -969,25 +996,33 @@ func hasSequenceHeader(tu []byte) bool {
 		hasExt, hasSize := h&4 != 0, h&2 != 0
 		off++
 		if hasExt {
+			if off == len(tu) {
+				return false
+			}
 			off++
 		}
 		if !hasSize {
 			return typ == 1
 		}
-		size, n := 0, 0
+		size, n := uint64(0), 0
+		terminated := false
 		for n < 8 && off+n < len(tu) {
 			b := tu[off+n]
-			size |= int(b&0x7f) << (7 * n)
+			size |= uint64(b&0x7f) << (7 * n)
 			n++
 			if b&0x80 == 0 {
+				terminated = true
 				break
 			}
 		}
 		off += n
+		if !terminated || size > uint64(len(tu)-off) {
+			return false
+		}
 		if typ == 1 {
 			return true
 		}
-		off += size
+		off += int(size)
 	}
 	return false
 }

@@ -439,17 +439,7 @@ func (e *encoder) checkFrame(f *codec.Frame) error {
 	case len(f.Planes) != 2 || len(f.Strides) != 2:
 		return fmt.Errorf("%w: NV12 frame needs 2 planes and 2 strides, got %d and %d", codec.ErrInvalidData, len(f.Planes), len(f.Strides))
 	}
-	rows := [2]int{f.Height, (f.Height + 1) / 2}
-	rowBytes := [2]int{f.Width, (f.Width + 1) / 2 * 2}
-	for i := range f.Planes {
-		if f.Strides[i] < rowBytes[i] {
-			return fmt.Errorf("%w: plane %d stride %d is smaller than its row of %d bytes", codec.ErrInvalidData, i, f.Strides[i], rowBytes[i])
-		}
-		if need := (rows[i]-1)*f.Strides[i] + rowBytes[i]; len(f.Planes[i]) < need {
-			return fmt.Errorf("%w: plane %d holds %d bytes, need %d", codec.ErrInvalidData, i, len(f.Planes[i]), need)
-		}
-	}
-	return nil
+	return f.Validate()
 }
 
 func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
@@ -563,54 +553,6 @@ func (e *encoder) upload(surface uint32, f *codec.Frame) error {
 	}
 	if st := sys.PutImage(dpy, surface, img.ImageID, 0, 0, uint32(img.Width), uint32(img.Height), 0, 0, uint32(img.Width), uint32(img.Height)); st != sys.StatusSuccess {
 		return vaError("vaPutImage", st)
-	}
-	return nil
-}
-
-// fillImage writes the NV12 frame into a mapped image of at least the frame
-// size, padding with edge pixels.
-func fillImage(dst []byte, img *sys.Image, f *codec.Frame, imgW, imgH int) error {
-	for p := 0; p < 2; p++ {
-		pitch := int(img.Pitches[p])
-		off := int(img.Offsets[p])
-		rows, rowBytes := f.Height, f.Width
-		imgRows := imgH
-		if p == 1 {
-			rows, rowBytes = (f.Height+1)/2, (f.Width+1)/2*2
-			imgRows = (imgH + 1) / 2
-		}
-		if rowBytes > pitch || off+(imgRows-1)*pitch+pitch > len(dst) {
-			return &codec.BackendError{Backend: Name, Op: "upload frame", Message: "image smaller than the picture"}
-		}
-		padBytes := imgW - rowBytes
-		if padBytes > pitch-rowBytes {
-			padBytes = pitch - rowBytes
-		}
-		src := f.Planes[p]
-		stride := f.Strides[p]
-		for r := 0; r < rows; r++ {
-			row := dst[off+r*pitch : off+r*pitch+pitch]
-			copy(row, src[r*stride:r*stride+rowBytes])
-			if padBytes > 0 {
-				if p == 0 {
-					last := row[rowBytes-1]
-					for i := rowBytes; i < rowBytes+padBytes; i++ {
-						row[i] = last
-					}
-				} else {
-					cb, cr := row[rowBytes-2], row[rowBytes-1]
-					for i := rowBytes; i+1 < rowBytes+padBytes; i += 2 {
-						row[i], row[i+1] = cb, cr
-					}
-				}
-			}
-		}
-		if rows > 0 {
-			last := dst[off+(rows-1)*pitch : off+(rows-1)*pitch+rowBytes+padBytes]
-			for r := rows; r < imgRows; r++ {
-				copy(dst[off+r*pitch:], last)
-			}
-		}
 	}
 	return nil
 }
