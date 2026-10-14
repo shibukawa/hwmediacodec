@@ -15,4 +15,7 @@ func init() {
 	// driver the nvidia backend cannot use.
 	registerNVIDIA()
 	codec.Register(mediafoundation.Backend{})
+
+	// The audio codecs are the software transforms of Media Foundation.
+	codec.RegisterAudio(mediafoundation.Backend{})
 }
