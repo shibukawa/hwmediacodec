@@ -203,13 +203,24 @@ func backends() []codec.Backend {
 	return selectBackends(codec.Backends(), os.Getenv(backendsEnv))
 }
 
+// audioBackendsEnv is backendsEnv for the audio backends, which have
+// names of their own (for example "libavcodec" to decode AAC with FFmpeg's
+// library on a Linux machine that has libfdk-aac as well).
+const audioBackendsEnv = "HWMEDIACODEC_AUDIO_BACKENDS"
+
+// audioBackends returns the audio backends to consult, honouring
+// audioBackendsEnv.
+func audioBackends() []codec.AudioBackend {
+	return selectBackends(codec.AudioBackends(), os.Getenv(audioBackendsEnv))
+}
+
 // selectBackends picks the backends named in list, in the order given
 // there. Names that match no backend are ignored.
-func selectBackends(all []codec.Backend, list string) []codec.Backend {
+func selectBackends[B interface{ Name() string }](all []B, list string) []B {
 	if strings.TrimSpace(list) == "" {
 		return all
 	}
-	out := []codec.Backend{}
+	out := []B{}
 	seen := map[string]bool{}
 	for _, name := range strings.Split(list, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))

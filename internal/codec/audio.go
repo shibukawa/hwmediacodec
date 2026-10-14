@@ -316,6 +316,45 @@ func AudioBackends() []AudioBackend {
 	return out
 }
 
+// NotImplemented is the error of an audio backend that is asked for a
+// codec or a direction it has no implementation of, whatever the request
+// is otherwise: where several backends share the codecs between them (the
+// libraries on Linux), the error of the one that implements the codec
+// says more, and IsNotImplemented lets the caller prefer it.
+func NotImplemented(backend string, c Codec, dir Direction, reason string) error {
+	return &notImplementedError{&UnsupportedError{Backend: backend, Codec: c, Direction: dir, Reason: reason}}
+}
+
+type notImplementedError struct{ *UnsupportedError }
+
+func (e *notImplementedError) Unwrap() error { return e.UnsupportedError }
+
+// IsNotImplemented reports whether err was made by NotImplemented.
+func IsNotImplemented(err error) bool {
+	_, ok := err.(*notImplementedError)
+	return ok
+}
+
+// PreferUnsupported picks the error to report when no backend takes a
+// request: the first one from a backend that implements the codec, or the
+// first one of all. Both arguments are errors that match ErrUnsupported;
+// held is nil at the start.
+func PreferUnsupported(held, next error) error {
+	if held == nil || (IsNotImplemented(held) && !IsNotImplemented(next)) {
+		return next
+	}
+	return held
+}
+
+// PlainUnsupported strips what NotImplemented wrapped around its
+// *UnsupportedError.
+func PlainUnsupported(err error) error {
+	if e, ok := err.(*notImplementedError); ok {
+		return e.UnsupportedError
+	}
+	return err
+}
+
 // Rescale converts v from units of 1/from to units of 1/to, rounding to
 // the nearest unit (halves away from zero).
 // Results outside the int64 range saturate at its nearest endpoint.
