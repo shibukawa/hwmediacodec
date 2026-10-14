@@ -200,7 +200,7 @@ verification:
     - path: internal/mediacodec/names_test.go
       input_hash: fecb9d27534a0d795918223fb1037c33653fc7bbecd2625a3a964e82e42cf1ea
     - path: internal/mediacodec/sys/types.go
-      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
+      input_hash: ae6a67214c33ef586fb688d309343eddf8e1b67262fad2e4b2ad2ac581841a58
     - path: internal/mediacodec/sys/types_test.go
       input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
   emulator-run:
@@ -219,7 +219,7 @@ verification:
         transcode h264->hevc 30 frames'
     basis:
     - path: scripts/android_device_check.sh
-      input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
+      input_hash: 251107a808e867e7734974447ae1cbfd46d9cf87954e2b5a4dfbdc0620ed7954
     - path: internal/mediacodec/decoder.go
       input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
     - path: internal/mediacodec/encoder.go
@@ -227,7 +227,7 @@ verification:
     - path: internal/mediacodec/layout.go
       input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
     - path: internal/mediacodec/sys/types.go
-      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
+      input_hash: ae6a67214c33ef586fb688d309343eddf8e1b67262fad2e4b2ad2ac581841a58
     - path: internal/reorder/decoder.go
       input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
   device-run:

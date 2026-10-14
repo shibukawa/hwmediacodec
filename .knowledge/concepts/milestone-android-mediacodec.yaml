@@ -116,7 +116,7 @@ verification:
     - path: internal/mediacodec/sys/sys.go
       input_hash: b8fe1267da557caeaacf13a1b8e1c60734d04db5222777b466170288f2dc53ac
     - path: backends_android.go
-      input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
+      input_hash: b1b4f051aab84e06030da9e56e930cc9ac0e21389bacbfffb70bae537737838b
   unit-tests:
     state: passed
     method: unit
@@ -141,7 +141,7 @@ verification:
     - path: internal/mediacodec/paramsets.go
       input_hash: 5d45e8ee7ffbbd1e61d993846bbb506c70ba514329e54483052c770931efd549
     - path: internal/mediacodec/sys/types.go
-      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
+      input_hash: ae6a67214c33ef586fb688d309343eddf8e1b67262fad2e4b2ad2ac581841a58
     - path: internal/mediacodec/sys/types_test.go
       input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
   android-deps:
@@ -155,7 +155,7 @@ verification:
       path: backends_android.go
     basis:
     - path: backends_android.go
-      input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
+      input_hash: b1b4f051aab84e06030da9e56e930cc9ac0e21389bacbfffb70bae537737838b
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   aar-build:
@@ -193,7 +193,7 @@ verification:
         header key, reorder-layer flush drain)
     basis:
     - path: scripts/android_device_check.sh
-      input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
+      input_hash: 251107a808e867e7734974447ae1cbfd46d9cf87954e2b5a4dfbdc0620ed7954
     - path: internal/mediacodec/decoder.go
       input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
     - path: internal/mediacodec/encoder.go

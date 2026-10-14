@@ -138,7 +138,7 @@ verification:
         encode 45 H.264 frames
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+      input_hash: 3bee7a121d44b79b595f8ff3c744e9869c345faf2e94a04b03060dabad1b274a
 facts:
   api:
     root: 'PacketReader{Codec, TimeScale, ReadPacket}; PacketSeeker{+SeekKeyframe, Length}; PacketWriter{WritePacket};

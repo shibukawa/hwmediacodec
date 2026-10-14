@@ -161,9 +161,9 @@ verification:
     - path: internal/vpl/backend_linux_test.go
       input_hash: d2655bf320771c414545f58d46aa5c952f3289a0c52358d5bfdc2894cdfd2f6e
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
   host-unit-tests:
     state: passed
     method: unit
@@ -190,7 +190,7 @@ verification:
     - path: backends_test.go
       input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: b327cbe535b9a8df651eb3abf3f59ca63819f70332d2fcab3cbb42c857be53f4
   hardware-decode:
     state: not_run
     method: integration
@@ -267,7 +267,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
   host-suite:
     state: passed
     method: integration
@@ -280,11 +280,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: b327cbe535b9a8df651eb3abf3f59ca63819f70332d2fcab3cbb42c857be53f4
 facts:
   steps:
   - internal/vpl/sys - status codes, FourCC identifiers and struct mirrors of the VPL headers
