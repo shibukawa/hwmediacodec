@@ -232,11 +232,11 @@ verification:
         Opus CBR 64000/160000'
     basis:
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
     - path: audio.go
-      input_hash: 4499f9910b67f655e78a4a82d6e90b370df541ae913d8bbc89a5e892a8aefb08
+      input_hash: 29d51242d120616accf4905afc5d4c5b635b523baf95b8cba7e1bae02ade51e2
     - path: internal/codec/audio.go
-      input_hash: c5d32693b648056bc2f70cfa632cd281c7b37e2600a57e55b83775f955c9a016
+      input_hash: c5f98ca343a3d296caab1dae0cdf13ca2dbbf96fdc3a128a227ae53872bdc01e
     - path: internal/audiotoolbox/decoder.go
       input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
     - path: internal/audiotoolbox/encoder.go
@@ -266,9 +266,9 @@ verification:
         and ffmpeg plays up to 192 padding samples)'
     basis:
     - path: mediacontainer/mp4/audio_test.go
-      input_hash: 834f86811e56d84337a6e553eec850d499da86887be2544726c45229259ab02b
+      input_hash: d113a2b9aea5d5ca49df9f732f7abe5e51d20a03af54bbf3d98e96bea834bd96
     - path: audio_mp4_test.go
-      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
+      input_hash: 24f4903474b1c586ea5c2947e66939b13ab15b6405c57ce47b9b8dc5a4a300ef
     - path: mediacontainer/mp4/audio.go
       input_hash: 8b892885119a0a0b441ccbdc9f0bab34b2bc55348a76349788efeabb70ac26e5
     - path: mediacontainer/mp4/mux.go
@@ -291,7 +291,7 @@ verification:
       note: 2026-10-13; no ffmpeg and no audio backend needed except the cookie test, which is darwin only
     basis:
     - path: internal/aac/config.go
-      input_hash: c844729f35df4162660648e17bc69c11d1f42931ff71fa3a133a47568bc81a3d
+      input_hash: 2cc320c7f13c65c1ee17bb56a2e09a14db22f632ba706e5ad11ae5a469a79266
     - path: internal/aac/adts.go
       input_hash: c20175433af47ecf7c7974da2b0b2660bfc3e8fb5c141b7b5046f68e280f565d
     - path: internal/aac/aac_test.go
@@ -324,7 +324,7 @@ verification:
         cannot run there
     basis:
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
     - path: internal/audiotoolbox/backend.go
       input_hash: 48e6d2cf9b8402612d13978f7863ff5fdb0b39a858652b8c702ff19302bae6b1
     - path: internal/audiotoolbox/sys/sys.go
@@ -355,7 +355,7 @@ verification:
         check passes
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: b327cbe535b9a8df651eb3abf3f59ca63819f70332d2fcab3cbb42c857be53f4
     - path: internal/codec/codec.go
       input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
     - path: backends_darwin.go

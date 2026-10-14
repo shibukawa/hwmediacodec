@@ -305,7 +305,7 @@ verification:
     - path: mediacontainer/mp4/audio.go
       input_hash: 8b892885119a0a0b441ccbdc9f0bab34b2bc55348a76349788efeabb70ac26e5
     - path: mediacontainer/mp4/audio_test.go
-      input_hash: 834f86811e56d84337a6e553eec850d499da86887be2544726c45229259ab02b
+      input_hash: d113a2b9aea5d5ca49df9f732f7abe5e51d20a03af54bbf3d98e96bea834bd96
   listening-run:
     state: not_run
     method: manual

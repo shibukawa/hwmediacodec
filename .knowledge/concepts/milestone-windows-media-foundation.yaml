@@ -243,7 +243,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_windows.go
-      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
     - &mf_backend

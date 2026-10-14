@@ -148,7 +148,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: backends_windows.go
-      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
     - path: backends_windows_amd64.go
       input_hash: 407cec921d166b9b447250cd9c0e15f55e2dbca78d5a3a1e4a92322eb646d595
     - path: backends_windows_arm64.go
@@ -196,11 +196,11 @@ verification:
       path: probe_test.go
     basis:
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: b327cbe535b9a8df651eb3abf3f59ca63819f70332d2fcab3cbb42c857be53f4
   windows-loader-run:
     state: not_run
     method: integration
@@ -222,7 +222,7 @@ verification:
     - path: internal/nvidia/sys/sys_test.go
       input_hash: 3399eb849d4a7fa97aeb93411e081aae50b8afe3f6627b0672b00febe40636d8
     - path: backends_windows.go
-      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
   hardware-decode-windows:
     state: not_run
     method: integration

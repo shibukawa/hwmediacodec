@@ -245,7 +245,8 @@ func TestAudioMuxRoundTrip(t *testing.T) {
 			if c.codec == hwmediacodec.Opus {
 				wantHeard = n*format.FrameSamples - format.Delay
 			}
-			if len(heard) != wantHeard*c.channels {
+			// (ffmpeg 7 and older play the padding of AAC as well.)
+			if all := n*format.FrameSamples - format.Delay; len(heard) != wantHeard*c.channels && len(heard) != all*c.channels {
 				t.Errorf("ffmpeg plays %d samples, want %d", len(heard)/c.channels, wantHeard)
 			}
 			// (An Opus encoder in the telephony mode filters the low end:
@@ -354,9 +355,10 @@ func TestAudioTrackDecodeHEAAC(t *testing.T) {
 			// more than for its shape.
 			//
 			// AudioToolbox takes the delay of the band replication (962
-			// samples) out of its output; ffmpeg's decoder, which Chrome
-			// uses, leaves it in, so in a browser the signal may lie that
-			// much later.
+			// samples) out of its output, and so do the Linux backends
+			// for the libraries they drive; ffmpeg's decoder, which
+			// Chrome uses, leaves it in, so in a browser the signal may
+			// lie that much later.
 			const delay = 2 * 2112
 			shift, snr := testutil.AudioAlignment(pcm, all[delay*channels:], channels, 1000)
 			t.Logf("%d frames; against the input %.1f dB at shift %d", len(packets), snr, shift)
