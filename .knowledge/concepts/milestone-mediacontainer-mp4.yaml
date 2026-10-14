@@ -76,7 +76,7 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: mediacontainer/mp4/mux.go
       input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/sample.go

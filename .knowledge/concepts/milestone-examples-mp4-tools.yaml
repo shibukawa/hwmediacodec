@@ -94,7 +94,7 @@ verification:
         bf=2 hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go
@@ -114,7 +114,7 @@ verification:
     - path: mediacontainer/mp4/mux.go
       input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go
@@ -139,7 +139,7 @@ verification:
     - path: mediacontainer/mp4/mux.go
       input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: examples/convert/main_test.go
       input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   convert-1080p-run:
@@ -179,7 +179,7 @@ verification:
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: examples/thumbnails/main_test.go
       input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
 open_questions:

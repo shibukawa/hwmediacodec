@@ -154,11 +154,11 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: e9a3f9ea2d8812d11f4c1f6ba96fa3f0c1ad0f3b80537189c02fe5f38145988d
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
     - path: audio_mp4_test.go
-      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
+      input_hash: 24f4903474b1c586ea5c2947e66939b13ab15b6405c57ce47b9b8dc5a4a300ef
     - path: internal/testutil/audio.go
       input_hash: baa6dc8d92fd85a5fdbda40d94c2238f3c681c3a776d012affc1e48794523219
     - path: backends_js.go
@@ -183,7 +183,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: e9a3f9ea2d8812d11f4c1f6ba96fa3f0c1ad0f3b80537189c02fe5f38145988d
     - path: internal/aac/esds.go
       input_hash: bc6fdd3d330a601907dfceef4eed6a29425d696d70abb52d1ae55e01cf6bbbe9
     - path: exact_js_test.go
@@ -205,9 +205,9 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: e9a3f9ea2d8812d11f4c1f6ba96fa3f0c1ad0f3b80537189c02fe5f38145988d
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
   chrome-full-run:
     state: passed
     method: integration
@@ -220,7 +220,7 @@ verification:
       note: 2026-10-13, Chrome 153 headless on an Apple M3; root package 26.5 s, internal/webcodecs 7.5 s
     basis:
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: internal/browserexec/main.go
       input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
     - path: internal/webcodecs/jsutil.go

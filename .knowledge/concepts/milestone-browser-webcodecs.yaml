@@ -152,7 +152,7 @@ verification:
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
   chrome-conformance:
     state: passed
     method: integration
@@ -241,9 +241,9 @@ verification:
         No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: fe2f5856d90170a7c29688abfe8ad3a25ff02c6ee9f5967ac6c91e12d269fb3b
     - path: internal/webcodecs/decoder.go
       input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
   firefox-macos:
@@ -311,9 +311,9 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: examples/internal/bundled/bundled.go
-      input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
+      input_hash: 7c496af2857489002c987f6a9f893b456007a7cd996bc57ff142df8c5a006de5
     - path: examples/internal/bundled/bundled_test.go
-      input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
+      input_hash: c9a7dbc71437fff23550ef82bb9fb1ba90c86414495c0670eb69cbdc5859b0dc
   player-in-game-loop:
     state: passed
     method: integration
@@ -330,7 +330,7 @@ verification:
     - path: ebitenvideo/player_js_test.go
       input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: e64c82df9fcca1c2409428c522528b9e7c7770174e4ed1eca56780932dc21165
   other-browsers:
     state: not_run
     method: integration

@@ -145,7 +145,7 @@ verification:
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/vaapi/backend.go
@@ -170,7 +170,7 @@ verification:
         frames'
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+      input_hash: 3bee7a121d44b79b595f8ff3c744e9869c345faf2e94a04b03060dabad1b274a
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: internal/videotoolbox/decoder.go
@@ -254,7 +254,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: b327cbe535b9a8df651eb3abf3f59ca63819f70332d2fcab3cbb42c857be53f4
 relations:
 - relation: implements
   to: requirement:hwmediacodec

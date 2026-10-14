@@ -98,11 +98,11 @@ verification:
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: fe2f5856d90170a7c29688abfe8ad3a25ff02c6ee9f5967ac6c91e12d269fb3b
     - path: playback/seek_darwin_test.go
       input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
     - path: encoding/annexb/annexb.go
       input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
   player-seek-test:
@@ -120,9 +120,9 @@ verification:
       note: run 2026-10-09
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: e64c82df9fcca1c2409428c522528b9e7c7770174e4ed1eca56780932dc21165
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/seek_darwin_test.go
       input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
   timeline-unit-test:
@@ -137,7 +137,7 @@ verification:
       locator: TestTimelineSeekResetsClock
     basis:
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/timeline_test.go
       input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
   packet-source-test:
@@ -155,7 +155,7 @@ verification:
     - path: mediacontainer/mp4/packetsource.go
       input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
     - path: mediacontainer/mp4/packetsource_test.go
       input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
   annexb-offset-test:

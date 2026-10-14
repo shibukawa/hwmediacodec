@@ -81,7 +81,7 @@ verification:
     - path: net/webrtc/broadcaster_test.go
       input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
   recorder-keyframe-test:
     state: passed
     method: integration

@@ -57,6 +57,35 @@ func (t *timeline) advance(dt time.Duration, next func() (item, bool)) (show ite
 	return show, skipped
 }
 
+// sync puts the clock where an outside clock (an audio device) says it
+// is, in pass loop of the stream at position pos, and returns the frame
+// that should be on screen now, like advance. The clock does not wait for
+// frames here: the sound goes on, and frames that come late are skipped.
+func (t *timeline) sync(loop int, pos time.Duration, next func() (item, bool)) (show item, skipped int) {
+	t.loop, t.pos = loop, pos
+	for {
+		if !t.hasPending {
+			it, ok := next()
+			if !ok {
+				break
+			}
+			t.pending, t.hasPending = it, true
+			t.started = true
+		}
+		t.gen = t.pending.gen
+		if t.pending.loop > loop || (t.pending.loop == loop && t.pending.pts > pos) {
+			break
+		}
+		if show.frame != nil {
+			show.release()
+			skipped++
+		}
+		show = t.pending
+		t.hasPending = false
+	}
+	return show, skipped
+}
+
 // reset moves the clock to pos and stops it until the next frame arrives,
 // which is what a seek needs.
 func (t *timeline) reset(pos time.Duration) {

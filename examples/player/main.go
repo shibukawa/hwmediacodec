@@ -6,11 +6,16 @@
 //	go run ./player -codec h264 -fps 30 stream.h264
 //
 // Space pauses, the left and right arrow keys seek five seconds, Home
-// restarts, L toggles looping. The window takes the video's aspect ratio.
-// MP4 files go through mp4.VideoTrack.PacketSource, which gives
-// ebitenvideo presentation times, the sync-sample table for seeking and
-// the length; raw streams go through ebitenvideo.NewPlayer. Audio tracks
-// are ignored (Ebitengine has no AAC decoder).
+// restarts, M mutes, the up and down arrow keys change the volume. The
+// window takes the video's aspect ratio. MP4 files go through
+// mp4.VideoTrack.PacketSource, which gives ebitenvideo presentation times,
+// the sync-sample table for seeking and the length; raw streams go
+// through ebitenvideo.NewPlayer.
+//
+// The audio track of an MP4 file (AAC or Opus) is decoded with the
+// system's codec and played through Ebitengine's audio, and the pictures
+// follow the sound. On a platform without an audio backend the film plays
+// silently; -mute does the same on purpose.
 package main
 
 import (
@@ -38,6 +43,7 @@ import (
 
 type game struct {
 	w, h   int
+	volume float64 // before M muted it
 	player *ebitenvideo.Player
 	name   string
 	pixel  *ebiten.Image
@@ -55,6 +61,25 @@ func (g *game) Update() error {
 		} else {
 			g.player.Play()
 			g.say("playing")
+		}
+	}
+	if g.player.HasAudio() {
+		switch {
+		case inpututil.IsKeyJustPressed(ebiten.KeyM):
+			if v := g.player.Volume(); v > 0 {
+				g.volume = v
+				g.player.SetVolume(0)
+				g.say("muted")
+			} else {
+				g.player.SetVolume(max(g.volume, 0.1))
+				g.say("sound on")
+			}
+		case inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
+			g.player.SetVolume(min(1, g.player.Volume()+0.1))
+			g.say(fmt.Sprintf("volume %.0f%%", g.player.Volume()*100))
+		case inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
+			g.player.SetVolume(max(0, g.player.Volume()-0.1))
+			g.say(fmt.Sprintf("volume %.0f%%", g.player.Volume()*100))
 		}
 	}
 	var seek time.Duration = -1
@@ -101,8 +126,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 	if time.Since(g.at) > 2*time.Second {
 		status = ""
 	}
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("%s  %dx%d  %.2fs / %.1fs  %.0f fps  skipped %d  %s\n[space] pause  [<-][->] seek 5s  [home] restart",
-		g.name, vw, vh, g.player.Position().Seconds(), g.player.Length().Seconds(), ebiten.ActualFPS(), g.player.Skipped(), status))
+	keys := "[space] pause  [<-][->] seek 5s  [home] restart"
+	if g.player.HasAudio() {
+		keys += "  [m] mute  [up][down] volume"
+	}
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("%s  %dx%d  %.2fs / %.1fs  %.0f fps  skipped %d  %s\n%s",
+		g.name, vw, vh, g.player.Position().Seconds(), g.player.Length().Seconds(), ebiten.ActualFPS(), g.player.Skipped(), status, keys))
 }
 
 func (g *game) rect(dst *ebiten.Image, x, y, w, h float64, c color.RGBA) {
@@ -120,6 +149,7 @@ func main() {
 	fps := flag.Float64("fps", 30, "frame rate of a raw elementary stream (ignored for MP4)")
 	noLoop := flag.Bool("once", false, "stop at the end instead of looping")
 	software := flag.Bool("software", false, "allow the OS software decoder")
+	mute := flag.Bool("mute", false, "play without sound")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: player [flags] [movie.mp4 | stream.h264]\n\n")
 		flag.PrintDefaults()
@@ -136,7 +166,7 @@ func main() {
 	if *software {
 		opts = append(opts, ebitenvideo.WithSoftwareFallback())
 	}
-	player, closer, name, vw, vh, err := open(flag.Arg(0), *codecName, *fps, opts)
+	player, closer, name, vw, vh, err := open(flag.Arg(0), *codecName, *fps, !*mute, opts)
 	if err != nil {
 		// In a browser the message goes into the page.
 		fatal.Exit(err)
@@ -144,6 +174,9 @@ func main() {
 	}
 	defer closer.Close()
 	defer player.Close()
+	if err := player.AudioErr(); err != nil && !*mute {
+		log.Printf("playing without sound: %v", err)
+	}
 	player.Play()
 
 	// A window with the video's aspect ratio, at most 1280x800.
@@ -156,19 +189,24 @@ func main() {
 	pixel.Fill(color.White)
 	ebiten.SetWindowSize(w, h)
 	ebiten.SetWindowTitle("hwmediacodec player - " + name)
-	if err := ebiten.RunGame(&game{w: w, h: h, player: player, name: name, pixel: pixel}); err != nil {
+	if err := ebiten.RunGame(&game{w: w, h: h, volume: 1, player: player, name: name, pixel: pixel}); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // open returns a player for path (or the bundled clip when path is empty)
-// and the picture size when the container knows it.
-func open(path, codecName string, fps float64, opts []ebitenvideo.Option) (p *ebitenvideo.Player, closer io.Closer, name string, w, h int, err error) {
+// and the picture size when the container knows it. With sound, the audio
+// track of an MP4 file is played too.
+func open(path, codecName string, fps float64, sound bool, opts []ebitenvideo.Option) (p *ebitenvideo.Player, closer io.Closer, name string, w, h int, err error) {
 	var d *mp4.Demuxer
 	switch {
 	case path == "":
 		// The bundled clip, in the encoding this machine decodes.
-		p, v, err := bundled.Open(opts...)
+		openBundled := bundled.Open
+		if sound {
+			openBundled = bundled.OpenWithSound
+		}
+		p, v, err := openBundled(opts...)
 		if err != nil {
 			return nil, nil, "", 0, 0, err
 		}
@@ -199,6 +237,9 @@ func open(path, codecName string, fps float64, opts []ebitenvideo.Option) (p *eb
 	if v == nil {
 		closer.Close()
 		return nil, nil, "", 0, 0, fmt.Errorf("%s has no H.264, HEVC or AV1 video track", name)
+	}
+	if a := d.Audio(); sound && a != nil {
+		opts = append(opts[:len(opts):len(opts)], ebitenvideo.WithAudio(a.PacketSource()))
 	}
 	p, err = ebitenvideo.NewPlayerFromSource(v.PacketSource(), opts...)
 	if err != nil {

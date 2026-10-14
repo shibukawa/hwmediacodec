@@ -76,7 +76,7 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
   player-test:
     state: passed
     method: integration
@@ -92,9 +92,9 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
     - path: examples/player/main_test.go
-      input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
+      input_hash: 1b7c72d25311dba2a26a0d9a292b835336a162a7aaa64bec3520b55ebec4a7cf
   mesh-test:
     state: passed
     method: unit

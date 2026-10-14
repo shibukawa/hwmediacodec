@@ -1,0 +1,353 @@
+id: milestone:playback-sound
+type: milestone
+title: Synchronised playback with sound (playback audio stream, ebitenvideo, player sample)
+summary: 'Requested on 2026-10-14 ("同期再生と発音の実装をお願いします"), the second audio slice agreed in decision:audio-codecs.
+  Package playback gains WithAudio: the audio track is decoded next to the pictures and comes out as an
+  AudioStream, an io.ReadSeeker of samples laid out on the pictures'' time line, for a device of the
+  caller''s to play; AttachAudioDevice makes that device the clock of the player. ebitenvideo plays the
+  stream through Ebitengine''s audio (WithAudio, Volume, SetVolume, HasAudio, AudioErr) and examples/player
+  plays films with their sound. The MP4 demuxer now applies empty edits and lets its tracks be read from
+  different goroutines.'
+lifecycle: active
+authority: authored
+aliases:
+- audio sync
+- A/V sync
+- 同期再生
+- 発音
+- AudioStream
+- AudioDevice
+- audio master clock
+- WithAudio
+scope:
+  platform:
+  - darwin
+  - ios
+  - js
+  milestone: playback-sound
+constraints:
+- 'AudioStream is strict about time: byte offset n is the sample of time n / BytesPerSecond on the time
+  line of the pictures, whatever was read before. Decoded frames are placed by their PTS (track time
+  scale, edit list applied), cut before 0 (encoder delay), at the audio track''s own length (padding)
+  and at the length of a pass; where nothing is decoded in time the stream is silence. So the position
+  a device reports (bytes read less bytes buffered) is a time on the time line with no bookkeeping, and
+  sound and picture agree by construction.'
+- 'Read never returns io.EOF (a device that sees the end stops, and with it the clock) and never blocks
+  for long: with nothing buffered it waits up to 30 ms for the decoder, then hands out 10 ms of silence;
+  otherwise it returns what is decoded, short reads included. A signal left in the ready channel by samples
+  that a Seek has since thrown away is drained before waiting (found by the tests: without that a jump
+  cost the first 10 ms).'
+- 'Seek(offset) is how a device flushes and jumps: the decoding goroutine restarts at the sample of the
+  offset (SeekKeyframe of the audio source, which backs up by the decoder''s run-in; decoder Flush).
+  Only SeekStart and SeekCurrent exist. Ebitengine''s resampler seeks its source to 4096-sample block
+  boundaries after a jump and otherwise reads sequentially, which this serves.'
+- 'One pass through the presentation is as long as the longer track (Player.Length returns it); with
+  WithLoop the audio stream carries pass after pass on a time line that runs on, and the video source''s
+  loop length is set to the same value, so both restart together. The clock of the timeline is (pass,
+  position); timeline.sync sets it from outside, timeline.advance still moves it by dt.'
+- 'With an AudioDevice attached, Player.Advance takes the device''s Position as the clock while Ready
+  reports true, clamped so that it never steps back (Ebitengine''s estimate did, by up to 2.7 ms). A
+  device that has just come up, and one after Seek, is paused, placed with SetPosition at the clock
+  and started when the timeline has a frame of the new position (or after 500 ms): sound and picture
+  start together. While the device is not ready the player holds the first picture for 500 ms once
+  and then runs on dt. Play, Pause, Seek, the end of the stream and Close pause or place the device.'
+- 'A film goes on without its sound: when NewAudioDecoder fails Player.Audio is nil and AudioErr holds
+  the error; when the decoder fails later the stream is silent from then on.'
+- 'WithAudioChannels mixes to mono or stereo in the stream (centre and surrounds at -3 dB into both sides,
+  LFE dropped, scaled by 1/(1+sqrt 2) so that it cannot clip); the stream decodes in F32 and hands out
+  F32 (default) or S16. No resampling in playback.'
+- 'ebitenvideo: audio.CurrentContext or a new context at the track''s rate (Ebitengine allows one per
+  process); another rate goes through audio.ResampleReaderF32; NewPlayerF32 on the stream; the device
+  wraps Player.Position, SetPosition, Play, Pause and Context.IsReady. Ebitengine''s Position is bytes
+  read less bytes buffered, interpolated with a stopwatch between buffer updates, updated once per tick.
+  It leaves out the output latency of the operating system. Close calls PauseAndStopReading before the
+  stream is closed.'
+- 'mediacontainer/mp4: an empty edit in front of a track is taken off Track.MediaTimeOffset (converted
+  from the movie time scale), so packet times of all tracks count from the start of the presentation;
+  AudioFormat.Delay keeps using the media time of the first real edit. Demuxer sample reads are serialised
+  by a mutex (video and audio packet sources read the same io.ReadSeeker from two goroutines; the device
+  test found NAL lengths of garbage without it).'
+- 'examples/go.sum carried hashes for ebitenvideo v0.1.0 that differ from the public checksum database
+  (the tag was moved after the proxy had fetched it). With a fresh module cache every build in the workspace
+  failed with a checksum mismatch on 2026-10-14; the two lines were set to the database''s values.'
+non_goals:
+- Audio output in the core module or in package playback (the device stays the caller's).
+- Smoothing the device clock in playback (Ebitengine's position is already interpolated; a device with
+  a coarse position would need it).
+- Compensating the operating system's output latency, which devices do not report through Ebitengine.
+- Sound for raw elementary streams (NewStream has no audio track to offer) and for the HLS and WebRTC
+  samples.
+- Resampling and time stretching to follow a clock other than the device's.
+- A run on an iPhone or in a browser with a person listening.
+acceptance:
+  stream-time-line:
+    text: Reading an AudioStream of an ffmpeg-made AAC track gives the encoded signal in place from offset
+      0 (shift 0, 15 dB or more as for every lossy round trip), exact silence behind the end of the track,
+      the signal of the target after jumps to five positions, pass after pass with silence between the
+      end of the track and the end of the pass when looping, and the right pass after a jump into the
+      sixth; a mono track comes out on both sides of a stereo stream; the mix weights are as documented.
+    scope:
+      milestone: playback-sound
+    verified_by:
+    - playback-stream-tests
+    - playback-stream-browser
+  pictures-follow-device:
+    text: With a device the test drives at 60 ticks a second, every picture returned is the one for the
+      device's position (never ahead, at most two frames and a tick behind); the device is placed at
+      0 and started when it comes up, paused by Pause, placed at the target of Seek and started with
+      the first picture of the target, and paused at the end; the samples the device read are the signal
+      of its positions, from the start and after the jump.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - playback-device-tests
+  late-device:
+    text: A device that is not ready holds the first picture for half a second, then the film runs on
+      the clock of Advance; when the device comes up it is placed where the pictures are (within two
+      ticks) and the samples it then reads are the signal of that position.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - playback-device-tests
+  loop-with-sound:
+    text: With WithLoop the pictures of every pass are shown at the device's position within the pass
+      for three passes and the sound of the second pass starts where the pass does.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - playback-device-tests
+  ebitenvideo-sound:
+    text: An ebitenvideo player with WithAudio reports HasAudio and its volume, plays to the end and through
+      a seek without a running audio device, and its stream read through Ebitengine's resampler (48 to
+      44.1 kHz) is the signal at the new rate in place, from the start and after a seek.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - ebitenvideo-tests
+  real-device-run-macos:
+    text: The bundled clip with sound in a real Ebitengine game loop on macOS (CoreAudio) follows the
+      audio player's position through a start, a seek and a loop, without an audio error and with at
+      most a frame or two skipped.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - live-run-macos
+  real-device-run-browser:
+    text: The same in headless Chrome (WebCodecs for both tracks, WebAudio for the output), with the
+      film on the tick clock until the page's first input event and on the audio's from then on.
+    scope:
+      milestone: playback-sound
+      platform: js
+    verified_by:
+    - live-run-chrome
+  track-offsets-read-back:
+    text: Files written with a later start for one track read back with that offset between the first
+      presented picture and the first presented sample (within 2 ms), one of them at 0.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - mp4-offset-tests
+  listening:
+    text: A person hears the sound of the player sample in step with the picture on a Mac, an iPhone and
+      in a browser.
+    scope:
+      milestone: playback-sound
+    verified_by:
+    - listening-run
+  existing-suites:
+    text: go test in all four modules, scripts/crossbuild.sh, scripts/mobilebuild.sh and scripts/browser_test.sh
+      . ./internal/webcodecs ./playback pass after the change.
+    scope:
+      milestone: playback-sound
+    verified_by:
+    - existing-suites
+verification:
+  playback-stream-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+    test: go test ./playback/ -run 'TestAudioStream'
+    evidence:
+      path: playback/audio_test.go
+      note: 2026-10-14 on an Apple M3, macOS 27 (AudioToolbox decoder, ffmpeg's AAC encoder)
+    basis:
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: playback/audio_test.go
+      input_hash: abe4d1a10c796b92565c1c13987c7ee72526d157e6532def6bb9d4c692d36fd0
+  playback-stream-browser:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: js
+    test: scripts/browser_test.sh -run 'TestAudioStream' ./playback
+    evidence:
+      path: playback/audio_test.go
+      note: 2026-10-14, Chrome 153 headless on an Apple M3 (WebCodecs AudioDecoder)
+    basis:
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+  playback-device-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: go test ./playback/ -run 'TestPlayerFollowsAudioDevice|TestPlayerWithoutReadyDevice|TestPlayerLoopsWithSound'
+    evidence:
+      path: playback/audio_darwin_test.go
+      note: 2026-10-14 on an Apple M3 (VideoToolbox H.264 decoder, 160x120 at 30 fps with B-frames; the
+        fake device consumes 799 samples per 1/60 s tick in real time)
+    basis:
+    - path: playback/audio_darwin_test.go
+      input_hash: 7754a7ecc88271d252fea52819b19516fd60b9eb85b6934b1b7eef302a660b06
+    - path: playback/player.go
+      input_hash: 267c7d8753f94c021deedf6fa45984611d047c22129827d3757049cd9655b747
+    - path: playback/timeline.go
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
+    - path: playback/source.go
+      input_hash: fe2f5856d90170a7c29688abfe8ad3a25ff02c6ee9f5967ac6c91e12d269fb3b
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
+  ebitenvideo-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: cd ebitenvideo && go test . -run 'TestPlayerWithSound|TestSoundThroughResampler'
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      note: 2026-10-14 on an Apple M3, Ebitengine v2.10.4; no game loop in the test, so the audio context
+        never becomes ready and the player runs on the tick clock after its wait
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: e64c82df9fcca1c2409428c522528b9e7c7770174e4ed1eca56780932dc21165
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
+    - path: ebitenvideo/go.mod
+      input_hash: c4c28b280556a1cda8ab32f3e14f66f52c816d91f1b0badfcb0f854bfdf5d7e3
+  live-run-macos:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: A throwaway program (not in the repository) that opens the bundled clip with bundled.OpenWithSound
+      and WithLoop at volume 0, runs ebiten.RunGame for nine seconds with a Seek to 8.5 s after four,
+      and logs Player.Position against the wall clock every 30 ticks
+    evidence:
+      path: examples/internal/bundled/bundled.go
+      note: '2026-10-14 on an Apple M3, built-in output: audio context ready within the first half second,
+        then position = wall time - 0.50 s to within 10 ms at every sample point, seek lands at 8.5 s and
+        the loop wraps at 9.88 s; clock steps per tick 16.2 ms on average, never backwards after the clamp
+        (4 steps back of up to 2.7 ms before it), largest 33 ms; 0 to 1 skipped frames; no audio error'
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: e64c82df9fcca1c2409428c522528b9e7c7770174e4ed1eca56780932dc21165
+    - path: examples/internal/bundled/bundled.go
+      input_hash: 7c496af2857489002c987f6a9f893b456007a7cd996bc57ff142df8c5a006de5
+    - path: playback/player.go
+      input_hash: 267c7d8753f94c021deedf6fa45984611d047c22129827d3757049cd9655b747
+  live-run-chrome:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: js
+    test: The same program built for GOOS=js GOARCH=wasm and run with "go run" through internal/browserexec
+      in headless Chrome with --autoplay-policy=no-user-gesture-required, dispatching mouseup, keyup
+      and touchend events on the document after 90 ticks
+    evidence:
+      path: internal/browserexec/main.go
+      note: '2026-10-14, Chrome 153 on an Apple M3: audio context not ready until the events, the film
+        on the tick clock meanwhile (0.5 s of position per 0.5 s); ready on the next sample point with
+        the position running on (0.983 s, then 1.464 s half a second later), then following the audio
+        through the seek to 8.5 s and the loop; 1 skipped frame; no audio error. Without the events the
+        whole run stays on the tick clock.'
+    basis:
+    - path: playback/player.go
+      input_hash: 267c7d8753f94c021deedf6fa45984611d047c22129827d3757049cd9655b747
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+  mp4-offset-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: go test ./mediacontainer/mp4/ -run 'TestMuxAudioWithVideo'
+    evidence:
+      path: mediacontainer/mp4/audio_test.go
+      note: 2026-10-14 on an Apple M3; offsets 0, +500 ms, -250 ms and +500 ms at wall-clock timestamps
+    basis:
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 828faaa5ed5083ba708f0c70181bf2e89a5b9e755866c72672ffa858147812f1
+    - path: mediacontainer/mp4/audio.go
+      input_hash: 8b892885119a0a0b441ccbdc9f0bab34b2bc55348a76349788efeabb70ac26e5
+    - path: mediacontainer/mp4/audio_test.go
+      input_hash: d113a2b9aea5d5ca49df9f732f7abe5e51d20a03af54bbf3d98e96bea834bd96
+  listening-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: playback-sound
+    test: cd examples && go run ./player (and the same through wasmserve in a browser, and examples/mobile
+      on the iPhone once it opens the clip with sound)
+    evidence:
+      path: examples/player/main.go
+      note: the development session cannot hear; the runs above were muted and measured the clock only
+  existing-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+    test: go test ./... in the core module, ebitenvideo, examples and net/webrtc; scripts/crossbuild.sh;
+      scripts/mobilebuild.sh; scripts/browser_test.sh . ./internal/webcodecs ./playback
+    evidence:
+      path: scripts/browser_test.sh
+      note: 2026-10-14 on an Apple M3, macOS 27, go1.27.0, Chrome 153
+    basis:
+    - path: examples/go.sum
+      input_hash: d982c94d4f72f055b6a8cf0c866cddd90d0713d24953432eb244f1e3b7920ca3
+    - path: examples/player/main.go
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
+    - path: playback/player.go
+      input_hash: 267c7d8753f94c021deedf6fa45984611d047c22129827d3757049cd9655b747
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: follows
+  to: milestone:audio-webcodecs
+- relation: extends
+  to: milestone:playback
+- relation: extends
+  to: milestone:audio-audiotoolbox
+history:
+  implemented-2026-10-14:
+    summary: Audio stream, device clock and Ebitengine output written and measured in a day; the device
+      tests found the demuxer's unsynchronised reads and the stale ready signal, the fresh module cache
+      of that morning found the go.sum mismatch.

@@ -42,27 +42,33 @@ func TestProbe(t *testing.T) {
 			}
 		}
 	case runtime.GOOS == "android":
-		// Every entry comes from MediaCodec and names a hardware codec;
-		// an emulator (software codecs only) lists nothing.
+		// Every entry comes from MediaCodec: the video ones name a
+		// hardware codec (an emulator, with software codecs only, lists
+		// none), the audio ones the framework's software codecs.
 		for _, c := range caps {
-			if c.Backend != "mediacodec" || !c.Hardware {
+			if c.Backend != "mediacodec" || c.Hardware == c.Codec.IsAudio() {
 				t.Errorf("unexpected capability on android: %+v", c)
 			}
 		}
 	case runtime.GOOS == "linux":
 		// With no GPU, no libva, no libvpl and no NVIDIA driver the list
-		// is empty; with one, every entry comes from a Linux backend.
+		// has no video; with one, every entry comes from a Linux backend.
+		// The audio entries stand for the codec libraries installed.
 		for _, c := range caps {
-			if (c.Backend != "vaapi" && c.Backend != "nvidia" && c.Backend != "vpl") || !c.Hardware {
+			video := (c.Backend == "vaapi" || c.Backend == "nvidia" || c.Backend == "vpl") && c.Hardware && !c.Codec.IsAudio()
+			audio := (c.Backend == "libopus" || c.Backend == "fdk-aac" || c.Backend == "libavcodec") && !c.Hardware && c.Codec.IsAudio()
+			if !video && !audio {
 				t.Errorf("unexpected capability on linux: %+v", c)
 			}
 		}
 	case runtime.GOOS == "windows" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64"):
 		// Hardware depends on the machine; only the backend identity is
-		// fixed. The NVIDIA backend exists on amd64 only.
+		// fixed. The NVIDIA backend exists on amd64 only. The audio
+		// entries are the system's software codecs.
 		for _, c := range caps {
 			nvidia := c.Backend == "nvidia" && runtime.GOARCH == "amd64"
-			if (c.Backend != "mediafoundation" && !nvidia) || !c.Hardware {
+			audio := c.Backend == "mediafoundation" && c.Codec.IsAudio()
+			if (c.Backend != "mediafoundation" && !nvidia) || c.Hardware == audio {
 				t.Errorf("unexpected capability on windows: %+v", c)
 			}
 		}

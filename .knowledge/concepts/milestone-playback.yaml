@@ -73,11 +73,11 @@ verification:
       note: Apple M3, macOS 27; run 2026-10-10 - ended after 33 ticks with 12 shown and 0 skipped
     basis:
     - path: playback/player.go
-      input_hash: a0917e0e22792cb1cdf616e3bc588fe5ed8e97a40325d977233a97435a269da9
+      input_hash: 267c7d8753f94c021deedf6fa45984611d047c22129827d3757049cd9655b747
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: fe2f5856d90170a7c29688abfe8ad3a25ff02c6ee9f5967ac6c91e12d269fb3b
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/source_darwin_test.go
       input_hash: a5c4ff454cb8b0ff7efc604ca30333ea932ae4059bafa5d9807ae2141398d547
     - path: playback/seek_darwin_test.go
@@ -97,9 +97,9 @@ verification:
       note: run 2026-10-10, three times in a row
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: e64c82df9fcca1c2409428c522528b9e7c7770174e4ed1eca56780932dc21165
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
   texture-run:
     state: passed
     method: manual
