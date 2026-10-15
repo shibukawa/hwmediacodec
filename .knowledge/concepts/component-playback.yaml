@@ -1,0 +1,483 @@
+id: component:playback
+type: component
+title: 'playback and ebitenvideo: decoding against a clock, pacing, seeking, looping; frames into an *ebiten.Image'
+summary: playback.Player decodes on a background goroutine a few frames ahead, in display order and as
+  RGBA by default, and Advance(dt) returns the frame that is due; a PacketSeeker gives Seek, Length and
+  looping, raw Annex-B streams are timed by output order and scanned once for keyframes. ebitenvideo (a
+  separate module) drives a playback.Player from the game loop and uploads the frames into an *ebiten.Image.
+  Consolidated on 2026-10-16 from milestone:playback, milestone:ebitenvideo-seek and the player parts
+  of milestone:display-order-rgba.
+lifecycle: active
+authority: authored
+aliases:
+- playback package
+- ebitenvideo
+- Player
+- 再生コア
+- シーク対応
+constraints:
+- The core module never imports Ebitengine. ebitenvideo is a separate module (own go.mod) that depends
+  on both hwmediacodec and Ebitengine; inside the repository a replace directive binds it to the working
+  tree.
+- Only ebitenvideo/player.go imported Ebitengine; source.go (551 lines) and timeline.go did not, so the
+  split is a move plus a new Player type. The seek protocol, the loop rebase and the raw-stream timing
+  (frames of an untimed Annex-B stream are timed by output order) are as before; see milestone:ebitenvideo-seek.
+- 'The decode loop is hwmediacodec.DecodeReader now: seek and stop requests are looked at once per frame
+  instead of once per packet, a seek calls Reset before repositioning the reader, and a loop iteration
+  calls Reset after rewinding because the reader had reached its end.'
+- Advance returns at most one frame per call (the latest one due; earlier ones are skipped and counted)
+  and nil between frames; the caller releases it. Frames are RGBA unless WithOutputFormat says otherwise;
+  ebitenvideo pins RGBA because WritePixels needs it.
+- ebitenvideo.Option is an alias of playback.Option and ErrNotSeekable is the same value, so existing
+  callers compile unchanged.
+- Length of a raw stream is 0 until the first seek scanned it; the new ebitenvideo test first asserted
+  it too early.
+- 'Packet sources carry presentation times: PacketReader{Codec(), TimeScale(), ReadPacket()} and PacketSeeker{SeekKeyframe(t),
+  Length()} (the root package''s interfaces since milestone:packet-pipeline; first ebitenvideo.Source/Seeker
+  with microsecond times). The decoder is opened with WithTimeScale(src.TimeScale()) so presentation times
+  round-trip through Packet.PTS and Frame.PTS.'
+- 'Raw elementary streams are timed after decoding: frame k out of the decoder (display order) is at k/fps,
+  counting from the keyframe index a seek landed on (a keyframe''s decode-order index equals its display-order
+  index). Timing packets by decode-order index was wrong for B-frame streams (the first attempt did that
+  and frame 1 came out at 2/fps).'
+- 'Seek protocol: Player.Seek bumps a generation counter, posts a request (newest wins), resets the timeline
+  clock to the target and stops it until the first frame of the new generation arrives; the decode goroutine
+  flushes and discards, calls SeekKeyframe, then decodes and drops frames before the target (precise seek).
+  Items carry gen/loop/rebase; the player releases items of older generations. An end marker item (no
+  frame) tells the player a generation finished; with a Seeker the goroutine then waits for the next seek
+  instead of exiting, so seeking after the end resumes playback.'
+- annexb.Reader.Offset reports the stream offset of the three-byte start code of the last access unit
+  (one byte into a four-byte start code); the stream source scans the whole file once (annexb.Split +
+  IsKeyframe) to build index->offset pairs and Length = count/fps.
+- PacketSource.Length is the presentation length (max PTS+duration minus the edit-list offset), not the
+  decode-time duration, which is one B-frame delay shorter.
+- NewPlayer still handles H.264/HEVC Annex-B only; AV1 plays through a Source (MP4 demuxer).
+acceptance:
+  dor-ebitenvideo-player:
+    text: The player shows frame k at k/fps on the game clock, starts its clock at the first decoded frame,
+      skips frames when behind, reports the end, loops over an io.ReadSeeker without shortening the last
+      frame, and delivers RGBA frames in display order from the decode goroutine.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-timeline-unit-test
+    - dor-player-hardware-test
+  dor-module-split:
+    text: The core module has no Ebitengine dependency (go.mod unchanged apart from purego) and ebitenvideo
+      builds with CGO_ENABLED=1 and 0 on darwin/arm64.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-module-build-check
+  playback-core:
+    text: A playback.Player ticked at 60 Hz shows all 12 frames of a 30 fps stream and ends, loops without
+      ending, returns NV12 frames when asked, seeks (position right after Seek, clock resuming just above
+      the target, seeking past the end ends, seeking back resumes) and refuses to seek or loop a non-seekable
+      reader; the decode source delivers a B-frame stream in display order matching ffmpeg.
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - playback-playback-test
+  playback-ebitengine:
+    text: An ebitenvideo.Player driven with Update fills an image of the stream's size, ends, resumes
+      after Seek and reports the length once the stream was scanned.
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - playback-ebitenvideo-test
+  playback-samples:
+    text: The player and texture samples play the bundled clip; a recording of the texture sample's window
+      shows the picture.
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - playback-texture-run
+  seek-source-seek-exact:
+    text: On a 90-frame H.264 B-frame stream (keyframes every 25) the first frame after a seek to 2 s
+      is frame 60 (keyframe 50 decoded from, 50..59 dropped) and matches ffmpeg's frame 60 within 30 dB
+      block PSNR; a seek between frames gives the first frame at or after the target; a seek onto a keyframe
+      gives it; a seek past the end gives only the end marker; a later seek resumes; Length is 3 s after
+      the scan.
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - seek-source-seek-test
+  seek-player-seek:
+    text: Player.Seek sets Position to the target at once, the clock resumes with the first frame after
+      it, Length reports 3 s, seeking past the end ends playback and seeking back resumes it, and a non-seekable
+      reader reports ErrNotSeekable and Length 0.
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - seek-player-seek-test
+  seek-timeline-reset:
+    text: After reset the clock sits at the target and does not run until a frame of the new generation
+      arrives; frames then show relative to the target.
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - seek-timeline-unit-test
+  seek-packet-source:
+    text: PacketSource delivers every sample with presentation times starting at 0, Length 2 s for a 60-frame
+      30 fps track, and SeekKeyframe lands on the sync sample at or before the target (1.5 s -> 1.333
+      s sample 40; past the end -> the last keyframe) with that sample read next.
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - seek-packet-source-test
+  seek-annexb-offset:
+    text: Offset points at the start code of the returned access unit and re-reading from it yields the
+      same access unit, also through a one-byte-at-a-time reader.
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - seek-annexb-offset-test
+verification:
+  dor-timeline-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestTimelineShowsFramesAtTheirTime, TestTimelineSkipsWhenBehind, TestTimelineWaitsForDecoder,
+      TestTimelineLoopKeepsLastFrameDuration
+    evidence:
+      path: playback/timeline_test.go
+      locator: TestTimelineShowsFramesAtTheirTime
+    basis:
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/timeline_test.go
+      input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
+  dor-player-hardware-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestSourceDeliversDisplayOrderRGBA, TestPlayerPlaysAndLoops
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      locator: TestPlayerPlaysAndLoops
+      note: runs without an Ebitengine window (ebiten.NewImage and WritePixels are allowed before RunGame);
+        a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+    - path: playback/source.go
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+  dor-module-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: go build ./... and CGO_ENABLED=0 go build ./... in ebitenvideo; scripts/crossbuild.sh for the
+      core module
+    evidence:
+      path: ebitenvideo/go.mod
+      note: ebiten v2.10.4; the core go.mod still requires only purego
+    basis:
+    - path: ebitenvideo/go.mod
+      input_hash: 5ab8abcd6de385198d5e476b7979aef44bbffd7412591f0aa6160f2ccfe67cf7
+    - path: go.mod
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+  browser-player-in-game-loop:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: scripts/browser_test.sh -v -run TestPlayerInGameLoop ./ebitenvideo (a real ebiten.RunGame in
+      the page)
+    evidence:
+      path: ebitenvideo/player_js_test.go
+      note: 2026-10-13, Chrome - after 40 ticks with a picture the image read back equals a frame of the
+        stream as decoded on its own
+    basis:
+    - path: ebitenvideo/player_js_test.go
+      input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+  playback-playback-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerPlaysAndLoops, TestPlayerSeek, TestSourceSeek, TestSourceDeliversDisplayOrderRGBA,
+      TestTimeline*
+    evidence:
+      path: playback/source_darwin_test.go
+      locator: TestPlayerPlaysAndLoops
+      note: Apple M3, macOS 27; run 2026-10-10 - ended after 33 ticks with 12 shown and 0 skipped
+    basis:
+    - path: playback/player.go
+      input_hash: 4506afbf0454e9a45287a1a9bd13edaa9b03b8af805e7633bedfdab51eddc520
+    - path: playback/source.go
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/source_darwin_test.go
+      input_hash: a5c4ff454cb8b0ff7efc604ca30333ea932ae4059bafa5d9807ae2141398d547
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
+  playback-ebitenvideo-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerUploadsFrames
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      locator: TestPlayerUploadsFrames
+      note: run 2026-10-10, three times in a row
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+  playback-texture-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -record tex.mp4 -seconds 3, then a frame extracted at 2 s
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-10 - 167 frames, 0 dropped, h264 1280x720 3.0 s; the extracted frame shows the waterfall
+        clip upright and in its colours (mp4.PacketSource -> playback -> ebitenvideo -> capture -> mp4.VideoFile)
+    basis:
+    - path: examples/texture/main.go
+      input_hash: 639aa06bec4fe658c7b79d1e1736a26fb044c5d913f42b1a8437b20aa355e8fa
+  seek-source-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestSourceSeek, TestSourceDeliversDisplayOrderRGBA
+    evidence:
+      path: playback/seek_darwin_test.go
+      locator: TestSourceSeek
+      note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
+    basis:
+    - path: playback/source.go
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+  seek-player-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlayerSeek, TestPlayerPlaysAndLoops
+    evidence:
+      path: playback/seek_darwin_test.go
+      locator: TestPlayerSeek
+      note: run 2026-10-09
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/seek_darwin_test.go
+      input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
+  seek-timeline-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestTimelineSeekResetsClock and the existing timeline tests (now pts based)
+    evidence:
+      path: playback/timeline_test.go
+      locator: TestTimelineSeekResetsClock
+    basis:
+    - path: playback/timeline.go
+      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+    - path: playback/timeline_test.go
+      input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
+  seek-packet-source-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPacketSource
+    evidence:
+      path: mediacontainer/mp4/packetsource_test.go
+      locator: TestPacketSource
+      note: no hardware; ffmpeg-made MP4; run 2026-10-09
+    basis:
+    - path: mediacontainer/mp4/packetsource.go
+      input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: mediacontainer/mp4/packetsource_test.go
+      input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
+  seek-annexb-offset-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: ebitenvideo-seek
+      platform: darwin
+      gpu: apple-silicon
+    test: TestReaderOffset
+    evidence:
+      path: encoding/annexb/annexb_test.go
+      locator: TestReaderOffset
+    basis:
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: encoding/annexb/annexb_test.go
+      input_hash: 5b5d474b15cb3d4dd902716e5853a662b0f8713d2bde18c9c2b588a808052373
+facts:
+  api:
+    ebitenvideo: NewPlayer(r io.Reader, codec, fps, WithLoop|WithSoftwareFallback|WithPrefetch) -> Player{Play,
+      Pause, IsPlaying, Update, Image, Size, Position, Skipped, Ended, Err, Close}; module github.com/shibukawa/hwmediacodec/ebitenvideo
+    playback: import github.com/shibukawa/hwmediacodec/playback; New(src PacketReader, opts...) / NewStream(r,
+      codec, fps, opts...) -> Player{Play, Pause, IsPlaying, Ended, Err, Position, Length, Seekable, Seek,
+      Skipped, Size, Advance(dt) (*Frame, error), Close}; WithLoop, WithSoftwareFallback, WithPrefetch,
+      WithOutputFormat; ErrNotSeekable
+    ebitenvideo_seek: Source, Seeker, ErrNotSeekable, NewPlayerFromSource(src, opts...), Player.Seek(t)
+      error, Player.Length(), Player.Seekable(); NewPlayer unchanged (seeks when r is an io.ReadSeeker)
+    container: VideoTrack.PacketSource() *PacketSource{Codec, ReadPacket, SeekKeyframe, Length}; Track.PresentationLength()
+    annexb: Reader.Offset() int64
+  milestone_notes:
+    dor:
+      implementation:
+        ebitenvideo: source.go decodes on a goroutine into a bounded channel (prefetch) in display order
+          as RGBA; timeline.go paces by display index (clock starts at the first frame, loop rebases by
+          the previous iteration's duration, late frames are skipped); player.go uploads with WritePixels
+          into an Unmanaged ebiten.Image created lazily
+    browser:
+      zero_copy:
+        state: 'tried and taken out on 2026-10-13 (commit 543e25b has the implementation, the one after
+          it removes it): the core keeps the Native frame format, ebitenvideo is back to RGBA frames and
+          WritePixels in the browser too'
+        why_removed: the author's decision after the measurements and the memory model of the other backends
+          were on the table - the upload had to find Ebitengine's texture from outside, it paid only from
+          1080p up in Chrome, it was slower in Firefox, and no native backend can do the same. Revisit
+          when Ebitengine offers a way to write an image source into an image's texture.
+        core: hwmediacodec.Native output format; see backend:webcodecs facts.native_frames_2026-10-13
+        ebitengine_internals: Ebitengine 2.10.4 on js creates a WebGL2 context on its canvas, copies the
+          context's functions with bind when it starts, allocates one texture per unmanaged image with
+          texImage2D(TEXTURE_2D, 0, RGBA, w, h, 0, RGBA, UNSIGNED_BYTE, null) at the next power of two
+          (16 at least), no padding, and writes pixels with texSubImage2D at flush time. It exposes none
+          of it.
+        how_it_worked: an init function wrapped texImage2D on WebGL2RenderingContext.prototype (before
+          Ebitengine binds it) and recorded allocations; the player wrote its first frames with WritePixels
+          (read back through an OffscreenCanvas), then took the allocation of the right size that read
+          those pixels back (temporary framebuffer + readPixels), and from then on called texSubImage2D(TEXTURE_2D,
+          0, 0, 0, RGBA, UNSIGNED_BYTE, videoFrame) with the previous texture binding restored. When the
+          texture was not found it reopened the source with RGBA frames at the same position. It worked
+          in Chrome and Safari (the image read back was identical to the RGBA path in Chrome); Firefox
+          was left on RGBA frames.
+        measurements_m3: 'time per frame on the page''s one thread, inside ebiten.RunGame (Chrome with
+          a window): RGBA path = copy into Go memory + WritePixels + texSubImage2D at flush = 0.9 ms at
+          720p, 1.7 ms at 1080p, 9.4 ms at 4K; direct upload 1.1-1.7 ms at every size; a VideoFrame read
+          back through a canvas 5.6-9 ms at 720p, 12 ms at 1080p, 50 ms at 4K. Firefox 720p - RGBA 1.9
+          ms, direct 4.5 ms. Safari 720p - RGBA 1.3-1.7 ms plus the Go YUV-to-RGB conversion in the decoder,
+          direct 3.8-5.4 ms. The RGBA path additionally makes the browser read every frame back from the
+          GPU, off the page''s thread.'
+        colour_caveat: with a direct upload the browser converts the frame; for untagged SD streams Safari
+          and Firefox take BT.709 where the RGBA path follows the library's rule (BT.601).
+  learned:
+  - Ebitengine v2.10 builds with CGO_ENABLED=0 on darwin/arm64, and ebiten.NewImageWithOptions/WritePixels
+    work before RunGame, so the player has headless tests.
+  delivery_results:
+    milestone:playback:
+      result:
+        status: delivered 2026-10-10
+    milestone:ebitenvideo-seek:
+      result:
+        status: delivered 2026-10-09
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:display-order-rgba
+- relation: supersedes
+  to: milestone:browser-webcodecs
+- relation: supersedes
+  to: milestone:playback
+- relation: supersedes
+  to: milestone:ebitenvideo-seek
+- relation: depends_on
+  to: component:core-api
+- relation: depends_on
+  to: component:display-order
+- relation: depends_on
+  to: component:mediacontainer
+history:
+  playback-delivered-2026-10-10:
+    summary: Third and last of the reusability points the author asked for, after the interfaces and the
+      loops (milestone:packet-pipeline).
+  seek-delivered-2026-10-09:
+    summary: Requested by the author right after the usage-sample PR (#10) was opened; added to the same
+      branch.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:display-order-rgba, milestone:browser-webcodecs,
+      milestone:playback, milestone:ebitenvideo-seek was folded into this concept (keys prefixed with
+      the milestone's tag; dated measurements kept as evidence notes); the milestone files remain as superseded
+      stubs with their timelines.
+    supersedes:
+    - milestone:display-order-rgba
+    - milestone:browser-webcodecs
+    - milestone:playback
+    - milestone:ebitenvideo-seek

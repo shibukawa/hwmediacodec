@@ -1,0 +1,741 @@
+id: component:examples
+type: component
+title: 'The examples module: converter, thumbnails, record, hls, webrtc, player, texture, imgconv, mobile,
+  fireworks scene'
+summary: A separate Go module of complete programs built on the library, with the bundled waterfall clip
+  (examples/assets, the author's own footage), the fireworks scene behind record/hls/webrtc, the Ebitengine
+  player and texture samples (also for the browser), the HEIC/AVIF converter with its cgo-free fallback
+  codecs, and the Ebitengine mobile game with its Xcode and Android projects. Consolidated on 2026-10-16
+  from the examples-* and imgconv-fallback milestones.
+lifecycle: active
+authority: authored
+aliases:
+- examples module
+- sample programs
+- サンプル
+- fireworks
+- imgconv
+- waterfall clip
+constraints:
+- The public API, the ebitenvideo and playback packages and the examples are unchanged in behaviour; the
+  Ebitengine mobile sample exports only a Dummy function because gobind cannot bind ebiten.Game method
+  signatures.
+- Timestamps pass through unchanged. Both decoder and encoder are opened with WithTimeScale(track time
+  scale), so frame PTS are MP4 sample times and encoder packets carry PTS/DTS in the same unit; the muxer
+  stores them as given, apart from a constant DTS shift.
+- 'Thumbnails decode with WithDecodeOrder() and WithOutputFormat(RGBA): a sequence of keyframes has decode
+  order equal to display order, so each picture comes out immediately instead of waiting in the reorder
+  buffer, and the plane maps onto image.RGBA without copying.'
+- The first demo scene drew with DrawImage only. Ebitengine 2.10 anti-aliased vector fills (24 FillCircle
+  + StrokeCircle per frame) cost about 80 ms a frame at 720p and dragged Draw to 12 fps, which first looked
+  like a capture problem. The scene was later replaced by the fireworks show (milestone:examples-fireworks).
+- 'Rendering: stars are 32 px radial sprites drawn with BlendLighter into cur (full brightness, cleared
+  each frame); acc is faded by a SourceOver black at alpha 0.09 plus a ReverseSubtract of 2/255 (a pure
+  multiplicative fade leaves permanent faint ghosts in 8-bit buffers) and then receives cur at 0.14; the
+  shader reads cur, acc and the skyline mask (Images[0..2], all screen-sized as DrawRectShader requires).'
+- The first version drew every frame at full brightness into one accumulating buffer and saturated to
+  white blobs; the two-layer split and smaller sprites fixed it.
+- 'Gopher shell: silhouette from ellipses (body, ears, eyes with pupil holes, snout, nose, teeth, arms,
+  feet) sampled at density 0.13 points per unit area with per-feature multipliers (body 0.55, eyes 1.3,
+  teeth 1.6) and outlines; star velocity v0 = (target - gravityFall)/travel where travel and fall are
+  integrated with the scene''s own particle.step at the scene TPS (a closed-form exponential was 2.5 %
+  off the discrete integration); tilt +-0.15 rad, scale 0.92-1.08 per axis, 2.5-unit jitter; forms in
+  1.1 s, then sinks.'
+- 'Shells: v = sqrt(2 g h) for a chosen apex, trail sparks every tick, burst when vy >= 0; Crackle stars
+  carry splitAt and explode into six sparks; all sizes scale with height/720.'
+- Scene cost at 720p on the M3 with the record sample capturing is about 5-7 ms per draw including ReadPixels;
+  60 fps is kept.
+- The window keeps the keyboard; browsers only watch. browser.OpenURL is called after the HTTP server
+  starts; failures are printed, not fatal.
+- 'Title screen (added on the author''s request): the scene starts idle with a centred "HANABI" title,
+  a blinking "PRESS A FOR THE AUTO SHOW" and the key list, drawn with text/v2 and the Go Regular font
+  from golang.org/x/image; A starts the automatic show, any other key starts manual play and is handled
+  as a launch key when it is one; Scene.Start(auto) does the same from code. record skips the title (-auto
+  defaults to true, -launch starts manual play), hls and webrtc show it unless -auto.'
+- 'Screen-off streaming: Ebitengine needs a window to exist (no headless backend), but it keeps running
+  Update/Draw while the window is minimized on macOS - measured 2026-10-09 with hls -auto -minimized:
+  the window minimized 1 s after start and after 14 s the playlist held five 2.000 s segments at 60 fps.
+  The -minimized flag does that; a truly windowless stream would render frames without Ebitengine and
+  feed the same Recorder/Segmenter/Broadcaster, which never touch the display.'
+- 'The player image is a plain *ebiten.Image updated in place, so no ebitenvideo API change was needed:
+  DrawImage, DrawTriangles (as the texture) and DrawRectShader (Images[0]) all take it as is.'
+- Ebitengine DrawTriangles interpolates texture coordinates affinely; each cube face is split into an
+  8x8 grid whose corners are projected individually so that the perspective error stays invisible.
+- Back faces are culled by the projected winding (corners listed counter-clockwise from outside give a
+  positive cross product on screen with y down when facing the camera); the first attempt had the sign
+  inverted and showed five faces head-on, which the mesh unit test caught.
+- DrawRectShader requires the destination rectangle and Images[0] to have the same size, so the shader
+  is drawn at video size and scaled with GeoM; scanlines are keyed to dstPos.y so they do not alias with
+  the video resolution.
+- The clip is embedded with go:embed (1.4 MB) so that go run ./player and go run ./texture work from any
+  directory; container.NewDemuxer takes the bytes.Reader. The ebitenvideo module cannot import examples
+  (it would make the two modules depend on each other), so the MP4-capable player lives in examples/player
+  and ebitenvideo/example stays a raw-stream demo.
+- 'texture box: half-extents (1, aspect, 1) with aspect = clamp(h/w, 0.5, 2), so the four side faces keep
+  the video''s aspect; top and bottom are square. Camera focal 0.75*h, distance 4.2 to fit a 2:1 box.'
+- 'Shader amounts for real footage: barrel 0.05*r2, ripple 0.002, scanline 0.93 +- 0.07, vignette 0.25*r2
+  (were 0.10 / 0.004 / 0.85 +- 0.15 / 0.45).'
+- Audio tracks are ignored by the players (no AAC decoder in Ebitengine); the clip's AAC track is copied
+  by convert and listed by the container tests.
+- 'The author asked for the fallback in the sample converter, not in the library: image/heif and image/avif
+  stay hardware-only and the examples module takes the new dependencies (gen2brain/avif v0.6.0 with wazero
+  v1.12.0, gen2brain/h265 v0.2.3).'
+- 'The author asked for pure-Go codecs. gen2brain/h265 is Go code; no AV1 encoder or decoder written in
+  Go was found, so the AVIF fallback is WebAssembly run by wazero: cgo-free, CGO_ENABLED=0 builds work,
+  but it is not Go source. The README and the program''s messages say so.'
+- Fallback only on errors.Is(err, hwmediacodec.ErrUnsupported), which also covers a hardware decoder that
+  exists but refuses the stream (VideoToolbox and 4:4:4 AV1). Other errors are reported, not hidden. -engine
+  hardware and -engine go force one side; who did the work is printed on standard error.
+- The hardware path encodes into memory, so nothing reaches the output when the fallback takes over, and
+  a failed conversion leaves no file.
+- 'The fallback encoders store no irot: -rotate turns the pixels (same displayed picture). The AVIF fallback
+  is told to write 4:2:0 because its default 4:4:4 (seq_profile 1) is refused by hardware decoders.'
+- Both fallback libraries also register heic/avif with the image package when imported; the sample therefore
+  calls the packages directly for HEIF input instead of image.Decode.
+acceptance:
+  browser-ebitengine-in-browser:
+    text: examples/player built for js/wasm plays the bundled clip in a browser at the display rate without
+      skipped frames, and seeking works.
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    verified_by:
+    - browser-player-in-browser
+  browser-clip-plays-without-hevc:
+    text: A browser without an HEVC decoder (Firefox) gets the bundled clip in H.264, chosen without any
+      setting, and automated tests cover the choice and both encodings.
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    verified_by:
+    - browser-bundled-clip-fallback
+  exmp4-convert-end-to-end:
+    text: convert produces an MP4 whose video has the target codec, the source frame count and size, PSNR
+      >= 30 dB against the source, B-frames when requested, identical presentation times as reported by
+      ffprobe, and the audio track copied with the same codec and packet count.
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exmp4-convert-test
+    - exmp4-convert-1080p-run
+  exmp4-thumbnails-end-to-end:
+    text: With -all the tool writes one image per keyframe named by presentation time, each within 30
+      dB (8x8 block PSNR) of ffmpeg's decode of the same frame; -every picks the keyframe at or before
+      each instant; -width scales with the aspect ratio kept.
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exmp4-thumbnails-test
+  exscreen-record-app:
+    text: The record app at 1280x720 and 60 fps records 5 s without drops at about 56 fps including window
+      start-up, with ReadPixels costing a few milliseconds per draw.
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exscreen-record-run
+  exfw-gopher-shape:
+    text: gopherPoints yields 500-1600 points inside the box, none inside the pupils, all colour classes
+      present with at least 100 white (eye/teeth) points; after 1.1 s of integration at 60 TPS a burst
+      at (600, 300) spans about 280x290 px centred within 25/40 px, white stars sitting in the upper half.
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exfw-fireworks-unit-test
+  exfw-solver-exact:
+    text: A star aimed with displacementForUnitVelocity lands within 1 px of its target after the formation
+      time.
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exfw-fireworks-unit-test
+  exfw-looks:
+    text: Recorded through the record sample, frames show distinct shell types with trails, the skyline
+      with lit windows and a rippled reflection, and the gopher shell forms a recognisable gopher (ears,
+      round body, white eyes) that then fades.
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exfw-fireworks-record-run
+  extex-cube-mesh:
+    text: Head-on only the front face is emitted (25 vertices, 96 indices for 4x4 cells) with texture
+      coordinates spanning the texture once and a centred square projection; 45 degrees shows two faces,
+      tilted three; all indices are in range.
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - extex-mesh-test
+  extex-renders:
+    text: The app plays an HEVC MP4 at 1280x720 and, recorded through screencast for 13 s, shows the flat
+      video, the lit cube with the video on three visible faces, and the shader effect in frames extracted
+      at 2 s, 6 s and 10 s.
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - extex-texture-run
+  exwebrtc-browser-playback:
+    text: A Chromium browser connects through the page at /, receives 1280x720 H.264 at the game's frame
+      rate with no packet loss, and the decoded picture shows the scene.
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exwebrtc-webrtc-live-run
+  explayer-clip-demuxes:
+    text: The embedded clip demuxes to an HEVC 720x1280 track of 293 samples at 29.6-29.7 fps with one
+      audio track, PacketSource.Length 9.8-9.9 s, keyframe 0 first, and every access unit converts to
+      Annex-B.
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - explayer-assets-container-test
+  explayer-player-plays-clip:
+    text: The player opens the clip the way main does, reports 720x1280 and a length of about 9.88 s,
+      shows a frame and seeks to 5 s.
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - explayer-player-test
+  explayer-box-aspect:
+    text: boxMesh with aspect 2 projects a front face twice as tall as wide; aspect 1 keeps the earlier
+      cube checks.
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - explayer-mesh-test
+  explayer-looks:
+    text: Recorded through the texture sample, the clip appears pillarboxed in flat mode, on a tall box
+      in box mode and with a barely visible curve and scanlines in shader mode.
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - explayer-texture-clip-run
+  imgconv-fallback-round-trip:
+    text: With -engine go both formats encode and decode within 32 dB (4x4-block PSNR) of the source,
+      and where the machine has a hardware decoder it reads the fallback encoders' files to the same quality.
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - imgconv-imgconv-test
+  imgconv-auto-choice:
+    text: -engine auto uses the hardware for every format and direction Probe lists and the fallback otherwise;
+      forcing the hardware where there is none is ErrUnsupported with nothing written.
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - imgconv-imgconv-test
+  imgconv-cross-read:
+    text: The fallback HEIC decoder reads the hardware encoder's files, a rotated 128-pixel grid included,
+      with the same size and rotation direction.
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - imgconv-imgconv-test
+  imgconv-command:
+    text: On the M3, imgconv writes a 1000x700 PNG as AVIF through the fallback, reads it back with the
+      hardware decoder, writes and reads a rotated HEIC with -engine go, and -engine hardware for AVIF
+      output fails without leaving a file.
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - imgconv-imgconv-run
+verification:
+  browser-player-in-browser:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: examples/player and examples/texture built with GOOS=js GOARCH=wasm, served from localhost and
+      opened in the Claude desktop app's built-in (Chromium) browser; go run github.com/hajimehoshi/wasmserve@latest
+      ./player serves the same build
+    evidence:
+      path: examples/player/main.go
+      note: '2026-10-12: the status line read "waterfall-720p-hevc.mp4 720x1280 ... 60 fps skipped 0"
+        at 3.15 s and 6.16 s; Home and the right arrow key seeked; texture showed the clip on its rotating
+        quad. No console messages.'
+    basis:
+    - path: examples/player/main.go
+      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+    - path: playback/source.go
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+    - path: internal/webcodecs/decoder.go
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
+  browser-bundled-clip-fallback:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: browser-webcodecs
+      platform: js
+    test: go test ./assets ./internal/bundled ./player ./texture (examples module, natively) ; scripts/browser_test.sh
+      -v ./examples/assets ./examples/internal/bundled in Chrome and with HWMEDIACODEC_BROWSER set to
+      Firefox
+    evidence:
+      path: examples/internal/bundled/bundled_test.go
+      note: '2026-10-13: Chrome decodes both encodings and Open takes the HEVC one; Firefox 157 skips
+        the HEVC one, decodes the H.264 one (30 frames RGBA in display order) and TestOpenFallsBackToH264
+        shows a frame; TestChoose covers the order of attempts and the error returned. Not run in Safari.'
+    basis:
+    - path: examples/assets/assets.go
+      input_hash: 3e244ca1acab9f5c2a46d9dfea0f581277fa7be76eccd60ec7702804e0dd42c4
+    - path: examples/assets/assets_test.go
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
+    - path: examples/internal/bundled/bundled.go
+      input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
+    - path: examples/internal/bundled/bundled_test.go
+      input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
+  exmp4-convert-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestConvert
+    evidence:
+      path: examples/convert/main_test.go
+      locator: TestConvert
+      note: Apple M3, macOS 26; 320x240 H.264 bf=2 + AAC -> HEVC 2 Mbit/s gop 30, and HEVC -> H.264 quality
+        0.7 with B-frames; run 2026-10-09
+    basis:
+    - path: examples/convert/main.go
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: examples/convert/main_test.go
+      input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
+  exmp4-convert-1080p-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: convert -codec hevc -bitrate 8M -bframes on a 300-frame 1080p30 libx264 bf=2 file with AAC
+    evidence:
+      path: examples/convert/main.go
+      locator: run
+      note: 2026-10-09 on an M3 - 162 fps end to end, output hevc 1920x1080 300 frames has_b_frames 2
+        duration 10.000 s, AAC 469 packets copied, ffmpeg decodes without errors, PSNR 47.1 dB
+    basis:
+    - path: examples/convert/main.go
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
+  exmp4-thumbnails-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestThumbnails
+    evidence:
+      path: examples/thumbnails/main_test.go
+      locator: TestThumbnails
+      note: 160x120 H.264 bf=2 gop 30, 90 frames - three keyframes at 0/1/2 s; names, sizes, block PSNR
+        vs ffmpeg's frames, -every 1.5s gives two files, -width 80 gives 80x60; run 2026-10-09
+    basis:
+    - path: examples/thumbnails/main.go
+      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+    - path: examples/thumbnails/resize.go
+      input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: examples/thumbnails/main_test.go
+      input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
+  exscreen-record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o rec.mp4 -seconds 5 -size 1280x720
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 - 278 frames, 0 dropped, 5.0 s, capture 3.74 ms per draw over 279 draws; ffprobe
+        h264 1280x720 278 frames 5.000 s; a frame extracted at n=120 shows the scene correctly
+    basis:
+    - path: examples/record/main.go
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
+    - path: examples/internal/fireworks/scene.go
+      input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
+  exfw-fireworks-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    test: TestGopherPointsCoverTheFigure, TestGopherBurstFormsTheFigure, TestDisplacementMatchesIntegration,
+      TestBurstsHaveStars
+    evidence:
+      path: examples/internal/fireworks/fireworks_test.go
+      locator: TestGopherBurstFormsTheFigure
+    basis:
+    - path: examples/internal/fireworks/gopher.go
+      input_hash: a0947a56704deb3b0ea7c99e53d6decd643ddb7b79695db053ef2930634fe7a8
+    - path: examples/internal/fireworks/particles.go
+      input_hash: 55c393727ac5806fb999d8018240c54e122906ee3c5c2192422a0b14fbcb93bc
+    - path: examples/internal/fireworks/fireworks_test.go
+      input_hash: 73ef3f02b253d3494e945a92ecfdd2c86c1b94752f69ecc1c312fcc7a7410693
+  exfw-fireworks-record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-fireworks
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o fw.mp4 -seconds 9 -launch gopher, frames extracted with ffmpeg and inspected
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 720p60 without drops, capture 5-7 ms per draw; frames at 2.6 s (forming
+        gopher), 3.4 s (gopher with eyes, chrysanthemum, peony) and 7 s (ring, willow, fading gopher)
+        inspected
+    basis:
+    - path: examples/internal/fireworks/scene.go
+      input_hash: bfef6b8c028a7a8bac73216ae111143bc83a6dedb3a6755c3c2c8f1022a839e1
+    - path: examples/internal/fireworks/shader.go
+      input_hash: fdd60fd3e663e55eefd7b11ac81b3dfde8430578eec9291e8e8d5f8d7c37c3ec
+    - path: examples/record/main.go
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
+  extex-mesh-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    test: TestCubeMeshCullsBackFaces
+    evidence:
+      path: examples/texture/mesh_test.go
+      locator: TestCubeMeshCullsBackFaces
+    basis:
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+    - path: examples/texture/mesh_test.go
+      input_hash: 1c5cdbef5942f474cff38e9dae580fa4563070bf98d202ab2e598b6f0131af60
+  extex-texture-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -seconds 13 -record demo.mp4 big_hevc.mp4 (1080p HEVC with B-frames from the
+      convert sample)
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 724 frames recorded, 0 dropped; frames at 2 s (flat), 6 s (cube, three
+        lit faces) and 10 s (shader) inspected
+    basis:
+    - path: examples/texture/main.go
+      input_hash: 639aa06bec4fe658c7b79d1e1736a26fb044c5d913f42b1a8437b20aa355e8fa
+    - path: examples/texture/shader.go
+      input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+  exwebrtc-webrtc-live-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./webrtc -addr 127.0.0.1:18081 with the desktop app's browser pane (Chromium 152) on
+      the page
+    evidence:
+      path: examples/webrtc/main.go
+      locator: main
+      note: 2026-10-09 - connectionState connected, inbound-rtp 1280x720, framesDecoded 317 after 6 s,
+        jitterBufferDelay 7.9 ms, decode 1.26 ms per frame, 0 packets lost, 1 PLI (the join), 4 keyframes;
+        the video drawn to a canvas had 2027 of 2304 bright pixels in 41 coarse colours (the scene), while
+        the pane itself rendered black and reported dropped frames because it was a hidden tab
+    basis:
+    - path: examples/webrtc/main.go
+      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+    - path: net/webrtc/broadcaster.go
+      input_hash: 6c397f65445d2472441d599d4c9f9adc0d6b470aaf434e1396d4a3d6647a4d0d
+  explayer-assets-container-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: TestBundledClip
+    evidence:
+      path: examples/assets/assets_test.go
+      locator: TestBundledClip
+      note: no ffmpeg or hardware; run 2026-10-09
+    basis:
+    - path: examples/assets/assets.go
+      input_hash: 3e244ca1acab9f5c2a46d9dfea0f581277fa7be76eccd60ec7702804e0dd42c4
+    - path: examples/assets/assets_test.go
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+  explayer-player-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: TestPlaysBundledClip
+    evidence:
+      path: examples/player/main_test.go
+      locator: TestPlaysBundledClip
+      note: Apple M3; run 2026-10-09
+    basis:
+    - path: examples/player/main.go
+      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+    - path: examples/player/main_test.go
+      input_hash: 1ed253526ea0dd482aaf507f63ce9b88dd95dc99610bec3899ac52b81cee9ea1
+  explayer-mesh-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: TestBoxMeshCullsBackFaces
+    evidence:
+      path: examples/texture/mesh_test.go
+      locator: TestBoxMeshCullsBackFaces
+    basis:
+    - path: examples/texture/mesh.go
+      input_hash: bb777f5c6fdeef23dcd943773cf1890a31bd0af04eaf214ae188d116ab5e8849
+    - path: examples/texture/mesh_test.go
+      input_hash: 1c5cdbef5942f474cff38e9dae580fa4563070bf98d202ab2e598b6f0131af60
+  explayer-texture-clip-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: examples-player-assets
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./texture -seconds 13 -record demo.mp4 (bundled clip), frames at 2, 6 and 10 s inspected
+    evidence:
+      path: examples/texture/main.go
+      locator: main
+      note: 2026-10-09 on the M3 - 765 frames recorded, 0 dropped
+    basis:
+    - path: examples/texture/main.go
+      input_hash: 639aa06bec4fe658c7b79d1e1736a26fb044c5d913f42b1a8437b20aa355e8fa
+    - path: examples/texture/shader.go
+      input_hash: c4392c51c348aed78cda72284bde579f37797365674597173e7ad0fa0b3d80df
+  imgconv-imgconv-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    test: TestFallbackRoundTrip, TestAutoPrefersHardware, TestFallbackReadsHardwareFiles, TestFallbackBakesRotation,
+      TestFormatOf
+    evidence:
+      path: examples/imgconv/main_test.go
+      locator: TestFallbackRoundTrip
+      note: Apple M3, macOS 27; run 2026-10-10. Before the colr fix the hardware decode of the pure-Go
+        HEIC was 31.5 dB; before forcing 4:2:0 VideoToolbox refused the fallback AVIF.
+    basis:
+    - path: examples/imgconv/codec.go
+      input_hash: fe2c50d893aac20b4afbd963b2355b6977ebb267cd39286a2e3e864fe62b99ac
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
+    - path: examples/imgconv/main_test.go
+      input_hash: 78aa53f9771646d254035f6943b4e1a1b680aa94352993bd824170c8f0927956
+    - path: internal/imageitem/decode.go
+      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+  imgconv-imgconv-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: imgconv-fallback
+      platform: darwin
+      gpu: apple-silicon
+    test: imgconv src.png auto.avif; imgconv auto.avif back.png; imgconv -engine go -rotate 90 src.png
+      go.heic; imgconv go.heic back.png; imgconv -engine hardware src.png hw.avif
+    evidence:
+      path: examples/imgconv/main.go
+      locator: run
+      note: 2026-10-10 - auto.avif 4491 bytes written by the fallback and described as avif 1000x700;
+        go.heic described as heic 700x1000; both read back; the forced hardware AVIF encode failed with
+        ErrUnsupported and left no file
+    basis:
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
+facts:
+  api:
+    convert: flags -codec h264|hevc -bitrate 6M|2500k -cbr -quality -gop -bframes -profile -software -q
+    thumbnails: flags -every 10s -all -width -format jpg|png -quality -o -software
+    record: flags -o -codec -bitrate -fps -size -seconds
+    fireworks: NewScene(w, h, tps) -> Scene{HandleInput, Update, Draw, Launch(kind, x), Particles, Status,
+      Auto}; Help(); Kind (Peony..Gopher), ParseKind
+    flags: record -launch <kind> -auto (default true); hls/webrtc -open (default true) -auto (default
+      false) -minimized
+    texture: flags -codec -fps (raw streams only) -size -seconds -record -software; keys 1/2/3 modes,
+      space pause; modes cycle every 4 s until a key is pressed
+    heifconv: flags -quality -tile -rotate -info -software -jpeg-quality; output format by extension (.heic/.heif/.hif,
+      .avif, .png, .jpg)
+    assets: WaterfallMP4 []byte, WaterfallName, Waterfall() io.ReadSeeker
+    player: flags -codec -fps (raw streams) -once -software; optional path argument
+    texture_explayer: optional path argument (default the clip); boxMesh(cam, ay, ax, texW, texH, aspect,
+      grid)
+  delivery_results:
+    milestone:examples-mp4-tools:
+      result:
+        status: delivered 2026-10-09
+        performance: 1080p H.264 (bf=2) -> HEVC 8 Mbit/s with B-frames at 162 fps on an M3 including demux,
+          mux and audio copy
+    milestone:examples-fireworks:
+      result:
+        status: delivered 2026-10-09
+    milestone:examples-texture:
+      result:
+        status: delivered 2026-10-09
+    milestone:examples-webrtc:
+      result:
+        status: delivered 2026-10-09
+    milestone:examples-player-assets:
+      result:
+        status: delivered 2026-10-09
+    milestone:imgconv-fallback:
+      result:
+        status: delivered 2026-10-10
+  milestone_notes:
+    imgconv:
+      flags: -quality -tile -rotate -info -engine auto|hardware|go -software -jpeg-quality
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:ios-videotoolbox
+- relation: supersedes
+  to: milestone:browser-webcodecs
+- relation: supersedes
+  to: milestone:examples-mp4-tools
+- relation: supersedes
+  to: milestone:examples-screencast-hls
+- relation: supersedes
+  to: milestone:examples-fireworks
+- relation: supersedes
+  to: milestone:examples-texture
+- relation: supersedes
+  to: milestone:examples-webrtc
+- relation: supersedes
+  to: milestone:examples-heif-avif
+- relation: supersedes
+  to: milestone:examples-player-assets
+- relation: supersedes
+  to: milestone:imgconv-fallback
+- relation: depends_on
+  to: component:playback
+- relation: depends_on
+  to: component:capture
+- relation: depends_on
+  to: component:image
+history:
+  exmp4-accepted-2026-10-09:
+    summary: Author asked for usage samples (file converter, keyframe thumbnails, HEIC/HEIF and AVIF conversion,
+      Ebitengine playback, playback as a texture, screen recording with HLS/WebRTC viewing) and agreed
+      to the proposed order - converter and thumbnails first, then recording and HLS, texture playback,
+      WebRTC, HEIF/AVIF last.
+  exmp4-delivered-2026-10-09:
+    summary: Examples module with the container bridge, convert and thumbnails; container tests pass with
+      ffmpeg alone, convert and thumbnails tests and a 1080p run pass on the author's M3.
+  exscreen-delivered-2026-10-09:
+    summary: Second sample slice (screen recording and HLS) delivered after the converter/thumbnails slice;
+      all tests pass on the author's M3 and the live HLS stream was played in a Chromium browser pane.
+  exscreen-moved-2026-10-09:
+    summary: screencast.Recorder left the examples module for the core module as capture.Recorder (milestone:capture-package);
+      NewMP4File became CreateVideoFile of the MP4 package and the MP4 acceptance test moved there; the
+      package itself (container, with the Segmenter) became mediacontainer/mp4 in the core module on 2026-10-10
+      (milestone:mediacontainer-mp4), and the Playlist of examples/hls/server.go became net/hls (milestone:mediacontainer-hls);
+      the sample keeps the player page (examples/hls/page.go).
+  exfw-delivered-2026-10-09:
+    summary: Requested mid-session by the author (good-looking Kage-based fireworks with an occasional
+      gopher, keyboard-selectable shells, browser auto-open) after the WebRTC/HLS samples existed.
+  extex-delivered-2026-10-09:
+    summary: Third sample slice delivered after recording/HLS; mesh and stream tests pass, rendering checked
+      through a screencast recording.
+  exwebrtc-delivered-2026-10-09:
+    summary: Fourth sample slice delivered after the texture sample; loopback tests pass without hardware,
+      the live stream played in a Chromium pane on the M3.
+  explayer-delivered-2026-10-09:
+    summary: Author supplied the clip ("自分で撮影したものなのでライセンスは問題ありません") and asked the player, texture and
+      Kage samples to use it because the test patterns had too much contrast.
+  imgconv-delivered-2026-10-10:
+    summary: The author asked for the sample converter to use pure-Go encoders and decoders when there
+      is no hardware codec, and for the sample to be called imgconv.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:ios-videotoolbox, milestone:browser-webcodecs,
+      milestone:examples-mp4-tools, milestone:examples-screencast-hls, milestone:examples-fireworks, milestone:examples-texture,
+      milestone:examples-webrtc, milestone:examples-heif-avif, milestone:examples-player-assets, milestone:imgconv-fallback
+      was folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as
+      evidence notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:ios-videotoolbox
+    - milestone:browser-webcodecs
+    - milestone:examples-mp4-tools
+    - milestone:examples-screencast-hls
+    - milestone:examples-fireworks
+    - milestone:examples-texture
+    - milestone:examples-webrtc
+    - milestone:examples-heif-avif
+    - milestone:examples-player-assets
+    - milestone:imgconv-fallback

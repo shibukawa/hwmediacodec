@@ -1,0 +1,304 @@
+id: component:capture
+type: component
+title: 'capture: recording what a renderer draws through the encoder into a packet sink'
+summary: capture.Recorder reads the pixels of a Source (Bounds + ReadPixels, which *ebiten.Image satisfies
+  without the package importing Ebitengine) on every frame, encodes them on a background goroutine and
+  pushes the packets into a hwmediacodec.PacketWriteCloser; frames are dropped and counted instead of
+  blocking the game loop, PTS are wall-clock based and quantised to the frame rate, RequestKeyframe forces
+  a keyframe. Consolidated on 2026-10-16 from milestone:capture-package and the recorder parts of the
+  sample milestones.
+lifecycle: active
+authority: authored
+aliases:
+- capture package
+- screen recorder
+- 画面録画パッケージ
+- Recorder
+constraints:
+- 'Capture never blocks the game loop: ReadPixels runs in Draw (about 2 ms at 1280x720 on the M3, 3.7
+  ms including the demo scene), the RGBA buffer goes through a bounded channel to the encoder goroutine,
+  and a full queue drops the frame (counted) instead of stalling.'
+- 'PTS are wall-clock based and quantised to the frame rate (slot = round(elapsed*fps), pts = slot*90000/fps):
+  a dropped frame leaves a gap rather than speeding the recording up, and a second Draw inside one slot
+  (120 Hz display, 60 fps game) is ignored.'
+- Recorder.RequestKeyframe sets ForceKeyframe on the next captured frame (atomic flag); the broadcaster
+  calls it when a peer registers and when the RTP sender reads a PictureLossIndication or FullIntraRequest.
+- Capture counts a frame only once it is queued (a frame that found a free buffer but no queue slot used
+  to be counted as both captured and dropped); VideoToolbox may still skip frames under bursts, so packets
+  <= captured.
+- Nothing in capture imports Ebitengine, mp4ff or pion. Container and transport sinks live with their
+  dependencies (mediacontainer/mp4.VideoFile and Segmenter, examples/webrtc.Broadcaster) and satisfy capture.Sink
+  structurally.
+- 'Named capture, not screencast: to the author screencast suggests mirroring a screen to a television
+  (casting), while the package grabs frames and encodes them. The type stays Recorder (capture.New returns
+  *capture.Recorder, fed with Recorder.Capture).'
+- 'A subpackage, not the root package: the root package is the codec API (Decoder, Encoder, Probe) and
+  the recorder is a consumer of it, like annexb and ivf are helpers around it. Recorder, Options and Sink
+  in package hwmediacodec would have needed prefixed names (NewRecorder, RecorderOptions).'
+- Packets go from the encoder goroutine straight into Sink.WritePacket in memory; no file is involved
+  unless the sink is one. The WebRTC sample hands each access unit to pion's TrackLocalStaticSample and
+  the HLS sample segments in memory.
+- The package tests cannot use an MP4 muxer, so TestRecorderEncodes collects the packets through Funcs,
+  checks PTS steps on the packets themselves and lets ffmpeg decode the concatenated Annex-B stream; the
+  MP4-level check (ffprobe frame count, duration, PTS steps) is TestVideoFileRecordsCapture in mediacontainer/mp4.
+acceptance:
+  exscreen-recorder-mp4:
+    text: Sixty frames of a synthetic screen captured at 30 fps (two captures per slot) give an MP4 with
+      60 frames, PTS steps of 3000 at 90 kHz, 2.000 s duration, no drops, decodable by ffmpeg, whose first
+      frame matches the first captured image within 30 dB.
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exscreen-recorder-test
+  exscreen-recorder-drops:
+    text: With a queue of two frames, bursts of captures are either encoded or counted as dropped and
+      every encoded frame yields a packet.
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exscreen-recorder-test
+  exwebrtc-keyframe-request:
+    text: RequestKeyframe makes the next captured frame a keyframe (keyframes at 0, 10, 20 for requests
+      before captures 10 and 20 with a 300-frame interval).
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exwebrtc-recorder-keyframe-test
+  capture-recorder-core:
+    text: Sixty frames of a synthetic screen captured at 30 fps (two captures per slot) reach the sink
+      as 60 packets starting with a keyframe, PTS steps of 3000 at 90 kHz, 2 s duration, no drops, the
+      sink closed; ffmpeg decodes the Annex-B stream to 60 pictures and the first matches the first captured
+      image within 30 dB (8x8-block PSNR).
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - capture-recorder-core-test
+  capture-recorder-keyframe-drops:
+    text: RequestKeyframe yields keyframes exactly at the requested captures, and with a queue of two
+      frames every capture is either encoded or counted as dropped.
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - capture-recorder-core-test
+  capture-no-new-dependencies:
+    text: The core module builds on its own (GOWORK=off), and go list -deps ./capture shows only the standard
+      library, purego, x/sys and packages of the module; go vet passes for linux and windows.
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - capture-deps-check
+  capture-samples-follow:
+    text: record, texture, hls and webrtc build against the moved package; the MP4 sink test passes in
+      mediacontainer/mp4 and the record app still writes a playable 1280x720 file.
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - capture-videofile-test
+    - capture-record-run
+verification:
+  exscreen-recorder-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: TestVideoFileRecordsCapture (MP4), TestRecorderEncodes, TestRecorderDropsWhenBehind
+    evidence:
+      path: mediacontainer/mp4/videofile_test.go
+      locator: TestVideoFileRecordsCapture
+      note: Apple M3, macOS 26, ffmpeg 9.0.1; run 2026-10-09, re-run the same day after the recorder moved
+        to the core module (milestone:capture-package)
+    basis:
+    - path: capture/recorder.go
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+    - path: packetio.go
+      input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+  exwebrtc-recorder-keyframe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-webrtc
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
+    evidence:
+      path: capture/recorder_test.go
+      locator: TestRecorderRequestKeyframe
+      note: Apple M3; run 2026-10-09
+    basis:
+    - path: capture/recorder.go
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
+  capture-recorder-core-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRecorderEncodes, TestRecorderRequestKeyframe, TestRecorderDropsWhenBehind
+    evidence:
+      path: capture/recorder_test.go
+      locator: TestRecorderEncodes
+      note: Apple M3, macOS 27, ffmpeg; run 2026-10-09 (go test ./... of the core module passes)
+    basis:
+    - path: capture/recorder.go
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+    - path: packetio.go
+      input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
+    - path: capture/recorder_test.go
+      input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
+  capture-deps-check:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: GOWORK=off go build ./...; go list -deps ./capture; GOOS=linux and GOOS=windows go vet ./capture
+    evidence:
+      path: go.mod
+      locator: require
+      note: 2026-10-09 - non-standard dependencies of ./capture are hwmediacodec, hwmediacodec/annexb,
+        hwmediacodec/internal/... and purego (go.mod gained mp4ff a day later for mediacontainer/mp4,
+        which capture does not import)
+    basis:
+    - path: go.mod
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+  capture-videofile-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: TestVideoFileRecordsCapture
+    evidence:
+      path: mediacontainer/mp4/videofile_test.go
+      locator: TestVideoFileRecordsCapture
+      note: 2026-10-09 - the former TestRecorderWritesMP4, unchanged apart from the sink constructor
+    basis:
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+  capture-record-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: capture-package
+      platform: darwin
+      gpu: apple-silicon
+    test: go run ./record -o rec.mp4 -seconds 3 -size 1280x720
+    evidence:
+      path: examples/record/main.go
+      locator: main
+      note: 2026-10-09 - 137 frames, 0 dropped, 3 s; ffprobe h264 1280x720 137 frames 3.000 s
+    basis:
+    - path: examples/record/main.go
+      input_hash: ceaeda4de9307142444076eb9650b89c7d5ea8d9ddd34a81c4c8e46fe7b3a6e6
+open_questions:
+  exscreen-hidpi-capture:
+    text: Should the recorder capture at the device pixel size (ebiten.Monitor().DeviceScaleFactor())
+      instead of the logical Layout size? That needs the game to render at device resolution.
+    state: deferred
+    resolution: The logical size is what the game draws; a game that wants a sharper recording can return
+      a larger Layout.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  capture-examples-release:
+    text: When is the core module tagged with the capture package, so that examples/go.mod can require
+      it and the examples run by module path again?
+    state: answered
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    resolution: 'The core module was tagged v0.2.0 on 2026-10-10 with capture, mediacontainer, image,
+      net/hls and playback; ebitenvideo, net/webrtc and examples require that version (PR #16, 2026-10-10).'
+  capture-more-sinks:
+    text: Should the core module ship sinks that need no dependency (an Annex-B io.Writer sink, an IVF
+      sink for AV1)?
+    state: deferred
+    resolution: Funcs covers them in three lines; add them when a user asks.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  api:
+    screencast: New(width, height, sink, Options{Codec, FPS, Bitrate, Quality, CBR, KeyframeInterval,
+      LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source), CaptureAt, Close, Err,
+      Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels() (ebiten.Image); Sink = WritePacket+Close;
+      Funcs{Write, Done}; TimeScale 90000. Since milestone:capture-package the package is github.com/shibukawa/hwmediacodec/capture
+      in the core module and the MP4 sink is mp4.CreateVideoFile(path, codec, timeScale)
+    screencast_exwebrtc: Recorder.RequestKeyframe()
+    capture: import github.com/shibukawa/hwmediacodec/capture; New(width, height, sink, Options{Codec,
+      FPS, Bitrate, Quality, CBR, KeyframeInterval, LowLatency, Profile, Queue, Software, Extra}) -> Recorder{Capture(Source),
+      CaptureAt, RequestKeyframe, Close, Err, Captured, Dropped, Encoded, Duration}; Source = Bounds()+ReadPixels();
+      Sink = WritePacket+Close; Funcs{Write, Done}; TimeScale 90000
+    container: CreateVideoFile(path, codec, timeScale) -> *VideoFile{WritePacket, Close} (mediacontainer/mp4)
+      replaces screencast.NewMP4File(path, codec)
+  delivery_results:
+    milestone:examples-screencast-hls:
+      result:
+        status: delivered 2026-10-09
+        performance: 1280x720 at 60 fps - ReadPixels about 2 ms per frame (3.7 ms with the scene render
+          it waits for), no drops; 5 s recording 278 frames
+    milestone:capture-package:
+      result:
+        status: delivered 2026-10-09
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:examples-screencast-hls
+- relation: supersedes
+  to: milestone:examples-webrtc
+- relation: supersedes
+  to: milestone:capture-package
+- relation: depends_on
+  to: component:core-api
+history:
+  capture-delivered-2026-10-09:
+    summary: The author asked for the recorder to be a formal feature rather than a sample; it moved to
+      the core module as a subpackage with its hardware tests, was renamed from screencast to capture
+      on the author's request the same day, and the samples switched their imports.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:examples-screencast-hls, milestone:examples-webrtc,
+      milestone:capture-package was folded into this concept (keys prefixed with the milestone's tag;
+      dated measurements kept as evidence notes); the milestone files remain as superseded stubs with
+      their timelines.
+    supersedes:
+    - milestone:examples-screencast-hls
+    - milestone:examples-webrtc
+    - milestone:capture-package

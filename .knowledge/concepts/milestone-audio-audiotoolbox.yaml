@@ -1,14 +1,15 @@
 id: milestone:audio-audiotoolbox
 type: milestone
 title: Audio codecs (AAC, Opus) on macOS and iOS through AudioToolbox, with MP4 audio tracks
-summary: 'First audio slice, requested on 2026-10-13 and scoped by decision:audio-codecs: NewAudioDecoder
-  and NewAudioEncoder in the root package with AudioFormat and AudioFrame, an AudioToolbox backend
-  (AudioConverter through purego) for AAC and Opus on darwin, encoding/adts, and audio tracks in mediacontainer/mp4
-  (AudioTrack and AudioPacketSource for reading, AddAudioTrack for encoder packets, with the encoder
-  delay in the edit list and empty edits for tracks that start later). Verified against ffmpeg in both
-  directions on an Apple M3 and by round trips in the iOS Simulator. Synchronised playback with sound
-  is the next slice.'
-lifecycle: active
+summary: 'Superseded on 2026-10-16: its constraints, acceptance, verification, open questions and facts
+  now live in component:audio (keys prefixed audioat-). Original summary: First audio slice, requested
+  on 2026-10-13 and scoped by decision:audio-codecs: NewAudioDecoder and NewAudioEncoder in the root package
+  with AudioFormat and AudioFrame, an AudioToolbox backend (AudioConverter through purego) for AAC and
+  Opus on darwin, encoding/adts, and audio tracks in mediacontainer/mp4 (AudioTrack and AudioPacketSource
+  for reading, AddAudioTrack for encoder packets, with the encoder delay in the edit list and empty edits
+  for tracks that start later). Verified against ffmpeg in both directions on an Apple M3 and by round
+  trips in the iOS Simulator. Synchronised playback with sound is the next slice.'
+lifecycle: superseded
 authority: authored
 aliases:
 - audio support
@@ -25,341 +26,19 @@ scope:
   - darwin
   - ios
   milestone: audio-audiotoolbox
-constraints:
-- 'AAC and Opus are values of the one Codec type (Codec.IsAudio tells them apart) so that Packet, PacketReader,
-  Capability and UnsupportedError serve audio unchanged; NewDecoder and NewEncoder answer ErrUnsupported
-  for them and name the audio constructor. Probe appends the audio capabilities with Hardware false;
-  HWMEDIACODEC_BACKENDS filters the video backends only.'
-- 'AudioFormat is the hub type: {Codec, SampleRate, Channels, Config, FrameSamples, Delay}. Config is
-  the AudioSpecificConfig for AAC and the OpusHead for Opus. Containers report it, AudioEncoder.Format
-  returns it, NewAudioDecoder(ctx, format) and mp4.Muxer.AddAudioTrack(format, timeScale) take it. Without
-  Config an AAC decoder assumes AAC-LC at SampleRate and Channels.'
-- 'Packets are raw: one AAC access unit without ADTS header, one Opus packet. Every audio packet is
-  a keyframe. Packet gained Duration (TimeScale units, 0 when unknown; set by audio encoders, left
-  0 by the video encoders).'
-- 'A decoder returns one AudioFrame per packet, with the packet''s PTS and every sample the packet
-  codes (delay and padding included); it has no time scale of its own. AudioFrame is plain Go memory
-  (interleaved S16 or F32 little-endian in Data), needs no Release, and has Int16s/Float32s views;
-  S16Frame/F32Frame wrap slices as encoder input.'
-- 'An encoder takes frames of any length as one continuous signal anchored at the PTS of the first
-  frame after start or Flush; packet k has PTS base + (k*FrameSamples - Delay) and a Duration cut at
-  the last sample sent, both rescaled from samples to the time scale (default: the sample rate). WithBitrate
-  and WithRateControl return SharedEncoderOption (video and audio); Option (WithTimeScale, WithSoftwareFallback)
-  is accepted by all four constructors; WithSampleFormat is the audio-only option.'
-- 'AudioConverter is driven piecewise: the input callback returns a private status (''hwnd'') when it
-  has nothing to give, which AudioConverterFillComplexBuffer passes through while keeping its state;
-  0 packets with noErr means end of stream and is followed by AudioConverterReset. Callbacks reach
-  their queue through an integer handle, never a Go pointer; the chunk handed out stays referenced
-  until the next callback.'
-- 'Observed AudioToolbox behaviour (macOS 27, Apple M3, 2026-10-13): the AAC encoder reports 1024 samples
-  per packet and a delay (kAudioConverterPrimeInfo leadingFrames) of 2112; the Opus encoder 960 and
-  312, 48 kHz only here. The AAC magic cookie is an ES_Descriptor around the AudioSpecificConfig. The
-  AAC-LC decoder gives 1024 samples per packet at once. The Opus decoder withholds its first 120 samples
-  for good (given back as silence, they lie inside the pre-skip) and needs the packet length in its
-  input description (a new converter when it changes); packets of several frames (60 ms from libopus)
-  decode. The HE-AAC decoder runs 962 samples behind and returns them at end of stream, so the decoder
-  keeps a sample queue and emits frames one packet late for HE-AAC only.'
-- 'Asked for kAudioFormatMPEG4AAC, the decoder plays only the AAC-LC core of an HE-AAC stream (half
-  the rate, mono under parametric stereo). The backend parses the AudioSpecificConfig itself and asks
-  for ''aach'' or ''aacp'' when SBR or PS is signalled (explicitly or by sync extension). Implicitly
-  signalled HE-AAC (ADTS) stays core-only.'
-- 'AudioToolbox''s Opus encoder starts in the VoIP application (2048). There is no property for it;
-  it is the first of seven big-endian uint32 in the encoder''s compression magic cookie ([application,
-  sample rate, frame samples, bitrate (-1000 = auto), channels, 0, 0]), and writing the cookie back
-  with 2049 (audio) takes effect: the round-trip SNR of the test signal rises from 17 dB (with a phase
-  lead of 2 to 5 samples) to 36 dB at shift 0. The layout is undocumented, so the backend only writes
-  when the cookie is 28 bytes and its first, second and fifth fields match what it expects.'
-- 'A refused kAudioConverterEncodeBitRate leaves the converter unable to answer kAudioConverterApplicableEncodeBitRates,
-  so the list for the error message is read before the attempt. AAC CBR holds the average only (bit
-  reservoir); Opus CBR makes every packet the same size. The channel layout properties are ''ocl ''
-  and ''icl '' (with a space); the decoder''s default output layout is already the WAV order (MPEG_x_A
-  tags) and the backend sets it explicitly for more than two channels.'
-- 'MP4: an audio track written from packets gets an edit list starting at the encoder delay; the edit
-  duration is rounded up to the movie time scale (1/1000 s) because ffmpeg cuts the track at the end
-  of the edit, while the sample durations bound it exactly. Tracks written from packets share a clock:
-  the one whose presentation starts later gets an empty edit of the difference in front; passthrough
-  tracks keep their source''s edit list. Demuxed audio packets have PTS minus the edit offset, so the
-  delay lies before 0. AudioPacketSource.SeekKeyframe positions one packet (AAC) or 80 ms (Opus) before
-  the target.'
 non_goals:
 - Synchronised playback, sound output and the playback/ebitenvideo changes (the next audio slice, see
   decision:audio-codecs).
 - Audio on Android, Windows, Linux and in the browser (ErrUnsupported there until their slices).
 - Resampling, channel mixing, microphone capture, audio devices.
-- Encoding more than two channels, HE-AAC encoding, Opus encoding at rates other than 48 kHz, Opus
-  with channel mapping family 1 (surround).
+- Encoding more than two channels, HE-AAC encoding, Opus encoding at rates other than 48 kHz, Opus with
+  channel mapping family 1 (surround).
 - Reading the encoder delay from iTunes metadata (iTunSMPB); only the edit list is read, so afconvert's
   files report Delay 0.
-- The 'roll' sample group that the Opus-in-ISOBMFF mapping recommends (ffmpeg and this package's own
-  demuxer do not need it).
+- The 'roll' sample group that the Opus-in-ISOBMFF mapping recommends (ffmpeg and this package's own demuxer
+  do not need it).
 - Audio in the fMP4 segmenter and in HLS, and Opus for the WebRTC broadcaster.
 - Applying an empty edit when demuxing (deferred question demux-empty-edit in decision:audio-codecs).
-acceptance:
-  aac-decode-matches-ffmpeg:
-    text: AAC-LC streams from ffmpeg's encoder (48 kHz stereo, 44.1 kHz mono, 22.05 kHz stereo in ADTS;
-      48 kHz stereo and 44.1 kHz mono in MP4; 3.0, 4.0, 5.0 and 5.1 in ADTS) decode to as many samples
-      as ffmpeg's decoder gives with -flags2 +skip_manual, at shift 0 and at least 50 dB (30 dB per channel
-      for the layouts with more than two, where the order must be the WAV order); S16 and F32 output agree.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - root-audio-tests
-    - mp4-audio-tests
-  opus-decode-matches-libopus:
-    text: Opus in MP4 from libopus (stereo and mono; 10, 20 and 60 ms packets) decodes to libopus's
-      samples at shift 0 and at least 50 dB outside the first 120 samples, with one frame of the packet's
-      length per packet.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - mp4-audio-tests
-  presentation-is-the-input:
-    text: Dropping the decoded samples before PTS 0 and after the track length leaves exactly the samples
-      of the signal that was encoded, at shift 0, for AAC and Opus files from ffmpeg and for files
-      written by this library.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - mp4-audio-tests
-  encode-decodable-in-place:
-    text: ffmpeg decodes the encoder's AAC packets from an ADTS file and from an MP4 file, and its Opus
-      packets from an MP4 file, to the input signal at shift 0 (which checks Delay to the sample); packet
-      PTS, DTS and Duration follow k*FrameSamples - Delay and end at the last input sample; ffprobe
-      reports codec, rate, channels, packet count, start 0 and the duration within 2 ms.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - root-audio-tests
-    - mp4-audio-tests
-  bitrate-control:
-    text: With noise as input, 64 and 160 kbit/s requests give that rate within 5 percent under CBR
-      (and equal packet sizes for Opus) and within -40/+30 percent under VBR, for AAC and Opus.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - root-audio-tests
-  flush-reuse-errors:
-    text: After Flush an encoder codes a second signal with the same packets at moved timestamps and
-      a decoder entered in the middle of a stream lands on the samples of a full decoding once run in;
-      unsupported requests (Opus at 44.1 kHz, 2 Mbit/s AAC, six channels, an odd rate, an unknown sample
-      format, video codecs, audio codecs given to the video constructors) match ErrUnsupported, frames
-      that do not fit the encoder and broken configs match ErrInvalidData, and calls after Close match
-      ErrClosed.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - root-audio-tests
-  he-aac-decode:
-    text: HE-AAC and HE-AAC v2 files from afconvert report 48 kHz stereo with frames of 2048, decode
-      to one such frame per packet, and place the input signal 4224 samples in (the encoder delay at
-      the output rate) at shift 0; a second decoding after Flush is identical.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - mp4-audio-tests
-  av-offset-in-file:
-    text: A file with an H.264 track copied from packets and an AAC track whose signal starts 500 ms
-      after the first picture (or 250 ms before it) shows those start times in ffprobe within 1.5 ms,
-      and the sound decodes in place.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - mp4-audio-tests
-  audio-seek:
-    text: After AudioPacketSource.SeekKeyframe to targets across an AAC and an Opus track (0, 10 ms,
-      1.234 s, 2.9 s, past the end), decoding from the returned position and cutting at the target gives
-      the samples a decoding from the start has there (20 dB or more).
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    verified_by:
-    - mp4-audio-tests
-  headers-pure-go:
-    text: The AudioSpecificConfig parser (AAC-LC, 960-sample frames, hierarchical and backward compatible
-      HE-AAC signalling, explicit rates), the ADTS header reader and writer (byte-identical to ffmpeg's
-      header for the same stream), the Opus TOC durations and OpusHead, the ADTS reader/writer round
-      trip with ID3 skipping and truncation errors, Rescale and the AudioFrame views pass on any platform.
-    scope:
-      milestone: audio-audiotoolbox
-    verified_by:
-    - header-unit-tests
-  ios-simulator:
-    text: The root package's test binary built for ios/arm64 against the iPhoneSimulator SDK and run
-      with xcrun simctl spawn passes the tests that need no ffmpeg (round trip for AAC and Opus in S16
-      and F32, bitrate control, flush and reuse, errors, garbage input, Probe).
-    scope:
-      milestone: audio-audiotoolbox
-      platform: ios
-    verified_by:
-    - simulator-test-run
-  iphone-run:
-    text: The same audio tests, or an app that decodes and encodes AAC and Opus, run on an iPhone.
-    scope:
-      milestone: audio-audiotoolbox
-      platform: ios
-    verified_by:
-    - iphone-audio-run
-  existing-suites:
-    text: go test ./... in the core module, go build and go vet in ebitenvideo, examples and net/webrtc,
-      scripts/crossbuild.sh and scripts/mobilebuild.sh pass after the change.
-    scope:
-      milestone: audio-audiotoolbox
-    verified_by:
-    - existing-suites
-verification:
-  root-audio-tests:
-    state: passed
-    method: integration
-    authority: observed
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    test: go test . -run 'TestAudio|TestProbeAudio'
-    evidence:
-      path: audio_test.go
-      note: '2026-10-13 on an Apple M3, macOS 27, ffmpeg from Homebrew: AAC decode against ffmpeg''s decoder
-        60.0 / 85.8 / 66.2 dB at shift 0; AAC encode decoded by ffmpeg 40.7 / 39.4 dB against the input
-        at shift 0, delay 2112; round trips AAC 42.7 dB and Opus 34.5 dB in S16 and F32 with 90 kHz timestamps;
-        bitrates for 64k/160k requests - AAC VBR 67802/170192, AAC CBR 64374/159818, Opus VBR 49462/119552,
-        Opus CBR 64000/160000'
-    basis:
-    - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
-    - path: audio.go
-      input_hash: ea935c4f34f7d0a9e122d00db55fbfded56f216833143317797d2aebfe21cf12
-    - path: internal/codec/audio.go
-      input_hash: c6df88743aa866e0c552cf904d9c76c7fbe1191b505f202d856cad2a400c98f1
-    - path: internal/audiotoolbox/decoder.go
-      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
-    - path: internal/audiotoolbox/encoder.go
-      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
-    - path: internal/audiotoolbox/converter.go
-      input_hash: 82ddf10c9ad450751ba041e409354bf7b5a4f333c0a546d360cc6640710c3885
-    - path: internal/audiotoolbox/sys/sys.go
-      input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
-    - path: encoding/adts/adts.go
-      input_hash: 8b09952bb5787fbcd0c7ca465a28cc5d7638db26a6788f4513552faa3d098ec4
-  mp4-audio-tests:
-    state: passed
-    method: integration
-    authority: observed
-    scope:
-      milestone: audio-audiotoolbox
-      platform: darwin
-    test: go test . -run 'TestAudioTrackDecode|TestAudioMuxRoundTrip|TestAudioTrackDecodeHEAAC' ; go test ./mediacontainer/mp4/ -run 'TestAudioPacketSourceSeek|TestMuxAudioWithVideo'
-    evidence:
-      path: mediacontainer/mp4/audio_test.go
-      note: '2026-10-13 on an Apple M3: AAC from ffmpeg 63.8 / 57.4 dB against its decoder, Opus from
-        libopus 107 to 108 dB (20, 10 and 60 ms packets, stereo and mono), presentations equal to the
-        input in length at shift 0; own AAC files 47.0 / 45.5 dB and own Opus files 36.3 / 35.7 dB through
-        ffmpeg at shift 0 with exact AAC length (ffmpeg plays the padding of the last Opus packet, as with
-        its own files); HE-AAC 32.8 dB and HE-AAC v2 7.2 dB at shift 0 after 4224 samples; track starts
-        0/0.5 s and 0.25/0 s in ffprobe (behind an empty edit ffprobe adds the delay to the stream duration
-        and ffmpeg plays up to 192 padding samples)'
-    basis:
-    - path: mediacontainer/mp4/audio_test.go
-      input_hash: b73c85310211174442bafacf727d1f9698b6fb3a96da7af282cf3a030385cbca
-    - path: audio_mp4_test.go
-      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
-    - path: mediacontainer/mp4/audio.go
-      input_hash: 23d5f094a712f78596564ba08c1bd1333a988dab0558b9f1c968106f145ee9ab
-    - path: mediacontainer/mp4/mux.go
-      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
-    - path: mediacontainer/mp4/demux.go
-      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
-    - path: internal/audiotoolbox/decoder.go
-      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
-    - path: internal/audiotoolbox/encoder.go
-      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
-  header-unit-tests:
-    state: passed
-    method: unit
-    authority: observed
-    scope:
-      milestone: audio-audiotoolbox
-    test: go test ./internal/aac/ ./internal/opus/ ./internal/codec/ ./encoding/adts/ ./internal/audiotoolbox/
-    evidence:
-      path: internal/aac/aac_test.go
-      note: 2026-10-13; no ffmpeg and no audio backend needed except the cookie test, which is darwin only
-    basis:
-    - path: internal/aac/config.go
-      input_hash: c844729f35df4162660648e17bc69c11d1f42931ff71fa3a133a47568bc81a3d
-    - path: internal/aac/adts.go
-      input_hash: 99366d3c51ec008b9ff920e5de9e24abb697b4267e4aaca3e9d5ce1ebeb6a12a
-    - path: internal/aac/aac_test.go
-      input_hash: 8680abf1cf644e718da762350ada4bd1f5b09a3681f2df671b7213fc85e086e6
-    - path: internal/opus/opus.go
-      input_hash: f40d17110cf5da414074e87380923bfa72e30161fb9a9f15054593cc57c2456d
-    - path: internal/opus/opus_test.go
-      input_hash: acd75b26ac997a9f6eebab1d07d27fadc27dd8c314cb074bbee2fe60d38f4868
-    - path: internal/codec/audio_test.go
-      input_hash: e27aa528183780ad1ad582a6dda26679731c7c633e2d5325f32cbd1daf2b9762
-    - path: encoding/adts/adts_test.go
-      input_hash: a66ee772a425cd2c61a5b6890c6b7ef1d1407500f0e261d21d2824458330e051
-    - path: internal/audiotoolbox/cookie.go
-      input_hash: 35e6eda5432d110d9d99543b0956491ea7bfbad7f7e59772b7ceca3dc2418abd
-    - path: internal/audiotoolbox/cookie_test.go
-      input_hash: afd1d8f39c957f3a20b26060a3c168f94caef21f21e600ff7fbbba0210826ad0
-  simulator-test-run:
-    state: passed
-    method: manual
-    authority: observed
-    scope:
-      milestone: audio-audiotoolbox
-      platform: ios
-    test: 'CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go test -c . with the iPhoneSimulator SDK flags of scripts/mobilebuild.sh;
-      xcrun simctl spawn booted ./hwmc_ios.test -test.run ''TestAudioRoundTrip|TestAudioFlushAndReuse|TestAudioErrors|TestAudioEncodeBitrate|TestProbeAudio|TestAudioDecodeGarbage'''
-    evidence:
-      path: audio_test.go
-      note: 2026-10-13, iPhone 17 Pro Simulator (iOS 26.0) on an Apple M3; all six pass with the same
-        figures as on macOS (delay 2112 and 312, the same bitrates); the tests that compare with ffmpeg
-        cannot run there
-    basis:
-    - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
-    - path: internal/audiotoolbox/backend.go
-      input_hash: 48e6d2cf9b8402612d13978f7863ff5fdb0b39a858652b8c702ff19302bae6b1
-    - path: internal/audiotoolbox/sys/sys.go
-      input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
-  iphone-audio-run:
-    state: not_run
-    method: manual
-    authority: authored
-    scope:
-      milestone: audio-audiotoolbox
-      platform: ios
-    test: Run the audio tests or a sample that decodes and encodes AAC and Opus on the author's iPhone
-    evidence:
-      path: audio_test.go
-      note: the author has the device; not run from the development session
-  existing-suites:
-    state: passed
-    method: integration
-    authority: observed
-    scope:
-      milestone: audio-audiotoolbox
-    test: go test ./... ; (cd ebitenvideo && go build ./... && go vet ./...) and the same in examples
-      and net/webrtc ; scripts/crossbuild.sh ; scripts/mobilebuild.sh
-    evidence:
-      path: scripts/crossbuild.sh
-      note: 2026-10-13 on an Apple M3, macOS 27, go1.27.0; six desktop targets with CGO_ENABLED=0, ios/arm64
-        device and both Simulator architectures; Android NDK build skipped (no NDK on the Mac), its type
-        check passes
-    basis:
-    - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
-    - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
-    - path: backends_darwin.go
-      input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
 relations:
 - relation: implements
   to: requirement:hwmediacodec
@@ -371,19 +50,24 @@ relations:
   to: milestone:android-mediacodec
 - relation: extends
   to: milestone:mediacontainer-mp4
+- relation: superseded_by
+  to: component:audio
 history:
   reworked-with-browser-2026-10-13:
-    summary: 'While the browser slice (milestone:audio-webcodecs) was added on the same branch - the tests
+    summary: While the browser slice (milestone:audio-webcodecs) was added on the same branch - the tests
       that take the codecs through MP4 files moved from mediacontainer/mp4 to the root package (audio_mp4_test.go,
       files through testutil so that they run in a browser); the ES_Descriptor parser moved to internal/aac
       for the browser backend; decoding was limited to 5.1 (3.0, 4.0, 5.0 and 5.1 are tested against ffmpeg;
-      7.1 was mapped but never tested, and its AAC form has front pairs where common 7.1 has rear ones).'
+      7.1 was mapped but never tested, and its AAC form has front pairs where common 7.1 has rear ones).
   planned-2026-10-13:
     summary: The author asked whether audio decoding and encoding could be added, then about AAC licensing
       and about how far the library should go with sound; the scope in decision:audio-codecs was agreed
       and this slice (core audio on macOS and iOS plus MP4 tracks) started on "それでお願いします".
   implemented-2026-10-13:
     summary: Public audio API, AudioToolbox backend for AAC (LC and HE decode, LC encode) and Opus, encoding/adts,
-      MP4 audio tracks with edit lists, ffmpeg and afconvert based tests, iOS Simulator run. Found on the
-      way - the Opus encoder's VoIP default, the HE-AAC decoder's 962-sample lag, the Opus decoder's missing
-      first 120 samples, ffmpeg's handling of edit ends for Opus and behind empty edits.
+      MP4 audio tracks with edit lists, ffmpeg and afconvert based tests, iOS Simulator run. Found on
+      the way - the Opus encoder's VoIP default, the HE-AAC decoder's 962-sample lag, the Opus decoder's
+      missing first 120 samples, ffmpeg's handling of edit ends for Opus and behind empty edits.
+  superseded-2026-10-16:
+    summary: Folded into component:audio on 2026-10-16 so that the current state of each backend and package
+      is read from one concept; this file keeps the slice's definition and timeline.

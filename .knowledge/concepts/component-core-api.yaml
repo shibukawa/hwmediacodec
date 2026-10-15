@@ -1,0 +1,278 @@
+id: component:core-api
+type: component
+title: 'Core API of the root package: packets, frames, pipelines, package layout'
+summary: 'The root package github.com/shibukawa/hwmediacodec: Probe, NewDecoder/NewEncoder and the audio
+  constructors, Packet and Frame, the Send/Receive/Flush contract with ErrAgain, the PacketReader/PacketWriter/FrameReader/FrameWriter
+  interfaces with DecodeReader, EncodeWriter and CopyFrames, HasHardware, and the layout of the core module
+  (encoding/, mediacontainer/, image/, net/, capture, playback) with ebitenvideo, net/webrtc and examples
+  as separate modules. Consolidated on 2026-10-16 from the milestone concepts packet-pipeline, package-layout
+  and the API parts of the backend milestones.'
+lifecycle: active
+authority: authored
+aliases:
+- root package
+- PacketReader
+- DecodeReader
+- EncodeWriter
+- package layout
+- パッケージ構成
+constraints:
+- Packet.Data for AV1 is one temporal unit whose OBUs carry obu_has_size_field=1 (the last one may run
+  to the end); temporal delimiter OBUs are optional and passed through; Annex-B does not apply.
+- 'GOOS=android compiles only the backend-independent packages and the MediaCodec backend: vaapi, vpl
+  and nvidia carry the constraint "linux && !android", files picked by the _linux suffix carry "!android",
+  and backends_android.go registers the MediaCodec backend (backends_other.go covered android until milestone:android-mediacodec).'
+- 'PacketReader hands out hwmediacodec.Packet values and declares TimeScale(); the decoder is opened with
+  WithTimeScale(src.TimeScale()) so Frame.PTS is in the reader''s units. Packet.PTS counts from the start
+  of the presentation: mp4.PacketSource subtracts the edit-list offset (DTS can then be negative; decoders
+  ignore it), while VideoTrack.Packet keeps the stored sample times. The converter moved to PacketSource
+  and its timestamp tests pass unchanged.'
+- DecodeReader calls Receive first and feeds one packet when the decoder asks (ErrAgain or, right after
+  a Reset, io.EOF); a packet the decoder refuses with ErrAgain is kept and offered again. It treats the
+  end as reached only after it flushed the decoder itself. Reset flushes and discards, for use after PacketSeeker.SeekKeyframe.
+  It checks the context on every turn but, like the loops it replaces, does not sleep when a decoder answers
+  ErrAgain on both calls.
+- EncodeWriter and DecodeReader own neither the codec nor the reader/writer; closing stays with the caller.
+  CopyFrames releases each frame after writing it and does not flush.
+- 'Lazy construction is done by composition: the converter''s frame writer opens the encoder for the size
+  of the first decoded picture and wraps an EncodeWriter; its packet writer interleaves the copied tracks.'
+- capture.Recorder now returns the pixel buffer to its pool after the packets of that frame were written
+  rather than right after Send; one buffer is held slightly longer.
+- 'internal/testutil and internal/mediatest stay two packages: the root package''s internal tests use
+  testutil, which therefore cannot import the root package, while mediatest builds on the public API.
+  mediatest now delegates the ffmpeg checks to testutil.'
+- 'Publishing the parameter-set parsers (internal/h264, hevc, av1) as encoding/* was considered and left
+  for when a user needs it: it would freeze a large internal API.'
+- 'No compatibility shims: the author stated on 2026-10-10 that compatibility is not needed yet and asked
+  for the best layout. Programs written against v0.1.0 must change hwmediacodec/annexb to hwmediacodec/encoding/annexb
+  and hwmediacodec/ivf to hwmediacodec/mediacontainer/ivf.'
+- 'annexb is under encoding/, in the sense of the standard library''s encoding/json and encoding/binary:
+  a data format that is both read and written (decoders consume Annex-B access units, encoders produce
+  them). It is not a container, so it is not under mediacontainer/. It was first moved to bitstream/annexb
+  because the author''s "encoder/annexb" was read as the encoder side only; the author meant encoding/
+  and it was renamed the same day.'
+- encoding/, mediacontainer/ and image/ are namespace directories without Go files, named after their
+  standard-library counterparts where one exists (encoding, image).
+- ebitenvideo, net/webrtc (added 2026-10-10, milestone:net-webrtc) and examples are separate modules because
+  of Ebitengine and pion; their go.mod files require the released core version (v0.2.0 since 2026-10-10),
+  so a change to the core API reaches them only through a core release and a bumped require line.
+- 'HLS is under net/ (net/hls, first placed at mediacontainer/hls): it is an HTTP delivery protocol on
+  top of the mp4 segments, not a container; the author asked for net/hls and net/webrtc.'
+- Packet.Data is one temporal unit in the low-overhead OBU format, as on macOS; every unit yields exactly
+  one frame with its packet's PTS; all four decoders implement codec.DisplayOrderer for AV1, so the reorder
+  layer is bypassed and WithDecodeOrder is a no-op.
+- Decoding starts and resumes after Flush at a unit with a shown key frame; the last sequence header OBU
+  is kept in Go and prepended to such a unit when it carries none (NVDEC, VPL, Media Foundation), since
+  their parsers are recreated or restarted.
+- 8-bit Main profile 4:2:0 to NV12 only on these backends; 10-bit, seq_profile 1 and 2 and monochrome
+  report ErrUnsupported (VA-API checks the sequence header itself; the others rely on the driver's answer).
+acceptance:
+  pipe-helpers:
+    text: With fake codecs, DecodeReader returns every frame once and in order for one-in-one-out, reordering
+      and full-queue decoders, flushes once, keeps EOF sticky, restarts after Reset and a seek, and passes
+      reader errors and cancellation on; EncodeWriter writes every packet with and without look-ahead
+      and stops on the writer's error; CopyFrames transcodes 40 frames.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - pipe-pipeline-test
+  pipe-small-helpers:
+    text: HasHardware agrees with Probe for every codec and direction; RGBAImage copies RGBA and BGRA
+      frames with padded strides and refuses NV12; RGBAFrame shares an image's pixels, sub-images included;
+      the length-prefixed conversions round-trip and reject bad lengths.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - pipe-pipeline-test
+  pipe-users-follow:
+    text: Every test of the four modules passes with capture, mp4, the image packages, the samples and
+      ebitenvideo on the new types; the command-line tool decodes bit-exactly like ffmpeg, transcodes
+      and encodes.
+    scope:
+      milestone: packet-pipeline
+    verified_by:
+    - pipe-all-tests
+    - pipe-cli-run
+  layout-builds-and-tests:
+    text: Every package of the core module builds (also GOWORK=off, linux, windows) and its tests pass
+      with the new import paths; examples and ebitenvideo build and pass.
+    scope:
+      milestone: package-layout
+    verified_by:
+    - layout-layout-test-run
+verification:
+  pipe-pipeline-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+    test: TestDecodeReader, TestDecodeReaderReset, TestDecodeReaderErrors, TestEncodeWriter, TestCopyFrames,
+      TestHasHardwareAgreesWithProbe, TestPacketWriterFunc, TestRGBAImage, TestRGBAFrame, TestLengthPrefixedRoundTrip,
+      TestFromLengthPrefixedErrors
+    evidence:
+      path: pipeline_test.go
+      locator: TestDecodeReader
+      note: run 2026-10-10; the first DecodeReader took the decoder's io.EOF right after Reset for the
+        end of the stream, which TestDecodeReaderReset caught
+    basis:
+    - path: pipeline.go
+      input_hash: 2001ad3a3086381e661c69205dfeaf6db3aaedd4f68b46d39f3f1d1b6373934d
+    - path: packetio.go
+      input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
+    - path: pipeline_test.go
+      input_hash: 8a3fa62b3c6c49ffef2f4986ff0d05354a5893f89156a451aaee5ba8db9cff7b
+    - path: packetio_test.go
+      input_hash: 0c33dad52282038e274dd56af9d4fcd7f43e4eb5a6aea38afbee513436c43e57
+    - path: internal/codec/image.go
+      input_hash: 92474845987ac123a9b4ecb0353cd5a1eae669299491c1b8ee91de25f80072ef
+    - path: internal/codec/image_test.go
+      input_hash: 6afe0a42bf1c643c5e9d03dd5c1d74f9bf443bfaf70894e0dc51929016285472
+    - path: encoding/annexb/lengthprefixed_test.go
+      input_hash: 2a86c031d9f989b799b7955d090ae80500ffd07e11788a395d372841ea369974
+  pipe-all-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in the core module, examples, ebitenvideo and net/webrtc; scripts/crossbuild.sh
+    evidence:
+      path: examples/convert/main.go
+      locator: run
+      note: Apple M3, macOS 27; run 2026-10-10
+    basis:
+    - path: examples/convert/main.go
+      input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
+    - path: examples/thumbnails/main.go
+      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+    - path: capture/recorder.go
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+  pipe-cli-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: packet-pipeline
+      platform: darwin
+      gpu: apple-silicon
+    test: hwmediacodec decode, transcode -codec hevc and encode on a 45-frame 320x240 H.264 stream with
+      B-frames
+    evidence:
+      path: cmd/hwmediacodec/main.go
+      locator: transcode
+      note: 2026-10-10 - the decoded NV12 has the MD5 of ffmpeg's decode; transcode gave 45 HEVC frames,
+        encode 45 H.264 frames
+    basis:
+    - path: cmd/hwmediacodec/main.go
+      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+  layout-layout-test-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: package-layout
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in the core module, examples and ebitenvideo; go build for linux and windows
+    evidence:
+      path: encoding/annexb/annexb_test.go
+      locator: package
+      note: Apple M3, macOS 27; run 2026-10-10
+    basis:
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: mediacontainer/ivf/ivf.go
+      input_hash: d36202342917da0d13a7115bfd60a350fc4401dbd2c62424a41cc72078ec71c7
+facts:
+  api:
+    encoder: NewEncoder(ctx, codec, width, height, opts...) -> Encoder{Send(ctx, *Frame) error; Receive(ctx)
+      (Packet, error); Flush(ctx) error; Close() error}
+    options: WithFrameRate, WithBitrate, WithRateControl(VBR|CBR), WithQuality, WithKeyframeInterval,
+      WithBFrames, WithLowLatency, WithProfile, WithInputFormat; shared WithSoftwareFallback and WithTimeScale
+      (Option satisfies DecoderOption and EncoderOption)
+    frame: Frame.ForceKeyframe is an encoder input; caller-owned frames may be reused after Send returns
+    packet: Packet{Data (Annex-B AU), PTS, DTS, Keyframe}; DTS == PTS without B-frames
+    option_types: DecoderOption/EncoderOption changed from func types to interfaces (ApplyDecoder/ApplyEncoder)
+      so that one option value can serve both constructors
+    decoder: NewDecoder returns display order by default (reorder.Wrap around the backend unless it implements
+      codec.DisplayOrderer); WithDecodeOrder() disables it; WithOutputFormat(NV12|RGBA|BGRA)
+    encoder_dor: WithInputFormat(NV12|RGBA|BGRA)
+    pixel_formats: PixelFormat.PlaneCount(), PlaneLayout(i, w, h) (rows, rowBytes), FrameSize(w, h); RGBA/BGRA
+      are one plane, 4 bytes per pixel, stride == 4*Width, alpha 255 out / ignored in
+    order_keys: codec.Order{Seq, POC, Reorder} travels from Packet (SetPacketOrder) through the backend
+      to Frame (SetFrameOrder); backends copy it blindly
+    cli: decode -format nv12|rgba|bgra -decode-order; encode -format nv12|rgba|bgra; transcode now re-encodes
+      in display order
+    decoder_av1mac: NewDecoder(ctx, AV1, WithOutputFormat(NV12|RGBA|BGRA)); Packet.Data is one temporal
+      unit; Frame.PTS == Packet.PTS; WithDecodeOrder is a no-op; WithSoftwareFallback does not help without
+      the hardware engine
+    probe: Capability{Backend videotoolbox, Codec AV1, Direction Decode, Hardware true} only when VTIsHardwareDecodeSupported('av01')
+      != 0
+    cli_av1mac: decode -codec av1 input.ivf (PTS from the IVF timebase, rescaled to 90 kHz); transcode
+      -in av1; probe prints av1 decode
+    root: PacketReader{Codec, TimeScale, ReadPacket}; PacketSeeker{+SeekKeyframe, Length}; PacketWriter{WritePacket};
+      PacketWriteCloser; PacketWriterFunc; FrameReader{ReadFrame}; FrameWriter{WriteFrame}; NewDecodeReader(dec,
+      src) -> ReadFrame, Reset; NewEncodeWriter(enc, dst) -> WriteFrame, Flush, Packets; CopyFrames(ctx,
+      dst, src); HasHardware(ctx, codec, dir); RGBAFrame(img, pts); Frame.RGBAImage()
+    annexb: AppendUnit(dst, nal); AppendLengthPrefixed(dst, nal); FromLengthPrefixed(dst, sample, lengthSize)
+    removed: capture.Sink, capture.Funcs, ebitenvideo.Source, ebitenvideo.Seeker
+  delivery_results:
+    milestone:packet-pipeline:
+      result:
+        status: delivered 2026-10-10
+    milestone:package-layout:
+      result:
+        status: delivered 2026-10-10
+  milestone_notes:
+    layout:
+      layout:
+        root: github.com/shibukawa/hwmediacodec - Probe, NewDecoder, NewEncoder
+        encoding: encoding/annexb
+        mediacontainer: mediacontainer/mp4, mediacontainer/ivf
+        image: image/heif, image/avif
+        net: net/hls (core module), net/webrtc (module of its own)
+        capture: capture
+        separate_modules: ebitenvideo, net/webrtc, examples
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:ffi-strategy
+- relation: supersedes
+  to: milestone:m2-darwin-encode
+- relation: supersedes
+  to: milestone:display-order-rgba
+- relation: supersedes
+  to: milestone:darwin-av1-decode
+- relation: supersedes
+  to: milestone:ios-videotoolbox
+- relation: supersedes
+  to: milestone:packet-pipeline
+- relation: supersedes
+  to: milestone:package-layout
+- relation: supersedes
+  to: milestone:av1-decode-linux-windows
+history:
+  pipe-delivered-2026-10-10:
+    summary: The author asked whether other package changes would raise reusability and then for the recommended
+      points in the recommended order - interfaces and small helpers, the loops, the playback core (milestone:playback).
+  layout-delivered-2026-10-10:
+    summary: The author suggested moving annexb (as encoder/annexb or similar), said compatibility was
+      not needed and asked for the best layout.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:m2-darwin-encode, milestone:display-order-rgba,
+      milestone:darwin-av1-decode, milestone:ios-videotoolbox, milestone:packet-pipeline, milestone:package-layout,
+      milestone:av1-decode-linux-windows was folded into this concept (keys prefixed with the milestone's
+      tag; dated measurements kept as evidence notes); the milestone files remain as superseded stubs
+      with their timelines.
+    supersedes:
+    - milestone:m2-darwin-encode
+    - milestone:display-order-rgba
+    - milestone:darwin-av1-decode
+    - milestone:ios-videotoolbox
+    - milestone:packet-pipeline
+    - milestone:package-layout
+    - milestone:av1-decode-linux-windows
