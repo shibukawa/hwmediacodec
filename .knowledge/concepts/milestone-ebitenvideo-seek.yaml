@@ -98,13 +98,13 @@ verification:
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
     - path: playback/seek_darwin_test.go
       input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
     - path: ebitenvideo/player_darwin_test.go
       input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
     - path: encoding/annexb/annexb.go
-      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
   player-seek-test:
     state: passed
     method: integration
@@ -120,7 +120,7 @@ verification:
       note: run 2026-10-09
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
     - path: playback/timeline.go
       input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
     - path: playback/seek_darwin_test.go
@@ -155,7 +155,7 @@ verification:
     - path: mediacontainer/mp4/packetsource.go
       input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: mediacontainer/mp4/packetsource_test.go
       input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
   annexb-offset-test:
@@ -170,9 +170,9 @@ verification:
       locator: TestReaderOffset
     basis:
     - path: encoding/annexb/annexb.go
-      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - path: encoding/annexb/annexb_test.go
-      input_hash: d759de2aa0f82d53ce154f230e8c3e1d8a8279407e127012f9029307c7044951
+      input_hash: 5b5d474b15cb3d4dd902716e5853a662b0f8713d2bde18c9c2b588a808052373
 facts:
   api:
     ebitenvideo: 'Source, Seeker, ErrNotSeekable, NewPlayerFromSource(src, opts...), Player.Seek(t) error,

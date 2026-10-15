@@ -326,7 +326,7 @@ func (s *packetSink) report(what string, width, height int, elapsed time.Duratio
 		s.bytes, s.keyframes, float64(s.bytes)*8/seconds/1000)
 }
 
-func encode(args []string) error {
+func encode(args []string) (err error) {
 	fs := flag.NewFlagSet("encode", flag.ExitOnError)
 	size := fs.String("size", "", "input picture size as WxH (required)")
 	formatName := fs.String("format", "nv12", "input pixel format: nv12, rgba or bgra")
@@ -364,7 +364,11 @@ func encode(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closeOut()
+	defer func() {
+		if cerr := closeOut(); err == nil {
+			err = cerr
+		}
+	}()
 
 	ctx := context.Background()
 	enc, err := hwmediacodec.NewEncoder(ctx, c, width, height, opts...)
@@ -408,7 +412,7 @@ func encode(args []string) error {
 // transcode decodes an elementary stream and re-encodes it. Frames are
 // re-encoded in the order the decoder returns them (decode order), so sources
 // with B-frames come out with their pictures reordered; see the README.
-func transcode(args []string) error {
+func transcode(args []string) (err error) {
 	fs := flag.NewFlagSet("transcode", flag.ExitOnError)
 	inCodec := fs.String("in", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
 	out := fs.String("o", "", "write the Annex-B stream to this file")
@@ -440,7 +444,11 @@ func transcode(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closeOut()
+	defer func() {
+		if cerr := closeOut(); err == nil {
+			err = cerr
+		}
+	}()
 
 	ctx := context.Background()
 	var decOpts []hwmediacodec.DecoderOption
@@ -512,7 +520,7 @@ func transcode(args []string) error {
 	return nil
 }
 
-func decode(args []string) error {
+func decode(args []string) (err error) {
 	fs := flag.NewFlagSet("decode", flag.ExitOnError)
 	codecName := fs.String("codec", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
 	formatName := fs.String("format", "nv12", "output pixel format: nv12, rgba or bgra")
@@ -544,7 +552,11 @@ func decode(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closeOut()
+	defer func() {
+		if cerr := closeOut(); err == nil {
+			err = cerr
+		}
+	}()
 
 	ctx := context.Background()
 	opts := []hwmediacodec.DecoderOption{hwmediacodec.WithOutputFormat(format)}

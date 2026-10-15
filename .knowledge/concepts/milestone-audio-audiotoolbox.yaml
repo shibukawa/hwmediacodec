@@ -234,19 +234,19 @@ verification:
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: audio.go
-      input_hash: 4499f9910b67f655e78a4a82d6e90b370df541ae913d8bbc89a5e892a8aefb08
+      input_hash: ea935c4f34f7d0a9e122d00db55fbfded56f216833143317797d2aebfe21cf12
     - path: internal/codec/audio.go
-      input_hash: c5d32693b648056bc2f70cfa632cd281c7b37e2600a57e55b83775f955c9a016
+      input_hash: c6df88743aa866e0c552cf904d9c76c7fbe1191b505f202d856cad2a400c98f1
     - path: internal/audiotoolbox/decoder.go
-      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
+      input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
+      input_hash: 8105ee9377cb129ad4ee3a6f95de7dbb75286d6e99cf1573fc1300759e375497
     - path: internal/audiotoolbox/converter.go
-      input_hash: 70a85e1da0284f5576981ab09928ef96b494d4245014477aa15d8541231beeb0
+      input_hash: 9f0b11730025cd6c5e07d4bb0a044ce3cb6641c7b3da8dcf04cf990188b7fb0f
     - path: internal/audiotoolbox/sys/sys.go
       input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
     - path: encoding/adts/adts.go
-      input_hash: d0a7dc27138d9b72f6b59c79a979b625e4cc5b7d7ad41d92cfdd7ec27a0767e8
+      input_hash: 8b09952bb5787fbcd0c7ca465a28cc5d7638db26a6788f4513552faa3d098ec4
   mp4-audio-tests:
     state: passed
     method: integration
@@ -270,15 +270,15 @@ verification:
     - path: audio_mp4_test.go
       input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
     - path: mediacontainer/mp4/audio.go
-      input_hash: 57c8fb1e0e6ebac54e3917e98253af37ddff4c17ce90ecbcba8c0e86edf30653
+      input_hash: a44e93295d8afe309bbfde3d467004803e5630837082afa5ca65b94439e946c7
     - path: mediacontainer/mp4/mux.go
-      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: internal/audiotoolbox/decoder.go
-      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
+      input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
+      input_hash: 8105ee9377cb129ad4ee3a6f95de7dbb75286d6e99cf1573fc1300759e375497
   header-unit-tests:
     state: passed
     method: unit
@@ -293,7 +293,7 @@ verification:
     - path: internal/aac/config.go
       input_hash: c844729f35df4162660648e17bc69c11d1f42931ff71fa3a133a47568bc81a3d
     - path: internal/aac/adts.go
-      input_hash: c20175433af47ecf7c7974da2b0b2660bfc3e8fb5c141b7b5046f68e280f565d
+      input_hash: 99366d3c51ec008b9ff920e5de9e24abb697b4267e4aaca3e9d5ce1ebeb6a12a
     - path: internal/aac/aac_test.go
       input_hash: 8680abf1cf644e718da762350ada4bd1f5b09a3681f2df671b7213fc85e086e6
     - path: internal/opus/opus.go
@@ -301,9 +301,9 @@ verification:
     - path: internal/opus/opus_test.go
       input_hash: acd75b26ac997a9f6eebab1d07d27fadc27dd8c314cb074bbee2fe60d38f4868
     - path: internal/codec/audio_test.go
-      input_hash: db2254dd3e03c2d475c233fb6a0f26f17ca1b40f15a621587c350a732ebc9a23
+      input_hash: e27aa528183780ad1ad582a6dda26679731c7c633e2d5325f32cbd1daf2b9762
     - path: encoding/adts/adts_test.go
-      input_hash: bb30b83b3fba190fb52fbe0c919c7600d2590a777f777a003b4c30f0e77c4e8e
+      input_hash: a66ee772a425cd2c61a5b6890c6b7ef1d1407500f0e261d21d2824458330e051
     - path: internal/audiotoolbox/cookie.go
       input_hash: 35e6eda5432d110d9d99543b0956491ea7bfbad7f7e59772b7ceca3dc2418abd
     - path: internal/audiotoolbox/cookie_test.go
@@ -355,9 +355,9 @@ verification:
         check passes
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: backends_darwin.go
       input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
 relations:

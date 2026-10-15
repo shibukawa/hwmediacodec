@@ -536,6 +536,10 @@ func (e *encoder) packetFromSample(sample uintptr, refPTS int64) (codec.Packet, 
 		return codec.Packet{}, err
 	}
 
+	// The sample is length-prefixed; the access unit wants start codes.
+	// With 4-byte lengths (what VideoToolbox emits) the prefix is rewritten
+	// in place, so a non-keyframe costs no second copy.
+	inPlace := e.nalLength == 4
 	var nals [][]byte
 	keyframe := false
 	total := 0
@@ -547,6 +551,9 @@ func (e *encoder) packetFromSample(sample uintptr, refPTS int64) (codec.Packet, 
 		for i := 0; i < e.nalLength; i++ {
 			size = size<<8 | int(raw[off+i])
 		}
+		if inPlace {
+			raw[off], raw[off+1], raw[off+2], raw[off+3] = 0, 0, 0, 1
+		}
 		off += e.nalLength
 		if size <= 0 || size > n-off {
 			return codec.Packet{}, &codec.BackendError{Backend: Name, Op: "parse sample", Message: "NAL unit length out of range"}
@@ -556,8 +563,13 @@ func (e *encoder) packetFromSample(sample uintptr, refPTS int64) (codec.Packet, 
 		if t := annexb.NALUnitType(e.cfg.Codec, nal); annexb.IsVCL(e.cfg.Codec, t) && annexb.IsKeyframe(e.cfg.Codec, t) {
 			keyframe = true
 		}
-		nals = append(nals, nal)
+		if !inPlace {
+			nals = append(nals, nal)
+		}
 		total += 4 + size
+	}
+	if inPlace && !keyframe {
+		return codec.Packet{Data: raw, PTS: pts, DTS: dts, Keyframe: false}, nil
 	}
 	if keyframe {
 		for _, ps := range e.paramSets {
@@ -570,6 +582,9 @@ func (e *encoder) packetFromSample(sample uintptr, refPTS int64) (codec.Packet, 
 			out = append(out, 0, 0, 0, 1)
 			out = append(out, ps...)
 		}
+	}
+	if inPlace {
+		out = append(out, raw...)
 	}
 	for _, nal := range nals {
 		out = append(out, 0, 0, 0, 1)

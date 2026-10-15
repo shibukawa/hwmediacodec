@@ -2,6 +2,8 @@ module github.com/shibukawa/hwmediacodec/net/webrtc
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/pion/rtcp v1.2.19
 	github.com/pion/rtp v1.10.5

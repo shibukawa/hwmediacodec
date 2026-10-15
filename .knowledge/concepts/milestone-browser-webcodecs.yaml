@@ -131,7 +131,7 @@ verification:
         pion (net/webrtc) has another API there, which predates this slice
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_js.go
       input_hash: 2cec5ee0cd89552bc2b5263453a9a4360899de1df3a90c4c2ef79868bd1b4978
     - path: backends_other.go
@@ -177,9 +177,9 @@ verification:
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/backend.go
       input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
     - path: decode_test.go
@@ -206,9 +206,9 @@ verification:
     - path: internal/webcodecs/browser_js_test.go
       input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
   chrome-no-acceleration:
     state: passed
     method: integration
@@ -243,9 +243,9 @@ verification:
     - path: examples/player/main.go
       input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
   firefox-macos:
     state: failed
     method: integration
@@ -265,9 +265,9 @@ verification:
     - path: internal/browserexec/main.go
       input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   safari-macos:
@@ -287,11 +287,11 @@ verification:
         range on input frames. The first runs stalled for minutes because the tab was in the background.'
     basis:
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
   bundled-clip-fallback:
     state: passed
     method: integration
@@ -330,7 +330,7 @@ verification:
     - path: ebitenvideo/player_js_test.go
       input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
   other-browsers:
     state: not_run
     method: integration

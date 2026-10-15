@@ -1,7 +1,7 @@
 // Command hls streams the fireworks show (see internal/fireworks; keys
 // launch shells) to browsers as live HLS and opens the player page:
 //
-//	go run ./hls -addr :8080
+//	go run ./hls
 //	go run ./hls -open=false        # print the URL only
 //
 // The screen is captured and encoded by capture.Recorder, cut into
@@ -64,7 +64,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 func (g *game) Layout(int, int) (int, int) { return g.scene.W, g.scene.H }
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address; :8080 to let other machines on the network watch")
 	codecName := flag.String("codec", "h264", "h264 or hevc (HEVC plays in Safari only)")
 	bitrate := flag.Int("bitrate", 4_000_000, "bits per second")
 	fps := flag.Float64("fps", 60, "frame rate")
@@ -100,7 +100,8 @@ func main() {
 		log.Fatal(err)
 	}
 	go func() {
-		if err := http.ListenAndServe(*addr, withPage(playlist)); err != nil {
+		srv := &http.Server{Addr: *addr, Handler: withPage(playlist), ReadHeaderTimeout: 10 * time.Second}
+		if err := srv.ListenAndServe(); err != nil {
 			log.Fatal(err)
 		}
 	}()

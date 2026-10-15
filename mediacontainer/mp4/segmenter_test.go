@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,6 +124,84 @@ func TestSegmenterShortTarget(t *testing.T) {
 	for _, s := range segs {
 		if d := s.Duration; d < 330*time.Millisecond || d > 336*time.Millisecond {
 			t.Errorf("segment %d lasts %v", s.Seq, d)
+		}
+	}
+}
+
+// TestSegmenterRejectsOverdueKeyframe feeds a stream with a single
+// keyframe: the segmenter must give up once the samples it holds back
+// span four times the target, instead of buffering the stream for ever.
+func TestSegmenterRejectsOverdueKeyframe(t *testing.T) {
+	mediatest.RequireFFmpeg(t)
+	src := mediatest.GenerateMP4(t, t.TempDir(), mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 90, BFrames: 0, GOP: 1000})
+	d, err := mp4.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	v := d.Video()
+	if len(v.Keyframes()) != 1 {
+		t.Fatalf("%d keyframes, want 1", len(v.Keyframes()))
+	}
+	var segs int
+	seg, err := mp4.NewSegmenter(hwmediacodec.H264, v.TimeScale, 100*time.Millisecond, nil, func(mp4.Segment) error { segs++; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedAt := -1
+	for i := range v.SampleCount() {
+		p, err := v.Packet(i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := seg.WritePacket(p); err != nil {
+			if !strings.Contains(err.Error(), "keyframe") {
+				t.Fatalf("packet %d: %v", i, err)
+			}
+			failedAt = i
+			break
+		}
+	}
+	// Four times 100 ms at 30 fps is 12 frames; the 14th packet (index
+	// 13, 433 ms after the first) is the first beyond it.
+	if failedAt != 13 {
+		t.Errorf("WritePacket failed at packet %d, want 13", failedAt)
+	}
+	if segs != 0 {
+		t.Errorf("%d segments emitted without a second keyframe", segs)
+	}
+}
+
+// TestSegmenterRejectsOversizedSegment lowers MaxSegmentBytes so that the
+// byte bound trips before the time bound does.
+func TestSegmenterRejectsOversizedSegment(t *testing.T) {
+	mediatest.RequireFFmpeg(t)
+	defer func(n int) { mp4.MaxSegmentBytes = n }(mp4.MaxSegmentBytes)
+	mp4.MaxSegmentBytes = 1
+	src := mediatest.GenerateMP4(t, t.TempDir(), mediatest.MP4Options{Codec: hwmediacodec.H264, Width: 160, Height: 120, Frames: 30, BFrames: 0, GOP: 10})
+	d, err := mp4.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	v := d.Video()
+	seg, err := mp4.NewSegmenter(hwmediacodec.H264, v.TimeScale, time.Second, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first packet opens the segment whatever its size; the second
+	// would take the segment over the limit.
+	for i := range 2 {
+		p, err := v.Packet(i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = seg.WritePacket(p)
+		if i == 0 && err != nil {
+			t.Fatalf("first packet: %v", err)
+		}
+		if i == 1 && (err == nil || !strings.Contains(err.Error(), "MaxSegmentBytes")) {
+			t.Fatalf("second packet: %v, want the MaxSegmentBytes error", err)
 		}
 	}
 }

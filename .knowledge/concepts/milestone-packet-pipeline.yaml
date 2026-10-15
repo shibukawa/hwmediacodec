@@ -96,7 +96,7 @@ verification:
     - path: packetio_test.go
       input_hash: 0c33dad52282038e274dd56af9d4fcd7f43e4eb5a6aea38afbee513436c43e57
     - path: internal/codec/image.go
-      input_hash: 6f476659cb9a90afafec4106dce75cc3d543165559da21774f8763bbe5312e4f
+      input_hash: 92474845987ac123a9b4ecb0353cd5a1eae669299491c1b8ee91de25f80072ef
     - path: internal/codec/image_test.go
       input_hash: 6afe0a42bf1c643c5e9d03dd5c1d74f9bf443bfaf70894e0dc51929016285472
     - path: encoding/annexb/lengthprefixed_test.go
@@ -118,9 +118,9 @@ verification:
     - path: examples/convert/main.go
       input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
     - path: examples/thumbnails/main.go
-      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+      input_hash: 640a3826e3a6bf78c2b1be97378dd4536bea65783868237eaeabe4e64ff9aff4
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
   cli-run:
     state: passed
     method: manual
@@ -138,7 +138,7 @@ verification:
         encode 45 H.264 frames
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+      input_hash: df01221689b4aeb619c33b39a8e131b6a68b058c8a8f071bb79ad5bd28081eef
 facts:
   api:
     root: 'PacketReader{Codec, TimeScale, ReadPacket}; PacketSeeker{+SeekKeyframe, Length}; PacketWriter{WritePacket};

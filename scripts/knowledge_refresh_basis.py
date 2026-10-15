@@ -77,7 +77,8 @@ for name in sorted(os.listdir(cdir)):
     if not name.endswith(".yaml"):
         continue
     fp = os.path.join(cdir, name)
-    lines = open(fp, encoding="utf-8").read().split("\n")
+    with open(fp, encoding="utf-8") as f:
+        lines = f.read().split("\n")
     out = []
     last_path = None
     renamed = updated = 0
@@ -94,8 +95,10 @@ for name in sorted(os.listdir(cdir)):
             continue
         m = hash_re.match(line)
         if m and last_path:
-            full = os.path.join(root, last_path)
-            if os.path.exists(full):
+            full = os.path.realpath(os.path.join(root, last_path))
+            if os.path.commonpath([full, os.path.realpath(root)]) != os.path.realpath(root):
+                missing.append((name, last_path + " (outside the repository)"))
+            elif os.path.exists(full):
                 h = sha(full)
                 if h != m.group(2):
                     line = m.group(1) + h
@@ -104,7 +107,8 @@ for name in sorted(os.listdir(cdir)):
                 missing.append((name, last_path))
         out.append(line)
     if (renamed or updated) and apply:
-        open(fp, "w", encoding="utf-8").write("\n".join(out))
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write("\n".join(out))
     if renamed or updated:
         print(f"{name}: {renamed} renamed, {updated} hashes updated")
     total_renamed += renamed

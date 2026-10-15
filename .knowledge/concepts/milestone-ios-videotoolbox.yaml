@@ -149,7 +149,7 @@ verification:
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
   simulator-cli-run:
@@ -170,13 +170,13 @@ verification:
         frames'
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+      input_hash: df01221689b4aeb619c33b39a8e131b6a68b058c8a8f071bb79ad5bd28081eef
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: internal/videotoolbox/encoder.go
-      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
   invalidation-tests:
     state: passed
     method: integration
@@ -194,11 +194,11 @@ verification:
     - path: internal/videotoolbox/invalidation_test.go
       input_hash: 98f95adb52ec398e148afa66cd9961a8ef050c8b65bb5e228a4b1de7dfdb6616
     - path: internal/videotoolbox/invalidation.go
-      input_hash: a6aafa8abe0b8ef33da8e92680b1dbf5284170a7fbe97469465af6d8e7f88a7c
+      input_hash: 7608aaaf1d3f91ed8db209674ae375c903758196b235c83fed3c9855951d4e7c
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: internal/videotoolbox/encoder.go
-      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
   mobile-sample-build:
@@ -252,9 +252,9 @@ verification:
       note: 2026-10-12 on an Apple M3, macOS 27, go1.27.0; all workspace modules
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
 relations:
 - relation: implements
   to: requirement:hwmediacodec

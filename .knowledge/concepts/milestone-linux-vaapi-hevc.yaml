@@ -118,9 +118,9 @@ verification:
     - path: internal/hevc/sps.go
       input_hash: 1374983ce37a6610377a25f0c5b14aca43b9af613141f7fb2c7d18127bbdefdf
     - path: internal/hevc/pps.go
-      input_hash: e77afbbb3211faff364fd819840e0e5fd348a8e536876bf327b8d15fa5084a11
+      input_hash: 1c3e21cc8c7c1ae01f8963fd4324502808cccd15fc2f98869b9bdace18a8a3a5
     - path: internal/hevc/slice.go
-      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
     - path: internal/hevc/paramsets.go
       input_hash: 960c560c9686df382fdf1b439059cfe96a87aaff1b4c0b2ea9fa743e388c4626
     - path: internal/hevc/oracle_test.go
@@ -147,7 +147,7 @@ verification:
     - path: internal/hevc/rps.go
       input_hash: 3ee4ab2fe14bd6349211998461d72b7d18ca9bb58b17270bd89224d21812a46f
     - path: internal/hevc/slice.go
-      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
     - path: internal/hevc/dpb_oracle_test.go
       input_hash: be2e3cda47e259fb407748d1fa4f787e89723173fdacf30b64e3493367a60437
     - path: internal/hevc/dpb_test.go
@@ -174,7 +174,7 @@ verification:
     - path: internal/hevc/dpb.go
       input_hash: 71ccc5e889291ebe46d5b832db7a0e03eacc38bddc58338c0bc9a8b1a4334982
     - path: internal/hevc/slice.go
-      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
   hevc-layout-test:
     state: passed
     method: unit
@@ -243,7 +243,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: scripts/vaapi_fake_driver_test.sh
-      input_hash: d060743a442a39dd14b1e9652e128f3375de84b47af78fb3f464ad1654f48432
+      input_hash: f4b9146a70e765956175211d78f5826f3139ee88cdc4cd06996e0bce3100c781
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
     - path: internal/vaapi/testdata/fakedriver/fake_drm.c
@@ -251,21 +251,21 @@ verification:
     - path: internal/vaapi/testdata/fakedriver/Dockerfile
       input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
     - path: internal/vaapi/decoder.go
-      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
+      input_hash: cd33a2460fc88cf15f823a6d0646604d4d3d73c178f7996ec2424b4ffe486907
     - path: internal/vaapi/hevcdec.go
       input_hash: 5b30a5d9c3065faa3cb9c0d3bd5b6c1f95498b106d7f8a820a391a7b545283c6
     - path: internal/vaapi/hevcfill.go
       input_hash: a96d02e0c2fb0a53c91b77cef6c901db0e94d08ec1d6a5c5ebe9cbabdc700ae5
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: a93f8bb8db6c8f7370f33ac74fb0f6453faec5b13f437079655c60e7d4c4db43
     - path: internal/vaapi/hevcenc.go
       input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
     - path: internal/vaapi/hevcparams.go
       input_hash: cc811fa1bfe1c396c0c9561c25ae53c35a142948ad4f9ab7e9eca60c3060c507
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vaapi/display.go
-      input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
+      input_hash: 76a672e902984156536893b217a1298d46bc60bf90b4910f5c3fb640718bcda8
     - path: internal/vaapi/sys/types_hevc.go
       input_hash: f8f0a7de322f48df990a6509528efceee4b98ddebc18b27b4c61d04b890c1580
   hevc-hardware-decode:
@@ -304,7 +304,7 @@ verification:
       path: scripts/crossbuild.sh
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
 facts:

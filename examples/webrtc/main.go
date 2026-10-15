@@ -2,7 +2,7 @@
 // launch shells) to browsers over WebRTC with about a hundred milliseconds
 // of latency, and opens the player page:
 //
-//	go run ./webrtc -addr :8080
+//	go run ./webrtc
 //	go run ./webrtc -open=false     # print the URL only
 //
 // The screen is captured and encoded by capture.Recorder (H.264,
@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -63,7 +64,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 func (g *game) Layout(int, int) (int, int) { return g.scene.W, g.scene.H }
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address; :8080 to let other machines on the network watch")
 	bitrate := flag.Int("bitrate", 3_000_000, "bits per second")
 	fps := flag.Float64("fps", 60, "frame rate")
 	size := flag.String("size", "1280x720", "screen size")
@@ -99,7 +100,8 @@ func main() {
 		log.Fatal(err)
 	}
 	go func() {
-		if err := http.ListenAndServe(*addr, withPage(bc)); err != nil {
+		srv := &http.Server{Addr: *addr, Handler: withPage(bc), ReadHeaderTimeout: 10 * time.Second}
+		if err := srv.ListenAndServe(); err != nil {
 			log.Fatal(err)
 		}
 	}()

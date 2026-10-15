@@ -110,7 +110,8 @@ func TestTrackLongRunningTimes(t *testing.T) {
 		t.Fatalf("48-hour timestamp = %v", got)
 	}
 	v := &VideoTrack{Track: tr}
-	v.samples = []sampleInfo{{dts: 0, sync: true}, {dts: ts, sync: true}}
+	v.samples = []sampleInfo{{dts: 0}, {dts: ts}}
+	v.allSync = true
 	if got := v.KeyframeAtOrBefore(49 * time.Hour); got != 1 {
 		t.Fatalf("long-stream seek = %d", got)
 	}

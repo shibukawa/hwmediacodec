@@ -242,6 +242,7 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	// over without a copy.
 	d.in.chunks = append(d.in.chunks[:0], p.Data)
 	n, st := d.fill(buf)
+	d.in.pinner.Unpin()
 	d.in.chunks, d.in.held = d.in.chunks[:0], nil
 	if st != 0 && st != statusNoData {
 		// Leave the converter usable for the packets that follow.
@@ -387,6 +388,6 @@ func (d *decoder) Close() error {
 	}
 	d.out = nil
 	d.pts, d.pcm = nil, nil
-	d.in.chunks, d.in.held = nil, nil
+	d.in.release()
 	return nil
 }

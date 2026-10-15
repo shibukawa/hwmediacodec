@@ -194,14 +194,23 @@ func (s *SPS) Crop() (left, top, width, height int) {
 		return 0, 0, width, height
 	}
 	ux, uy := s.cropUnits()
-	left = ux * int(s.CropLeft)
-	top = uy * int(s.CropTop)
-	width -= ux * int(s.CropLeft+s.CropRight)
-	height -= uy * int(s.CropTop+s.CropBottom)
-	if width <= 0 || height <= 0 || left < 0 || top < 0 {
-		return 0, 0, s.CodedWidth(), s.CodedHeight()
+	cropW := int64(ux) * (int64(s.CropLeft) + int64(s.CropRight))
+	cropH := int64(uy) * (int64(s.CropTop) + int64(s.CropBottom))
+	if cropW >= int64(width) || cropH >= int64(height) {
+		return 0, 0, width, height
 	}
-	return left, top, width, height
+	return ux * int(s.CropLeft), uy * int(s.CropTop), width - int(cropW), height - int(cropH)
+}
+
+// validCrop reports whether the cropping rectangle leaves a picture: the
+// offsets are ue(v) fields that may add up to more than the coded size.
+func (s *SPS) validCrop() bool {
+	if !s.FrameCropping {
+		return true
+	}
+	ux, uy := s.cropUnits()
+	return int64(ux)*(int64(s.CropLeft)+int64(s.CropRight)) < int64(s.CodedWidth()) &&
+		int64(uy)*(int64(s.CropTop)+int64(s.CropBottom)) < int64(s.CodedHeight())
 }
 
 // Width and Height are the cropped output dimensions.
@@ -377,6 +386,9 @@ func ParseSPS(nal []byte) (*SPS, error) {
 			if *p, err = r.ReadUE(); err != nil {
 				return nil, err
 			}
+		}
+		if !s.validCrop() {
+			return nil, syntaxErr("frame cropping (%d, %d, %d, %d) leaves no picture", s.CropLeft, s.CropRight, s.CropTop, s.CropBottom)
 		}
 	}
 	if s.VUIPresent, err = r.ReadFlag(); err != nil {

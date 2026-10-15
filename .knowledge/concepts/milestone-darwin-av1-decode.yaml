@@ -140,7 +140,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: internal/videotoolbox/sys/sys.go
@@ -154,7 +154,7 @@ verification:
     - path: internal/av1/av1c.go
       input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
     - path: decode_test.go
@@ -201,7 +201,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
     - path: internal/videotoolbox/pixels.go
-      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   av1-sequence-change-test:
@@ -221,7 +221,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
     - path: mediacontainer/ivf/ivf.go
-      input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
+      input_hash: d36202342917da0d13a7115bfd60a350fc4401dbd2c62424a41cc72078ec71c7
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
   av1-flush-resume-test:
@@ -242,7 +242,7 @@ verification:
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: decode_av1_test.go
@@ -262,9 +262,9 @@ verification:
       note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
   av1-ten-bit-test:
@@ -355,9 +355,9 @@ verification:
         12 packets
     basis:
     - path: mediacontainer/ivf/ivf.go
-      input_hash: 6a159f96d7dae35d0c263b7d41546f8b443bcd81d490bf3323b79a8375323a48
+      input_hash: d36202342917da0d13a7115bfd60a350fc4401dbd2c62424a41cc72078ec71c7
     - path: mediacontainer/ivf/ivf_test.go
-      input_hash: 5fc2ceb7c2eaf1083603174cd23dc73694f5d8c8ad7b73282097942b90620542
+      input_hash: 1fec34a3681e50b65e92c37574074ff86627e40a051aa8fc3c966a5204f7adc4
   probe-test:
     state: passed
     method: integration
@@ -389,9 +389,9 @@ verification:
       note: 2026-10-09; every package ok with cgo on and off, six targets ok
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: go.mod
-      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+      input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
 open_questions:
   software-av1-on-m1-m2:
     text: On an M1 or M2, NewDecoder(AV1, WithSoftwareFallback()) runs av1SessionAvailable, which on

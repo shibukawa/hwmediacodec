@@ -380,6 +380,18 @@ func writeFile(w io.Writer, coded []codedItem, cols, rows, width, height, codedW
 		items = n + 1
 	}
 
+	// ipma stores a property index in 7 bits, or in 15 when flag 1 is
+	// set. Every tile with its own hvcC (encoders may vary the parameter
+	// sets between pictures) adds a property, so a large grid can pass
+	// 127; the wide form holds it, and beyond 32,767 there is no form.
+	var ipmaFlags uint32
+	if len(props) > 0x7f {
+		ipmaFlags = 1
+	}
+	if len(props) > 0x7fff {
+		return fmt.Errorf("the file needs %d properties, more than ipma can index", len(props))
+	}
+
 	buildMeta := func(mdatStart int) []byte {
 		return payload(func(m *writer) {
 			m.full("meta", 0, 0, payload(func(x *writer) {
@@ -424,18 +436,26 @@ func writeFile(w io.Writer, coded []codedItem, cols, rows, width, height, codedW
 							z.raw(p)
 						}
 					}))
-					y.full("ipma", 0, 0, payload(func(z *writer) {
+					y.full("ipma", 0, ipmaFlags, payload(func(z *writer) {
 						z.u32(uint32(items))
 						for id := 1; id <= items; id++ {
 							a := assocs[uint32(id)]
 							z.u16(uint16(id))
 							z.u8(uint8(len(a)))
 							for _, e := range a {
-								v := uint8(e.index)
-								if e.essential {
-									v |= 0x80
+								if ipmaFlags&1 == 1 {
+									v := uint16(e.index)
+									if e.essential {
+										v |= 0x8000
+									}
+									z.u16(v)
+								} else {
+									v := uint8(e.index)
+									if e.essential {
+										v |= 0x80
+									}
+									z.u8(v)
 								}
-								z.u8(v)
 							}
 						}
 					}))

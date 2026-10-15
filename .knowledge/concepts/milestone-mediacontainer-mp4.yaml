@@ -76,13 +76,13 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: mediacontainer/mp4/mux.go
-      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/sample.go
       input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
     - path: mediacontainer/mp4/packetsource.go
       input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/stream.go
@@ -92,7 +92,7 @@ verification:
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: mediacontainer/mp4/segmenter_test.go
-      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
+      input_hash: acd7a44136bd3ff7257219f1b872544f8dbb8b23b6fef8c026d4ae76819b04f4
     - path: mediacontainer/mp4/packetsource_test.go
       input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
     - path: mediacontainer/mp4/stream_test.go
@@ -115,7 +115,7 @@ verification:
       note: 2026-10-10 - go.mod requires mp4ff v0.59.0, purego v0.11.1, x/sys v0.48.0
     basis:
     - path: go.mod
-      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+      input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
     - path: go.sum
       input_hash: 5077878216cdac94a8e763a5d1356735917af0ae270d24e3c6364b5073867a2e
   examples-tests:

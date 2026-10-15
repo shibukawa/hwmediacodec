@@ -114,7 +114,7 @@ verification:
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
+      input_hash: 9cdcd98f65fe64e0f6fb5047f04a349113dcbdfdc5db43c5b257146e21e93a52
     - path: internal/pixconv/yuv_test.go
       input_hash: d057cb80a9b3421898e353fe1ec16a88f61e5d10222df9ca3374a59f849d1053
   selection-test:
@@ -130,7 +130,7 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: convert_test.go
       input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
   videotoolbox-comparison-test:
@@ -155,7 +155,7 @@ verification:
     - path: internal/pixconv/yuv.go
       input_hash: 368d35aecc0d41aa10a570d1ebfa86fd525a9de5f2e5f1d369cc282cab449dbd
     - path: internal/pixconv/decoder.go
-      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
+      input_hash: 9cdcd98f65fe64e0f6fb5047f04a349113dcbdfdc5db43c5b257146e21e93a52
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -173,7 +173,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
   hardware-run:
     state: not_run
     method: manual
@@ -187,7 +187,7 @@ verification:
         streams, that the backend returns the samples unscaled.'
     basis:
     - path: internal/pixconv/decoder.go
-      input_hash: 7419cba59c8e7007e656df1e6549bba71b1437e0d5da734fbfb42d713dc497e9
+      input_hash: 9cdcd98f65fe64e0f6fb5047f04a349113dcbdfdc5db43c5b257146e21e93a52
 open_questions:
   full-range-nv12:
     text: Do Media Foundation (DXVA), NVDEC, VA-API and Intel VPL return full-range streams as full-range

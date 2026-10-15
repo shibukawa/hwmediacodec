@@ -58,11 +58,11 @@ verification:
       note: no hardware - loopback pion viewer, ffmpeg-made stream; run 2026-10-10 in the workspace
     basis:
     - path: net/webrtc/broadcaster.go
-      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
+      input_hash: b8cd22748c6f88dd11cda1999e712351dc9ff54c29178c11f690be6316655b16
     - path: net/webrtc/broadcaster_test.go
       input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: net/webrtc/go.mod
-      input_hash: 1ea7d12df4b8e49c89e09700bd930d7dbd2763d15dcd450ad8ac4084e4917d01
+      input_hash: 31186a22ec42381582cd819b8f1c5d560f9d5cdc0a2bcc8a588bbb65394ddf2b
   page-test:
     state: passed
     method: unit
@@ -95,7 +95,7 @@ verification:
         was connected in this run; playback in a browser was last checked before the move (milestone:examples-webrtc).
     basis:
     - path: examples/webrtc/main.go
-      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+      input_hash: 0efee88242a9e3eb9b70558d1054d96a19b8727971d6f9c81200c5e73c57daff
 facts:
   api:
     webrtc: 'import github.com/shibukawa/hwmediacodec/net/webrtc; NewBroadcaster(fps, iceServers, requestKeyframe)

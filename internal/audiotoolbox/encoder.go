@@ -309,7 +309,7 @@ func (e *encoder) Flush(ctx context.Context) error {
 		err = e.pump()
 		e.in.eof = false
 	}
-	e.in.chunks, e.in.held = nil, nil
+	e.in.release()
 	e.started, e.flushed = false, true
 	if st := sys.AudioConverterReset(e.conv); st != 0 && err == nil {
 		err = backendError("AudioConverterReset", st)
@@ -332,6 +332,6 @@ func (e *encoder) Close() error {
 		unregisterInput(e.handle)
 	}
 	e.pending = nil
-	e.in.chunks, e.in.held = nil, nil
+	e.in.release()
 	return nil
 }

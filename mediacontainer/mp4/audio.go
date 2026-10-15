@@ -77,7 +77,7 @@ func (d *Demuxer) newAudioTrack(t *Track) *AudioTrack {
 		f.Channels = head.Channels
 		f.Delay = head.PreSkip
 		if len(a.samples) > 0 {
-			f.FrameSamples = int(codec.Rescale(int64(a.samples[0].dur), int64(t.TimeScale), opus.SampleRate))
+			f.FrameSamples = int(codec.Rescale(int64(a.dur(0)), int64(t.TimeScale), opus.SampleRate))
 		}
 	default:
 		return nil

@@ -311,15 +311,15 @@ verification:
     - path: internal/webcodecs/backend.go
       input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/jsutil.go
       input_hash: 1936032ef5664f279d336f3fbfa7cad15023da56cb1b8c9386938b837d340a56
     - path: internal/webcodecs/names.go
-      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+      input_hash: 3bba1226957da6fae8c3cac815b0fa5f9bd57a33cc166bcbeccdae0ee108cae4
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
     - path: backends_js.go
@@ -341,9 +341,9 @@ verification:
     - path: internal/webcodecs/browser_js_test.go
       input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
   unit-tests:
     state: passed
     method: unit
@@ -358,13 +358,13 @@ verification:
     - path: internal/webcodecs/names_test.go
       input_hash: c5c2518a8b4ed822f70ce8604fdf9db6bd8c8f7c85354930c733ffc490db7fac
     - path: internal/webcodecs/pixels_test.go
-      input_hash: 6aeb1def3aa781fd5b6c1b514d93e8f83043ee07c7cf155d2974e0209f9a5663
+      input_hash: 8427cb6817ebcb7bc866910bcb431530966ba5e453301bd0b0b7e401d6e46f8d
     - path: internal/webcodecs/paramsets_test.go
       input_hash: ad210b8917498b84eb62c5f129fd4f180914bf6e0a174a7c40cdc3e3f024dfc9
     - path: internal/webcodecs/names.go
-      input_hash: c73d05baf6087ecbd356539d4329c850c14fd8962349b9b3831b4b5e642fda64
+      input_hash: 3bba1226957da6fae8c3cac815b0fa5f9bd57a33cc166bcbeccdae0ee108cae4
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
     - path: internal/webcodecs/paramsets.go
       input_hash: 3c29aa6d9674e1aa9b804b58d84db96a400fdd4a31ca736ece794931f977726f
   firefox-macos:
@@ -387,9 +387,9 @@ verification:
         0.5 and 0.9).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/browserexec/main.go
       input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
   safari-macos:
@@ -410,11 +410,11 @@ verification:
         for 1 Mbit/s). Skip - AV1 (Probe did not list it in this run), WithQuality (ErrUnsupported).'
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
   native-frames:
     state: passed
     method: integration
@@ -430,11 +430,11 @@ verification:
         when the caller holds it; HEVC skips in Firefox
     basis:
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/browser_js_test.go
       input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
     - path: internal/codec/codec.go
-      input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: native_test.go
       input_hash: a4cd0b7206d94e0cd85670e7ebeee6fec40e04950848c743afa5a31b9ec78bf1
   other-browsers:

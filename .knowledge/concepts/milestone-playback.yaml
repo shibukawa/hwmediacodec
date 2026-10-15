@@ -73,9 +73,9 @@ verification:
       note: Apple M3, macOS 27; run 2026-10-10 - ended after 33 ticks with 12 shown and 0 skipped
     basis:
     - path: playback/player.go
-      input_hash: a0917e0e22792cb1cdf616e3bc588fe5ed8e97a40325d977233a97435a269da9
+      input_hash: 4506afbf0454e9a45287a1a9bd13edaa9b03b8af805e7633bedfdab51eddc520
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
     - path: playback/timeline.go
       input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
     - path: playback/source_darwin_test.go
@@ -97,7 +97,7 @@ verification:
       note: run 2026-10-10, three times in a row
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
     - path: ebitenvideo/player_darwin_test.go
       input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
   texture-run:

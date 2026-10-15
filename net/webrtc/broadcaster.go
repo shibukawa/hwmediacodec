@@ -12,12 +12,19 @@
 //
 // Latency is that of the encoder and the network, around 100 ms on a LAN.
 //
+// The signalling endpoint is unauthenticated: anyone who can reach it can
+// watch the stream. Serve it on a loopback or trusted interface, or put
+// it behind the application's own authentication. A Broadcaster accepts
+// at most MaxViewers connections, and a request that is cancelled before
+// the answer is ready releases its connection.
+//
 // The package is a module of its own
 // (github.com/shibukawa/hwmediacodec/net/webrtc) so that the WebRTC stack
 // stays out of the core module's dependencies.
 package webrtc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,11 +50,49 @@ var h264Codec = pion.RTPCodecCapability{
 	SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
 }
 
+// DefaultMaxViewers is the number of viewers a Broadcaster accepts unless
+// MaxViewers says otherwise.
+const DefaultMaxViewers = 32
+
+// gatherTimeout bounds how long Accept waits for ICE gathering.
+const gatherTimeout = 5 * time.Second
+
+// keyframeMinInterval is the shortest time between two keyframe requests
+// the Broadcaster passes on to the encoder. Viewers that join or report a
+// picture loss within it share the keyframe the first request produces,
+// and a viewer that floods the stream with picture loss indications
+// cannot turn it into keyframes only.
+const keyframeMinInterval = 500 * time.Millisecond
+
+// peerQueueSize is the number of access units a viewer may fall behind by
+// before it is dropped: about one second at 60 fps.
+const peerQueueSize = 64
+
+var (
+	// ErrTooManyViewers is returned by Accept, and answered with 503 by
+	// ServeHTTP, when MaxViewers connections exist or are being set up.
+	ErrTooManyViewers = errors.New("webrtc: too many viewers")
+	// ErrBadOffer is returned by Accept, and answered with 400 by
+	// ServeHTTP, when the session description is not an offer the
+	// Broadcaster can answer. The wrapped error says why.
+	ErrBadOffer = errors.New("webrtc: invalid SDP offer")
+)
+
 type peer struct {
-	pc      *pion.PeerConnection
-	track   *pion.TrackLocalStaticSample
-	started bool // true once a keyframe has been sent
-	closed  bool // guarded by Broadcaster.mu, including during Accept
+	pc    *pion.PeerConnection
+	track *pion.TrackLocalStaticSample
+	// queue carries the access units the peer's own goroutine sends, so
+	// that a slow network stalls neither the encoder nor the other
+	// viewers; done is closed when the peer is dropped.
+	queue  chan queued
+	done   chan struct{}
+	closed bool // guarded by Broadcaster.mu, including during Accept
+}
+
+type queued struct {
+	data     []byte
+	duration time.Duration
+	keyframe bool
 }
 
 // Broadcaster fans one encoded H.264 stream out to every connected
@@ -60,17 +105,26 @@ type Broadcaster struct {
 	iceServers      []string
 	requestKeyframe func()
 
-	mu      sync.Mutex
-	peers   map[*peer]struct{}
-	lastPTS int64
-	closed  bool
-	writeMu sync.Mutex // preserves packet ordering across concurrent writers
+	// MaxViewers is the number of connections the Broadcaster accepts,
+	// counting those still being set up; DefaultMaxViewers unless changed
+	// before the first viewer arrives, and no limit when zero or
+	// negative.
+	MaxViewers int
+
+	mu             sync.Mutex
+	peers          map[*peer]struct{}
+	pending        int // connections inside Accept
+	lastPTS        int64
+	closed         bool
+	lastKeyRequest time.Time
+	writeMu        sync.Mutex // preserves packet ordering across concurrent writers
 }
 
 // NewBroadcaster creates a broadcaster for a stream of fps frames per
 // second. requestKeyframe is called when a new viewer joins or a viewer
 // reports a picture loss; wire it to Recorder.RequestKeyframe (a viewer
-// only starts at a keyframe). iceServers lists STUN/TURN URLs, empty for
+// only starts at a keyframe). Requests closer together than half a
+// second are merged into one. iceServers lists STUN/TURN URLs, empty for
 // LAN use. Invalid or unrepresentable frame rates use 60 fps.
 func NewBroadcaster(fps float64, iceServers []string, requestKeyframe func()) *Broadcaster {
 	period := float64(time.Second) / fps
@@ -80,7 +134,14 @@ func NewBroadcaster(fps float64, iceServers []string, requestKeyframe func()) *B
 	if requestKeyframe == nil {
 		requestKeyframe = func() {}
 	}
-	return &Broadcaster{fps: fps, iceServers: append([]string(nil), iceServers...), requestKeyframe: requestKeyframe, peers: map[*peer]struct{}{}, lastPTS: -1}
+	return &Broadcaster{
+		fps:             fps,
+		iceServers:      append([]string(nil), iceServers...),
+		requestKeyframe: requestKeyframe,
+		MaxViewers:      DefaultMaxViewers,
+		peers:           map[*peer]struct{}{},
+		lastPTS:         -1,
+	}
 }
 
 // Viewers is the number of connected peers.
@@ -93,7 +154,8 @@ func (b *Broadcaster) Viewers() int {
 // ServeHTTP implements http.Handler: the signalling endpoint. A POST with
 // a JSON session description (what RTCPeerConnection.localDescription
 // serialises to) is answered with ours; the path is not looked at, so
-// mount the handler where the page posts to.
+// mount the handler where the page posts to. An offer that cannot be
+// answered gets 400, a full or closed Broadcaster 503.
 func (b *Broadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -102,12 +164,22 @@ func (b *Broadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var offer pion.SessionDescription
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&offer); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "the body is not a JSON session description", http.StatusBadRequest)
 		return
 	}
-	answer, err := b.Accept(offer)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	answer, err := b.AcceptContext(r.Context(), offer)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrBadOffer):
+		http.Error(w, "invalid SDP offer", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrTooManyViewers), errors.Is(err, hwmediacodec.ErrClosed):
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	case r.Context().Err() != nil:
+		return // the client went away
+	default:
+		http.Error(w, "could not set up the connection", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -116,14 +188,33 @@ func (b *Broadcaster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Accept takes a viewer's offer, adds a video track and returns the
 // answer once ICE candidates are gathered (so no trickle ICE is needed).
-// It is what ServeHTTP does, for programs with their own signalling.
+// It is what ServeHTTP does, for programs with their own signalling. The
+// error is ErrBadOffer for an offer that cannot be answered and
+// ErrTooManyViewers when MaxViewers is reached.
 func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescription, error) {
+	return b.AcceptContext(context.Background(), offer)
+}
+
+// AcceptContext is Accept that gives up, releasing the connection, when
+// ctx is cancelled before the answer is ready.
+func (b *Broadcaster) AcceptContext(ctx context.Context, offer pion.SessionDescription) (*pion.SessionDescription, error) {
 	b.mu.Lock()
-	closed := b.closed
-	b.mu.Unlock()
-	if closed {
-		return nil, errors.New("broadcaster is closed")
+	switch {
+	case b.closed:
+		b.mu.Unlock()
+		return nil, fmt.Errorf("webrtc: broadcaster is closed: %w", hwmediacodec.ErrClosed)
+	case b.MaxViewers > 0 && len(b.peers)+b.pending >= b.MaxViewers:
+		b.mu.Unlock()
+		return nil, ErrTooManyViewers
 	}
+	b.pending++
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		b.pending--
+		b.mu.Unlock()
+	}()
+
 	cfg := pion.Configuration{}
 	if len(b.iceServers) > 0 {
 		cfg.ICEServers = []pion.ICEServer{{URLs: b.iceServers}}
@@ -142,7 +233,7 @@ func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescri
 		pc.Close()
 		return nil, err
 	}
-	p := &peer{pc: pc, track: track}
+	p := &peer{pc: pc, track: track, queue: make(chan queued, peerQueueSize), done: make(chan struct{})}
 
 	// Picture loss or full intra requests from the viewer become
 	// keyframe requests to the encoder.
@@ -155,7 +246,7 @@ func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescri
 			for _, pkt := range pkts {
 				switch pkt.(type) {
 				case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
-					b.requestKeyframe()
+					b.askKeyframe()
 				}
 			}
 		}
@@ -169,35 +260,78 @@ func (b *Broadcaster) Accept(offer pion.SessionDescription) (*pion.SessionDescri
 
 	if err := pc.SetRemoteDescription(offer); err != nil {
 		pc.Close()
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrBadOffer, err)
 	}
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		pc.Close()
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrBadOffer, err)
 	}
 	gathered := pion.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		pc.Close()
 		return nil, err
 	}
+	timeout := time.NewTimer(gatherTimeout)
+	defer timeout.Stop()
 	select {
 	case <-gathered:
-	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
 		pc.Close()
-		return nil, errors.New("ICE gathering timed out")
+		return nil, ctx.Err()
+	case <-timeout.C:
+		pc.Close()
+		return nil, errors.New("webrtc: ICE gathering timed out")
 	}
 
 	b.mu.Lock()
 	if b.closed || p.closed {
 		b.mu.Unlock()
 		pc.Close()
-		return nil, errors.New("broadcaster is closed")
+		return nil, fmt.Errorf("webrtc: broadcaster is closed: %w", hwmediacodec.ErrClosed)
 	}
 	b.peers[p] = struct{}{}
 	b.mu.Unlock()
-	b.requestKeyframe() // the new viewer can only start at a keyframe
+	go b.serve(p)
+	b.askKeyframe() // the new viewer can only start at a keyframe
 	return pc.LocalDescription(), nil
+}
+
+// askKeyframe passes a keyframe request on to the encoder unless one went
+// out within keyframeMinInterval, whose keyframe serves this request too.
+func (b *Broadcaster) askKeyframe() {
+	b.mu.Lock()
+	now := time.Now()
+	if !b.lastKeyRequest.IsZero() && now.Sub(b.lastKeyRequest) < keyframeMinInterval {
+		b.mu.Unlock()
+		return
+	}
+	b.lastKeyRequest = now
+	b.mu.Unlock()
+	b.requestKeyframe()
+}
+
+// serve sends the peer's queue on its track, starting at the first
+// keyframe, until the peer is dropped or its track fails.
+func (b *Broadcaster) serve(p *peer) {
+	started := false
+	for {
+		select {
+		case <-p.done:
+			return
+		case q := <-p.queue:
+			if !started {
+				if !q.keyframe {
+					continue
+				}
+				started = true
+			}
+			if err := p.track.WriteSample(media.Sample{Data: q.data, Duration: q.duration}); err != nil {
+				b.remove(p)
+				return
+			}
+		}
+	}
 }
 
 func (b *Broadcaster) remove(p *peer) {
@@ -207,15 +341,20 @@ func (b *Broadcaster) remove(p *peer) {
 	delete(b.peers, p)
 	b.mu.Unlock()
 	if !wasClosed {
-		p.pc.Close()
+		close(p.done)
+		if p.pc != nil {
+			p.pc.Close()
+		}
 	}
 }
 
 // WritePacket implements hwmediacodec.PacketWriter: one Annex-B access unit goes to
 // every viewer. pion's H.264 payloader splits the NAL units into RTP
 // packets (STAP-A for the parameter sets, FU-A for large slices). Packet
-// times are in 90 kHz units (capture.TimeScale). A viewer whose track
-// fails is dropped.
+// times are in 90 kHz units (capture.TimeScale). The data is copied
+// before WritePacket returns and sent by one goroutine per viewer; a
+// viewer whose track fails, or that falls about a second behind, is
+// dropped.
 func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
 	b.writeMu.Lock()
 	defer b.writeMu.Unlock()
@@ -235,15 +374,15 @@ func (b *Broadcaster) WritePacket(pkt hwmediacodec.Packet) error {
 		peers = append(peers, p)
 	}
 	b.mu.Unlock()
+	if len(peers) == 0 {
+		return nil
+	}
+	q := queued{data: append([]byte(nil), pkt.Data...), duration: dur, keyframe: pkt.Keyframe}
 	for _, p := range peers {
-		if !p.started {
-			if !pkt.Keyframe {
-				continue
-			}
-			p.started = true
-		}
-		if err := p.track.WriteSample(media.Sample{Data: pkt.Data, Duration: dur}); err != nil {
-			b.remove(p)
+		select {
+		case p.queue <- q:
+		default:
+			b.remove(p) // too far behind to catch up
 		}
 	}
 	return nil
@@ -258,7 +397,7 @@ func (b *Broadcaster) Close() error {
 	b.peers = map[*peer]struct{}{}
 	b.mu.Unlock()
 	for p := range peers {
-		p.pc.Close()
+		b.remove(p)
 	}
 	return nil
 }

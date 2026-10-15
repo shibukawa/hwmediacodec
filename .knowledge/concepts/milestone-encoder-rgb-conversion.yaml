@@ -97,7 +97,7 @@ verification:
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/pixconv/encoder.go
-      input_hash: 180eb443b5f27ab0154251131ad699d9819a489d17b921543e1d99392babb85f
+      input_hash: 5bf3f1b479d17d5abe71dbe9381fb67b08a5b6d50084713010b92193c98358d9
     - path: internal/pixconv/pixconv_test.go
       input_hash: 547bab878cdd9c2687ef3928afab0c8386c3b72fcec0a0821b38bc5a373c9a1b
   selection-test:
@@ -113,7 +113,7 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: convert_test.go
       input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
   videotoolbox-roundtrip-test:
@@ -137,7 +137,7 @@ verification:
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
-      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -155,7 +155,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: a93f8bb8db6c8f7370f33ac74fb0f6453faec5b13f437079655c60e7d4c4db43
     - path: internal/vaapi/hevcenc.go
       input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
   windows-hardware-run:
@@ -173,7 +173,7 @@ verification:
         the webrtc sample asks.'
     basis:
     - path: internal/mediafoundation/encoder.go
-      input_hash: 94584d63f7f0b1ea292af050e907c3d8c41badad0289e2ed16c3180bbeed8a7e
+      input_hash: 7332d85e3a9f053e43c9ae1b137f6baf85898f723c98748e67a305e7ad0df4c3
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/vpl_test.go

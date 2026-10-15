@@ -3,6 +3,7 @@
 package vpl
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -127,6 +128,7 @@ func openDevice(path string, explicit bool) (*session, error) {
 	vasys.InstallMessageCallbacks(s.dpy)
 	var major, minor int32
 	if st := vasys.Initialize(s.dpy, &major, &minor); st != vasys.StatusSuccess {
+		vasys.Terminate(s.dpy) // frees the display vaGetDisplayDRM made
 		syscall.Close(fd)
 		return nil, fmt.Errorf("vpl: vaInitialize on %s: %s", path, vasys.StatusString(st))
 	}
@@ -210,14 +212,20 @@ func (s *session) sync(op string, syncPoint uintptr) error {
 }
 
 // busyWait sleeps after MFX_WRN_DEVICE_BUSY; it reports false once the
-// retry budget is spent.
-func busyWait(n *int) bool {
+// retry budget is spent and ctx's error when the wait is cancelled.
+func busyWait(ctx context.Context, n *int) (bool, error) {
 	if *n >= busyRetries {
-		return false
+		return false, nil
 	}
 	*n++
-	time.Sleep(time.Millisecond)
-	return true
+	t := time.NewTimer(time.Millisecond)
+	select {
+	case <-ctx.Done():
+		t.Stop()
+		return false, ctx.Err()
+	case <-t.C:
+	}
+	return true, nil
 }
 
 // mfxError wraps a failed VPL call.

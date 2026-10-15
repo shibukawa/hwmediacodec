@@ -63,11 +63,11 @@ verification:
       note: no hardware - packets come from demuxing an ffmpeg-made file; run 2026-10-10
     basis:
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
   page-test:
     state: passed
     method: unit
@@ -100,7 +100,7 @@ verification:
         served as text/html and ffprobe read h264 1280x720 from index.m3u8; no browser playback this time
     basis:
     - path: examples/hls/main.go
-      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+      input_hash: a79eb3f418a3e60364f809c2327fbae60dba60e69b8da23e82ec337b6db6a9d1
 facts:
   api:
     hls: 'import github.com/shibukawa/hwmediacodec/net/hls; NewPlaylist(window, target) -> Playlist{SetInit([]byte),

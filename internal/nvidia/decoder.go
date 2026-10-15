@@ -21,6 +21,11 @@ import (
 // decoder from stalling when the driver's minimum is tight.
 const extraSurfaces = 2
 
+// maxPendingFrames bounds the decoded frames held for Receive; Send reports
+// ErrAgain beyond it, so that a caller that never receives cannot make the
+// decoder copy pictures to host memory without limit.
+const maxPendingFrames = 8
+
 // decoder drives one cuvid parser and one NVDEC decoder. The parser calls
 // back into Go for every sequence header and every complete picture; the
 // picture callback submits the picture and copies the result to a pooled
@@ -195,6 +200,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if len(d.pending) >= maxPendingFrames {
+		return codec.ErrAgain
 	}
 	d.flushed = false
 

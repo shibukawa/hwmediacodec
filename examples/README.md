@@ -20,8 +20,8 @@ install (Go 1.27 or later is needed):
 go run github.com/shibukawa/hwmediacodec/examples/convert@latest -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
 go run github.com/shibukawa/hwmediacodec/examples/thumbnails@latest -every 10s -o thumbs movie.mp4              # keyframe thumbnails
 go run github.com/shibukawa/hwmediacodec/examples/record@latest -o capture.mp4 -seconds 10                      # fireworks show to MP4
-go run github.com/shibukawa/hwmediacodec/examples/hls@latest -addr :8080                                        # fireworks show over HLS, opens the browser
-go run github.com/shibukawa/hwmediacodec/examples/webrtc@latest -addr :8080                                     # fireworks show over WebRTC, opens the browser
+go run github.com/shibukawa/hwmediacodec/examples/hls@latest                                                    # fireworks show over HLS, opens the browser
+go run github.com/shibukawa/hwmediacodec/examples/webrtc@latest                                                 # fireworks show over WebRTC, opens the browser
 go run github.com/shibukawa/hwmediacodec/examples/player@latest                                                 # video player, bundled clip
 go run github.com/shibukawa/hwmediacodec/examples/texture@latest                                                # video as a texture (flat, box, shader)
 go run github.com/shibukawa/hwmediacodec/examples/imgconv@latest photo.heic photo.png                          # HEIC or AVIF to PNG or JPEG
@@ -174,7 +174,8 @@ capture cost per draw.
 
 ```sh
 cd examples
-go run ./hls -addr :8080            # opens http://localhost:8080/ in the browser
+go run ./hls                        # opens http://127.0.0.1:8080/ in the browser
+go run ./hls -addr :8080            # also reachable from other machines on the network
 go run ./hls -segment 1s -bitrate 2M -open=false
 ```
 
@@ -246,7 +247,8 @@ keyframes. `-record` turns the capture recorder on the window itself.
 
 ```sh
 cd examples
-go run ./webrtc -addr :8080         # opens http://localhost:8080/ in the browser
+go run ./webrtc                     # opens http://127.0.0.1:8080/ in the browser
+go run ./webrtc -addr :8080         # also reachable from other machines on the network
 go run ./webrtc -stun stun:stun.l.google.com:19302   # viewers outside the LAN
 go run ./webrtc -open=false         # print the URL only
 ```

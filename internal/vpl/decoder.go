@@ -19,6 +19,11 @@ import (
 // that neither consume input nor produce output.
 const maxStalledCalls = 16
 
+// maxPendingFrames bounds the decoded frames held for Receive; Send reports
+// ErrAgain beyond it, so that a caller that never receives cannot make the
+// decoder hold every surface's copy.
+const maxPendingFrames = 8
+
 // decoder drives MFXVideoDECODE with system-memory output surfaces. The
 // runtime decodes on the GPU and copies each finished picture into one of
 // the surfaces; the picture is copied once more into a pooled frame buffer
@@ -68,6 +73,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if len(d.pending) >= maxPendingFrames {
+		return codec.ErrAgain
 	}
 	d.flushed = false
 
@@ -250,7 +258,9 @@ func (d *decoder) run(ctx context.Context, bs *sys.Bitstream, mayReinit bool) er
 		}
 		st := sys.DecodeFrameAsync(d.ses.ses, bs, work.s, &out, &syncPoint)
 		if st == sys.WrnDeviceBusy {
-			if !busyWait(&busy) {
+			if ok, err := busyWait(ctx, &busy); err != nil {
+				return err
+			} else if !ok {
 				return mfxError("MFXVideoDECODE_DecodeFrameAsync", st)
 			}
 			continue

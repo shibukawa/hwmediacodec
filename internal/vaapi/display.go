@@ -96,6 +96,7 @@ func openDevice(path string) (*display, error) {
 	}
 	sys.InstallMessageCallbacks(d.dpy)
 	if st := sys.Initialize(d.dpy, &d.major, &d.minor); st != sys.StatusSuccess {
+		sys.Terminate(d.dpy) // frees the display vaGetDisplayDRM made
 		syscall.Close(fd)
 		return nil, fmt.Errorf("vaapi: vaInitialize on %s: %s", path, statusMessage(st))
 	}

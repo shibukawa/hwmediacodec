@@ -155,7 +155,7 @@ verification:
     - path: internal/vpl/sys/sys_linux_test.go
       input_hash: 5ea74658f7bbf3ac6e91e051170528db1e1bd3a6c60cdb827537ebd1172c9565
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: internal/vpl/backend_linux_test.go
@@ -190,7 +190,7 @@ verification:
     - path: backends_test.go
       input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
   hardware-decode:
     state: not_run
     method: integration
@@ -212,9 +212,9 @@ verification:
         MFXVideoDECODE_Reset after the drain at Flush.'
     basis:
     - path: internal/vpl/decoder.go
-      input_hash: f775c7ba8d74f9195f0cfa4bdb57870a901c33c3c6fcac64eb434ae8f4cf8d1b
+      input_hash: 2763179b8adc0bf4cc1e796331a036daa324e6fbf7c36e5fbe0b3733c6f83a05
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: internal/vpl/pixels.go
@@ -243,11 +243,11 @@ verification:
         order; the CBR/VBR thresholds came from VideoToolbox.'
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 4fe46b48f1c4149cd1355927a68fcf301274e6a8e60ed36b2bbad39e78f50c37
+      input_hash: ccb6b24a920c4d248f82b35e848f0f2d5b87af9b3e7c73e194a2436917d3b2af
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: encode_test.go
@@ -265,7 +265,7 @@ verification:
         GOOS=linux GOARCH=amd64
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
   host-suite:
@@ -284,7 +284,7 @@ verification:
     - path: decode_test.go
       input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
 facts:
   steps:
   - internal/vpl/sys - status codes, FourCC identifiers and struct mirrors of the VPL headers

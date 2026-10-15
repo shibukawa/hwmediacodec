@@ -88,6 +88,9 @@ func parseScalingList(r *bitstream.Reader, dst []uint8, zigzag []int) (useDefaul
 			if err != nil {
 				return false, err
 			}
+			if delta < -128 || delta > 127 {
+				return false, syntaxErr("delta_scale %d out of range", delta)
+			}
 			next = (last + delta + 256) % 256
 			if j == 0 && next == 0 {
 				return true, nil

@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -382,3 +383,95 @@ func TestRejectsAVIF(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+func third[T, U any](_ T, _ U, err error) error { return err }
+
+// TestLimits lowers the package limits under a 500x300 grid of 12 tiles:
+// every decoding entry point refuses it with ErrTooLarge, the structure
+// readers still report its size, and a per-call Limits lifts the bound
+// for that call alone.
+func TestLimits(t *testing.T) {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	var buf bytes.Buffer
+	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 128}); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	defer func(pixels, tiles int, input int64) {
+		heif.MaxPixels, heif.MaxTiles, heif.MaxInputBytes = pixels, tiles, input
+	}(heif.MaxPixels, heif.MaxTiles, heif.MaxInputBytes)
+
+	refused := func(what string) {
+		t.Helper()
+		for name, err := range map[string]error{
+			"DecodeBytes":  third(heif.DecodeBytes(data)),
+			"Decode":       second(heif.Decode(bytes.NewReader(data))),
+			"image.Decode": third(image.Decode(bytes.NewReader(data))),
+		} {
+			if !errors.Is(err, heif.ErrTooLarge) {
+				t.Errorf("%s with %s: %v, want ErrTooLarge", name, what, err)
+			}
+		}
+	}
+	heif.MaxPixels = 100 * 100
+	refused("MaxPixels 10000")
+	if cfg, err := heif.DecodeConfig(bytes.NewReader(data)); err != nil || cfg.Width != 500 || cfg.Height != 300 {
+		t.Errorf("DecodeConfig under the limit = %+v, %v; want the declared 500x300", cfg, err)
+	}
+	if info, err := heif.DecodeInfo(data); err != nil || info.Width != 500 || info.Tiles != 12 {
+		t.Errorf("DecodeInfo under the limit = %+v, %v", info, err)
+	}
+	img, info, err := heif.DecodeBytesWithLimits(data, heif.Limits{MaxPixels: 500 * 300})
+	if err != nil || info.Tiles != 12 || img.Rect.Dx() != 500 {
+		t.Fatalf("DecodeBytesWithLimits = %+v, %v", info, err)
+	}
+	heif.MaxPixels = 16384 * 16384
+	heif.MaxTiles = 4
+	refused("MaxTiles 4")
+	if _, info, err := heif.DecodeWithLimits(bytes.NewReader(data), heif.Limits{MaxTiles: 12}); err != nil || info.Tiles != 12 {
+		t.Errorf("DecodeWithLimits = %+v, %v", info, err)
+	}
+	heif.MaxTiles = 4096
+	heif.MaxInputBytes = 1024
+	refused("MaxInputBytes 1024")
+	if _, err := heif.DecodeConfig(bytes.NewReader(data)); !errors.Is(err, heif.ErrTooLarge) {
+		t.Errorf("DecodeConfig over MaxInputBytes: %v, want ErrTooLarge", err)
+	}
+}
+
+// TestDecodeFromFile reads through an *os.File, which can seek: the
+// headers come first and the pictures when they are decoded, and the
+// result is what DecodeBytes gives.
+func TestDecodeFromFile(t *testing.T) {
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
+	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
+	path := filepath.Join(t.TempDir(), "grid.heic")
+	encodeFile(t, path, testImage(500, 300), heif.Options{TileSize: 128, Rotation: 90})
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _, err := heif.DecodeBytes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if cfg, err := heif.DecodeConfig(f); err != nil || cfg.Width != 300 || cfg.Height != 500 {
+		t.Errorf("DecodeConfig = %+v, %v", cfg, err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	got, err := heif.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rgba, ok := got.(*image.RGBA); !ok || !bytes.Equal(rgba.Pix, want.Pix) {
+		t.Errorf("Decode of the file differs from DecodeBytes of its bytes")
+	}
+}

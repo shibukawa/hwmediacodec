@@ -93,15 +93,15 @@ verification:
       note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: 5a9fa3152887db0e3a3bcb46012a8d4c44b540788760b199f8d079eca9883014
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
     - path: internal/imageitem/decode.go
-      input_hash: 47e7e4950c5ebc0e27702d64c2f42d624ce5a260e7a33dca9e409021a35be1c6
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: internal/imageitem/transform.go
       input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: internal/imageitem/box.go
-      input_hash: 230322bb2c15cfab837dd1ee427b5c253e4ce4dba6add5dad2b222ce257d95a6
+      input_hash: c0d7de2e41280892f81928be2806e652061283917dd9bb9999024617d4b53360
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
     - path: internal/mediatest/image.go
       input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
   heif-decode-test:
@@ -119,9 +119,9 @@ verification:
       note: run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 47e7e4950c5ebc0e27702d64c2f42d624ce5a260e7a33dca9e409021a35be1c6
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
   avif-decode-test:
     state: passed
     method: integration
@@ -137,9 +137,9 @@ verification:
       note: ffmpeg 9.0.1 with libsvtav1 writes the AVIF; the M3 AV1 hardware decoder reads it; run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 47e7e4950c5ebc0e27702d64c2f42d624ce5a260e7a33dca9e409021a35be1c6
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
   avif-encode-test:
     state: passed
     method: unit
@@ -155,9 +155,9 @@ verification:
       note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: 5a9fa3152887db0e3a3bcb46012a8d4c44b540788760b199f8d079eca9883014
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
 open_questions:
   encoder-odd-sizes:
     text: Should the VideoToolbox encoder (and the Encoder contract) handle odd picture sizes itself, by

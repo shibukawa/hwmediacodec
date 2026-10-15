@@ -96,7 +96,7 @@ verification:
         moved to the core module (milestone:capture-package)
     basis:
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
     - path: packetio.go
       input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
     - path: capture/recorder_test.go
@@ -106,7 +106,7 @@ verification:
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: mediacontainer/mp4/mux.go
-      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
   segmenter-test:
     state: passed
     method: integration
@@ -120,11 +120,11 @@ verification:
       note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
     basis:
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
     - path: mediacontainer/mp4/sample.go
       input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
     - path: mediacontainer/mp4/segmenter_test.go
-      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
+      input_hash: acd7a44136bd3ff7257219f1b872544f8dbb8b23b6fef8c026d4ae76819b04f4
   hls-server-test:
     state: passed
     method: integration
@@ -139,11 +139,11 @@ verification:
         run 2026-10-09
     basis:
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
   hls-live-run:
     state: passed
     method: manual
@@ -162,9 +162,9 @@ verification:
         advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+      input_hash: a79eb3f418a3e60364f809c2327fbae60dba60e69b8da23e82ec337b6db6a9d1
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
   record-run:
     state: passed
     method: manual
