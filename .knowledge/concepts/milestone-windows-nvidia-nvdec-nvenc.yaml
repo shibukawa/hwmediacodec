@@ -146,7 +146,7 @@ verification:
         hash it lacked since the Media Foundation slice.
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_windows.go
       input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
     - path: backends_windows_amd64.go
@@ -198,9 +198,9 @@ verification:
     - path: probe_test.go
       input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
   windows-loader-run:
     state: not_run
     method: integration
@@ -245,7 +245,7 @@ verification:
     - path: internal/nvidia/sys/types_cuvid.go
       input_hash: 136be8a7e94616b5610bea50115c343d3c69bf2bac5c7f669dbe06918eb45579
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
   hardware-encode-windows:
     state: not_run
     method: integration
@@ -262,7 +262,7 @@ verification:
         not Direct3D.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 48d4560639dc60d02a4003bb1c43d2d1c8da0cebbbd2233c94d9be0d2be2736b
+      input_hash: 2477197799934f3a958cb5eb632e52730336496bf924e255dd8d7f09af34f2d8
     - path: internal/nvidia/sys/nvenc.go
       input_hash: 28e4e07e2c7f4ac6ffa47b4c88299aa94db45019ebf3ef3b056cc8f5988ac3ba
     - path: encode_test.go

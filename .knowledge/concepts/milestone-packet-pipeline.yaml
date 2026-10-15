@@ -96,7 +96,7 @@ verification:
     - path: packetio_test.go
       input_hash: 0c33dad52282038e274dd56af9d4fcd7f43e4eb5a6aea38afbee513436c43e57
     - path: internal/codec/image.go
-      input_hash: 6f476659cb9a90afafec4106dce75cc3d543165559da21774f8763bbe5312e4f
+      input_hash: 92474845987ac123a9b4ecb0353cd5a1eae669299491c1b8ee91de25f80072ef
     - path: internal/codec/image_test.go
       input_hash: 6afe0a42bf1c643c5e9d03dd5c1d74f9bf443bfaf70894e0dc51929016285472
     - path: encoding/annexb/lengthprefixed_test.go
@@ -120,7 +120,7 @@ verification:
     - path: examples/thumbnails/main.go
       input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
   cli-run:
     state: passed
     method: manual

@@ -90,7 +90,7 @@ verification:
     - path: examples/imgconv/main_test.go
       input_hash: 78aa53f9771646d254035f6943b4e1a1b680aa94352993bd824170c8f0927956
     - path: internal/imageitem/decode.go
-      input_hash: 47e7e4950c5ebc0e27702d64c2f42d624ce5a260e7a33dca9e409021a35be1c6
+      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
   imgconv-run:
     state: passed
     method: manual

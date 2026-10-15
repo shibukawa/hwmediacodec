@@ -53,27 +53,27 @@ verification:
     method: integration
     scope:
       milestone: m1
-    test: TestDecodeH264MatchesReference
+    test: TestDecodeMatchesReference/h264-bf0
     authority: observed
     evidence:
       path: decode_test.go
-      locator: TestDecodeH264MatchesReference
+      locator: TestDecodeMatchesReference/h264-bf0
     basis:
     - &id004
       path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - &id005
       path: internal/videotoolbox/sys/sys.go
       input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - &id006
       path: encoding/annexb/annexb.go
-      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - &id007
       path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - &id001
       path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - &id002
       path: probe_test.go
       input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
@@ -125,17 +125,17 @@ verification:
       path: scripts/crossbuild.sh
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
   hevc-reference-test:
     state: passed
     method: integration
     authority: observed
     scope:
       milestone: m1
-    test: TestDecodeHEVCMatchesReference
+    test: TestDecodeMatchesReference/hevc-bf0
     evidence:
       path: decode_test.go
-      locator: TestDecodeHEVCMatchesReference
+      locator: TestDecodeMatchesReference/hevc-bf0
       note: bonus beyond the M1 scope; libx265 source, bit-exact
     basis:
     - *id004
@@ -173,28 +173,28 @@ verification:
       note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
   bframe-set-test:
     state: passed
     method: integration
     authority: observed
     scope:
       milestone: m1
-    test: TestDecodeBFramesMatchesReference
+    test: TestDecodeMatchesReference
     evidence:
       path: decode_test.go
-      locator: TestDecodeBFramesMatchesReference
+      locator: TestDecodeMatchesReference
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: encoding/annexb/annexb.go
-      input_hash: 35cba724134d2171c07a86e5b3788ca0861bde2e80e19b2414aee23770cc4bac
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: probe_test.go
       input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
     - path: internal/testutil/ffmpeg.go
@@ -253,8 +253,8 @@ facts:
       oracle: ffmpeg 9.0.1 (libx264, libx265 available)
       date: '2026-10-09'
     tests:
-    - TestDecodeH264MatchesReference
-    - TestDecodeHEVCMatchesReference
+    - TestDecodeMatchesReference/h264-bf0
+    - TestDecodeMatchesReference/hevc-bf0
     - TestDecodeParameterSetChange
     - TestFlushResumesAtKeyframe
     - TestInvalidData

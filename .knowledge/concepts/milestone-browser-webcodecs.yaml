@@ -131,7 +131,7 @@ verification:
         pion (net/webrtc) has another API there, which predates this slice
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_js.go
       input_hash: 2cec5ee0cd89552bc2b5263453a9a4360899de1df3a90c4c2ef79868bd1b4978
     - path: backends_other.go
@@ -177,19 +177,19 @@ verification:
     - path: internal/testutil/host_js.go
       input_hash: 7892f751afebd135eb7578ce74ac9c88e18de40a039fead55710d52bbb769dae
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/backend.go
       input_hash: a6334e707a1e09c5c2acc2d8e2d431a72ad54ff1eba3df4e0dece6db88d13b0f
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: convert_test.go
-      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
+      input_hash: 1cbdacb5dce4728d89c164033f37ae13b131e7efdbcfb5d1c5240d12a59ac19b
   chrome-software:
     state: passed
     method: integration
@@ -204,11 +204,11 @@ verification:
         after "EncodingError - Error during flush" reported as ErrInvalidData
     basis:
     - path: internal/webcodecs/browser_js_test.go
-      input_hash: 9470e5f512a31d83176001a587b1043b3f0542bd86294ed9df1f561318a8bc66
+      input_hash: 13a8e3ab43becc0dd97038669d12fedf55bb17eceeb63160c59938e35157e82c
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
   chrome-no-acceleration:
     state: passed
     method: integration
@@ -217,7 +217,7 @@ verification:
       milestone: browser-webcodecs
       platform: js
     test: HWMEDIACODEC_BROWSER_ARGS="--disable-accelerated-video-decode --disable-accelerated-video-encode"
-      scripts/browser_test.sh -v -run 'TestProbe|TestDecodeH264MatchesReference' .
+      scripts/browser_test.sh -v -run 'TestProbe|TestDecodeMatchesReference/h264-bf0' .
     evidence:
       path: internal/webcodecs/backend.go
       note: 2026-10-12 - Probe lists nothing and the hardware test skips with "no hardware h264 decode"
@@ -243,9 +243,9 @@ verification:
     - path: examples/player/main.go
       input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
   firefox-macos:
     state: failed
     method: integration
@@ -257,7 +257,7 @@ verification:
       . ./internal/webcodecs (Firefox 146.0.1 on the M3, started by the author and then by the agent)
     evidence:
       path: internal/browserexec/main.go
-      note: '2026-10-13: 4 tests fail (TestDecodeRGBA h264, TestEncodeRGBAInput, TestEncodeConvertedRGB, TestEncodeQuality)
+      note: '2026-10-13: 4 tests fail (TestDecodeRGBA h264, TestEncodeRGBAInput, TestEncodeConvertedRGB (since removed), TestEncodeQuality)
         for reasons inside Firefox, the NV12 decode tests skip (BGRX frames), the rest passes; details in backend:webcodecs
         facts.firefox_macos_2026-10-13. The run led to three changes - Firefox through "open" on macOS, RGB-only
         decoder output reported as ErrUnsupported, the encoder confirming configure and falling back from realtime.'
@@ -265,11 +265,11 @@ verification:
     - path: internal/browserexec/main.go
       input_hash: 2eeb924113cac90fc6be0ecedf328151903082ac585a9e961b0a9e6b2bd2a2d3
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
   safari-macos:
     state: failed
     method: integration
@@ -287,11 +287,11 @@ verification:
         range on input frames. The first runs stalled for minutes because the tab was in the background.'
     basis:
     - path: internal/webcodecs/encoder.go
-      input_hash: 3fbb81c6f83539d55f1f13355d1a29c3ab3eb33d29f4266f75085274f9061d8a
+      input_hash: e44b7d8ef2b329d26c95ef1d8652ade013c00057439353a97852b262f719fd9d
     - path: internal/webcodecs/decoder.go
-      input_hash: e779541e024aec0ec9ac50d46583cb49d732fb347426f2560a1f4bcbbe47e290
+      input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
     - path: internal/webcodecs/pixels.go
-      input_hash: 2b2a130397f630b3fa42cca40b356b3e24792260fe5f631926f8518b8c64717f
+      input_hash: 457d67cf825b8ad325cdb25e11089a7f610bcd1d8d704b44c0d051c49b95cb8f
   bundled-clip-fallback:
     state: passed
     method: integration
@@ -407,8 +407,9 @@ history:
       and said Safari was running. examples/player and examples/texture now fall back to the browser''s software
       decoder on js and show a fatal error in the page (examples/internal/fatal). The Safari run showed
       full-range frames, an H.264 encoder that only works in realtime mode and full-range NV12 input, each
-      handled in the backend; diagnostic tests (TestSupportMatrix, TestEncoderBehaviour, TestDecoderBehaviour,
-      HWMEDIACODEC_TEST_DIAGNOSE=1) log what a browser does.'
+      handled in the backend. The diagnostic tests that logged what a browser does (TestSupportMatrix,
+      TestEncoderBehaviour, TestDecoderBehaviour behind HWMEDIACODEC_TEST_DIAGNOSE=1) were removed on 2026-10-16,
+      their findings being in the backend and the README''s browser notes.'
   firefox-run-2026-10-13:
     summary: The author ran the script with Firefox, which hung; a Firefox started by its binary path cannot
       start content processes on macOS, so the wrapper now starts it through "open". The run that followed

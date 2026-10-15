@@ -97,7 +97,7 @@ verification:
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/pixconv/encoder.go
-      input_hash: 180eb443b5f27ab0154251131ad699d9819a489d17b921543e1d99392babb85f
+      input_hash: 5bf3f1b479d17d5abe71dbe9381fb67b08a5b6d50084713010b92193c98358d9
     - path: internal/pixconv/pixconv_test.go
       input_hash: 547bab878cdd9c2687ef3928afab0c8386c3b72fcec0a0821b38bc5a373c9a1b
   selection-test:
@@ -113,9 +113,9 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: convert_test.go
-      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
+      input_hash: 1cbdacb5dce4728d89c164033f37ae13b131e7efdbcfb5d1c5240d12a59ac19b
   videotoolbox-roundtrip-test:
     state: passed
     method: integration
@@ -124,20 +124,23 @@ verification:
       milestone: encoder-rgb-conversion
       platform: darwin
       gpu: apple-silicon
-    test: TestEncodeConvertedRGB
+    test: TestNewEncoderConvertsRGB (convert_test.go, where the conversion goes) with TestRGBToNV12MatchesReference
+      and TestEncoderConvertsFrames (internal/pixconv); on an NV12-only backend TestEncodeRGBAInput runs
+      the converted path on the hardware
     evidence:
       path: convert_test.go
-      locator: TestEncodeConvertedRGB
-      note: 'VideoToolbox behind a wrapper that refuses RGB input, so the Go conversion feeds its NV12
-        path: worst 8x8-block PSNR 39.33 dB (H.264) and 39.41 dB (HEVC), against 39.34 dB for VideoToolbox''s
-        own RGB input; color_space bt709. Apple M3, ffmpeg; run 2026-10-09'
+      locator: TestNewEncoderConvertsRGB
+      note: 'Measured 2026-10-09 by TestEncodeConvertedRGB (VideoToolbox behind a wrapper that refuses RGB
+        input, so the Go conversion fed its NV12 path): worst 8x8-block PSNR 39.33 dB (H.264) and 39.41 dB
+        (HEVC), against 39.34 dB for VideoToolbox''s own RGB input; color_space bt709. Apple M3, ffmpeg.
+        That hardware run was removed on 2026-10-16 as a duplicate of the pixconv tests and of TestEncodeRGBAInput.'
     basis:
     - path: convert_test.go
-      input_hash: 1efca16d7b6bda87e1b25ee08b3efe6c1e5f6bd0668bee059c40b3bf6e0df98b
+      input_hash: 1cbdacb5dce4728d89c164033f37ae13b131e7efdbcfb5d1c5240d12a59ac19b
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
-      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
   vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -155,7 +158,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: c53237595d3e729069818e267a857caa5e4cb612b0ffc17041a7a04ea800a67d
     - path: internal/vaapi/hevcenc.go
       input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
   windows-hardware-run:

@@ -29,11 +29,10 @@ type av1Slot struct {
 // av1Picture is the frame being assembled from the OBUs of a temporal
 // unit.
 type av1Picture struct {
-	h       *av1.Header
-	slot    av1Slot
-	tiles   int
-	groups  []*av1.TileGroup
-	started bool
+	h      *av1.Header
+	slot   av1Slot
+	tiles  int
+	groups []*av1.TileGroup
 }
 
 // av1Decoder is the AV1 bitstream state of a decoder: the frame header

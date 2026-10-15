@@ -63,11 +63,11 @@ verification:
       note: no hardware - packets come from demuxing an ffmpeg-made file; run 2026-10-10
     basis:
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
   page-test:
     state: passed
     method: unit

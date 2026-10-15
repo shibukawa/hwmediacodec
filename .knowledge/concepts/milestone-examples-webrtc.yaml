@@ -77,11 +77,11 @@ verification:
         2026-10-09
     basis:
     - path: net/webrtc/broadcaster.go
-      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
+      input_hash: 6c397f65445d2472441d599d4c9f9adc0d6b470aaf434e1396d4a3d6647a4d0d
     - path: net/webrtc/broadcaster_test.go
       input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
   recorder-keyframe-test:
     state: passed
     method: integration
@@ -97,7 +97,7 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
     - path: capture/recorder_test.go
       input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
   webrtc-live-run:
@@ -121,7 +121,7 @@ verification:
     - path: examples/webrtc/main.go
       input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
     - path: net/webrtc/broadcaster.go
-      input_hash: 168f1737fb78c3809a6ed95a9a1d00086941b8c88661653fb75753fd9629b3fa
+      input_hash: 6c397f65445d2472441d599d4c9f9adc0d6b470aaf434e1396d4a3d6647a4d0d
 open_questions:
   latency-measurement:
     text: End-to-end glass-to-glass latency was not measured (the pane could not be filmed); jitter buffer

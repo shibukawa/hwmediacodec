@@ -145,21 +145,6 @@ func (r *reader) bytes(n int) []byte {
 	return v
 }
 
-func (r *reader) cstring() string {
-	if r.err != nil {
-		return ""
-	}
-	for i := r.off; i < len(r.b); i++ {
-		if r.b[i] == 0 {
-			s := string(r.b[r.off:i])
-			r.off = i + 1
-			return s
-		}
-	}
-	r.err = errors.New("unterminated string")
-	return ""
-}
-
 // writer builds boxes.
 type writer struct {
 	buf []byte

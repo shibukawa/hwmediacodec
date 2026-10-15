@@ -96,7 +96,7 @@ verification:
         moved to the core module (milestone:capture-package)
     basis:
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
     - path: packetio.go
       input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
     - path: capture/recorder_test.go
@@ -106,7 +106,7 @@ verification:
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: mediacontainer/mp4/mux.go
-      input_hash: 82d263174bf59622d10bf5973894ebddee04a2e42ecb89bb2f05106efd62af19
+      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
   segmenter-test:
     state: passed
     method: integration
@@ -120,7 +120,7 @@ verification:
       note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
     basis:
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
     - path: mediacontainer/mp4/sample.go
       input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
     - path: mediacontainer/mp4/segmenter_test.go
@@ -139,11 +139,11 @@ verification:
         run 2026-10-09
     basis:
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: 042e277dab74cef138c8e34a5982bcf07f7d5253151a319c30cc1dbff5af903a
+      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
   hls-live-run:
     state: passed
     method: manual
@@ -164,7 +164,7 @@ verification:
     - path: examples/hls/main.go
       input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
     - path: net/hls/playlist.go
-      input_hash: 4b28314ed323cb77de9e86ceda0cf95b5dff35c3e991a2ee22e70e4ba0e666c3
+      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
   record-run:
     state: passed
     method: manual

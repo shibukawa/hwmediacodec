@@ -56,7 +56,7 @@ acceptance:
     verified_by:
     - container-smoke-test
   decode-reference-linux:
-    text: On a Linux machine with a VA-API driver, TestDecodeH264MatchesReference, the B-frame set test,
+    text: On a Linux machine with a VA-API driver, TestDecodeMatchesReference/h264-bf0, the B-frame set test,
       the SPS-change test and the flush/seek test pass (per-frame NV12 checksums equal ffmpeg's software
       decoder).
     scope:
@@ -100,7 +100,7 @@ verification:
     - path: internal/h264/dpb.go
       input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
     - path: internal/h264/paramsets.go
-      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
@@ -108,13 +108,13 @@ verification:
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
       input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
     - path: internal/bitstream/reader.go
-      input_hash: b938130875981723695b8a1cdc4fb25d5ecd0d06ce210a0f05cfa162382e1630
+      input_hash: 0d1dc581d7ef6bef5ae96474becdc9da5db36c8eaea8ec7d8cdd16e8b7660b92
   dpb-oracle-test:
     state: passed
     method: integration
@@ -129,7 +129,7 @@ verification:
     - path: internal/h264/dpb.go
       input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
     - path: internal/h264/paramsets.go
-      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
@@ -137,7 +137,7 @@ verification:
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
     - path: internal/h264/dpb_oracle_test.go
       input_hash: 2ccab55495face2c8e5141ce1f497de8a43e0f8875d482cfdf665c2a44deaa93
     - path: internal/h264/dpb_test.go
@@ -178,9 +178,9 @@ verification:
     - path: internal/vaapi/display.go
       input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vaapi/decoder.go
-      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
+      input_hash: 228520aacdea4a64a32683cfa13b278503e21215cc3cc02bbca8ab12865fd59c
     - path: internal/vaapi/h264fill.go
       input_hash: 978c940fe3fd451e314f02f6a78bc5325ab289875ff219304a64c22ef9e38069
     - path: backends_linux.go
@@ -234,9 +234,9 @@ verification:
         VideoToolbox; VCN rate control may need the window/HRD values tuned.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: c53237595d3e729069818e267a857caa5e4cb612b0ffc17041a7a04ea800a67d
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vaapi/display.go
       input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
     - path: internal/vaapi/sys/sys_linux.go
@@ -254,7 +254,7 @@ verification:
       path: scripts/crossbuild.sh
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go

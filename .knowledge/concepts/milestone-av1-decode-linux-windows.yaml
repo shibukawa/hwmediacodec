@@ -171,13 +171,13 @@ verification:
     - path: internal/av1/frame.go
       input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
     - path: internal/vaapi/av1dec.go
-      input_hash: da4de4786f74e6f0482cd7779c22ae9784abd9271239e0188185cd2f27bf2da0
+      input_hash: a4a75e2dfef3177ff5f9ec3223677a0debe243ac97a10a57c9e63209bc2139f7
     - path: internal/vaapi/av1fill.go
       input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
     - path: internal/vaapi/decoder.go
-      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
+      input_hash: 228520aacdea4a64a32683cfa13b278503e21215cc3cc02bbca8ab12865fd59c
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vaapi/sys/types_av1.go
       input_hash: 5811a816e5bd9cd414acbb0937c7cec85b22b96cc4baeeba039ef9b59e80957e
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
@@ -209,7 +209,7 @@ verification:
     - path: internal/av1/header.go
       input_hash: 3b2cd38f495d0efa24e2aa9a318ab8d47e48954c948fe6905d76122244a51270
     - path: internal/vaapi/av1dec.go
-      input_hash: da4de4786f74e6f0482cd7779c22ae9784abd9271239e0188185cd2f27bf2da0
+      input_hash: a4a75e2dfef3177ff5f9ec3223677a0debe243ac97a10a57c9e63209bc2139f7
     - path: internal/vaapi/av1fill.go
       input_hash: ef3d0d5b636493f2545e34356f727927679c6bd8456a3ccbd1f08b75d07fbe6b
     - path: fakevaapi_av1_linux_test.go
@@ -231,9 +231,9 @@ verification:
         stream after Flush.
     basis:
     - path: internal/vaapi/av1dec.go
-      input_hash: da4de4786f74e6f0482cd7779c22ae9784abd9271239e0188185cd2f27bf2da0
+      input_hash: a4a75e2dfef3177ff5f9ec3223677a0debe243ac97a10a57c9e63209bc2139f7
     - path: internal/vaapi/decoder.go
-      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
+      input_hash: 228520aacdea4a64a32683cfa13b278503e21215cc3cc02bbca8ab12865fd59c
     - path: fakevaapi_av1_linux_test.go
       input_hash: a71200827bc2bab9ae02d24bd9cf29f416036a5ef9a741566ff121de14b70a2d
   av1-layout-test:

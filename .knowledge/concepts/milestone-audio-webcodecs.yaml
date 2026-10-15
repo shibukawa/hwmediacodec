@@ -152,9 +152,9 @@ verification:
     - path: internal/webcodecs/audio.go
       input_hash: 6e240cbb9fe1e9be571788fe1d9ef6e69626ac8c8b9322edefaf55e09ddbcf37
     - path: internal/webcodecs/audiodecoder.go
-      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+      input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: audio_mp4_test.go
@@ -181,11 +181,11 @@ verification:
     - path: internal/webcodecs/audio.go
       input_hash: 6e240cbb9fe1e9be571788fe1d9ef6e69626ac8c8b9322edefaf55e09ddbcf37
     - path: internal/webcodecs/audiodecoder.go
-      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+      input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
     - path: internal/aac/esds.go
-      input_hash: bc6fdd3d330a601907dfceef4eed6a29425d696d70abb52d1ae55e01cf6bbbe9
+      input_hash: 35eb2633e6c75b94821cbebeb617ef6a77673956eb10efb03e245f297ebc687e
     - path: exact_js_test.go
       input_hash: 8ff2ee41c9e4a7aaf562c0abd225a06f0356a66ff6c6bdb87c7fb18ff217c227
   firefox-audio-run:
@@ -203,9 +203,9 @@ verification:
         ffmpeg; skipped - every test that opens an AAC encoder, HE-AAC, HE-AAC v2 and 4.0 AAC'
     basis:
     - path: internal/webcodecs/audiodecoder.go
-      input_hash: e180cad2670f21b94bca3699920593ea69c0f94f4d93358e4437d2b55e0b9693
+      input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: a8741c947ad134f253250aeadc86c1ae77741f5a7882fc4ff54e72f89b448198
+      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
   chrome-full-run:
@@ -239,11 +239,11 @@ verification:
         of net/webrtc and examples/webrtc fail in pion as they did before the change
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: internal/audiotoolbox/decoder.go
-      input_hash: cee4bdef84755dbee581717c20168b96d57f87749bce901bd7944f3ac5937fbf
+      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8131558b21b3dcdddc29f1b8da066b9643b569b9643b202f2b258e4e878244f0
+      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
   chrome-elsewhere:
     state: not_run
     method: manual

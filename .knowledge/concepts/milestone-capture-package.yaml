@@ -91,7 +91,7 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-09 (go test ./... of the core module passes)
     basis:
     - path: capture/recorder.go
-      input_hash: ad4576c0ae580c8c4ed7f913a115433a847f31c83beea54e098804f6a0635bc4
+      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
     - path: packetio.go
       input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
     - path: capture/recorder_test.go

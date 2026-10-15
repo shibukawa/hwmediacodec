@@ -68,7 +68,7 @@ acceptance:
     - container-smoke-test
     - symbol-binding-container
   decode-reference-linux:
-    text: On a Linux machine with an NVIDIA GPU, TestDecodeH264MatchesReference, TestDecodeHEVCMatchesReference,
+    text: On a Linux machine with an NVIDIA GPU, TestDecodeMatchesReference/h264-bf0, TestDecodeMatchesReference/hevc-bf0,
       the B-frame display-order tests, TestDecodeOrderOption, TestDecodeParameterSetChange and
       TestFlushResumesAtKeyframe pass (per-frame NV12 checksums equal ffmpeg's software decoder).
     scope:
@@ -202,7 +202,7 @@ verification:
     - path: internal/nvidia/device.go
       input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
   hardware-encode:
     state: not_run
     method: integration
@@ -220,7 +220,7 @@ verification:
         conversion.'
     basis:
     - path: internal/nvidia/encoder.go
-      input_hash: 48d4560639dc60d02a4003bb1c43d2d1c8da0cebbbd2233c94d9be0d2be2736b
+      input_hash: 2477197799934f3a958cb5eb632e52730336496bf924e255dd8d7f09af34f2d8
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: encode_test.go
@@ -238,7 +238,7 @@ verification:
         GOOS=linux
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
       input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
     - path: backends_other.go
@@ -258,7 +258,7 @@ verification:
     - path: probe_test.go
       input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
 facts:

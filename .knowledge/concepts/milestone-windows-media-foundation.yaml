@@ -129,11 +129,11 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeH264MatchesReference (decode_test.go)
+    test: TestDecodeMatchesReference/h264-bf0 (decode_test.go)
     authority: authored
     evidence:
       path: decode_test.go
-      locator: TestDecodeH264MatchesReference
+      locator: TestDecodeMatchesReference/h264-bf0
       note: Needs a Windows machine with a DXVA GPU and ffmpeg; skips when Probe reports no hardware.
   hevc-reference-test-windows:
     state: not_run
@@ -141,22 +141,22 @@ verification:
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeHEVCMatchesReference (decode_test.go)
+    test: TestDecodeMatchesReference/hevc-bf0 (decode_test.go)
     authority: authored
     evidence:
       path: decode_test.go
-      locator: TestDecodeHEVCMatchesReference
+      locator: TestDecodeMatchesReference/hevc-bf0
   bframe-order-test-windows:
     state: not_run
     method: integration
     scope:
       milestone: m3
       platform: windows
-    test: TestDecodeBFramesMatchesReference (decode_test.go)
+    test: TestDecodeMatchesReference (decode_test.go)
     authority: authored
     evidence:
       path: decode_test.go
-      locator: TestDecodeBFramesMatchesReference
+      locator: TestDecodeMatchesReference
       note: Compares frame for frame in display order, which the Media Foundation decoders produce
         natively (TestDecodeOrderOption is skipped on Windows).
   sps-change-test-windows:
@@ -241,7 +241,7 @@ verification:
       note: Run on macOS (go1.27.0 darwin/arm64) on 2026-10-09; all targets ok, vet clean.
     basis:
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_windows.go
       input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
     - path: backends_other.go
@@ -309,23 +309,23 @@ verification:
         on macOS 2026-10-09.
     basis:
     - path: internal/mediafoundation/frame.go
-      input_hash: f494eb75c61e2bcd764602234bec37397ed8e85667710391eda82ba911b12561
+      input_hash: 5a0a634831f23df94d5915330f730ccff8e0770a7c9a0178d658ed050685004b
     - path: internal/mediafoundation/time.go
-      input_hash: 6cade0f2a36a7356f801482f5b83a29b8e3f3911c9d0ad01e4d3f6da36b73553
+      input_hash: f4d13d07737244f174bdc02be2eb6a89d771cd47960f6b18eee246ed4a7962e9
     - path: internal/mediafoundation/paramsets.go
       input_hash: e9d34c3fdab73a10936e6fa14246bfd979f2f6df16806b97330eb8dc74b0bcab
     - path: encoding/annexb/paramsets.go
-      input_hash: 63834eae0dd58bd494d66b5488ba59cf89ba638bf7e3a0d03c91e3e9fc6a434a
+      input_hash: eae94a52d8bb18a2b5e60cc93e6058f18930debfda2bc0a920c29fa57f1ec9ae
     - path: internal/mediafoundation/frame_test.go
-      input_hash: 14545212fb75a36d42b2f8f8293976d6482827f567b2630cc52e975886c214df
+      input_hash: d0b9181922a077738b8fa5dc937714ce739f342790ce27cc2a895e6282d7b123
     - path: internal/mediafoundation/paramsets_test.go
       input_hash: 82cb51f5ade86e86da0cb863d5db49ef365afca3cce9ef85a1ad8a87a1f4d6f5
     - path: internal/mediafoundation/time_test.go
-      input_hash: 41957ebf74a3f2ff62c8db67dee4a63a3c277c600f04e936ba07524012bedb53
+      input_hash: c3e02c0b20100e81ff78275c5a2cff02977d76d0d9c45d7070d056a6592ab178
     - path: encoding/annexb/paramsets_test.go
-      input_hash: b95fcf8864b98cffc9d94a23a5837b6c0322608168dbf0138fc039b8f804b954
+      input_hash: 22d3bd18c13bfb758daf222d8fdf3cd9938f65d31919a88ff9faf02ad23705fe
     - path: internal/mediafoundation/encodeutil.go
-      input_hash: 3c66f9e57d0dee122627c16451bcb6348fa759690d5ea85b2af42b0fc3bbe395
+      input_hash: 1815e81c9589a5b1ba012bb7a4cb6fd1342671fa648a2e7371d414dbd9badb8b
     - path: internal/mediafoundation/encodeutil_test.go
       input_hash: 24ea374200a61af9e90c6001cae4c3102390c047b7d889bc93e26c0d0282b211
 open_questions:

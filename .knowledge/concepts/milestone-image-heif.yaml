@@ -95,11 +95,11 @@ verification:
       note: Apple M3, macOS 27, sips and ffmpeg with libsvtav1; run 2026-10-10
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 47e7e4950c5ebc0e27702d64c2f42d624ce5a260e7a33dca9e409021a35be1c6
+      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
     - path: internal/imageitem/encode.go
-      input_hash: 5a9fa3152887db0e3a3bcb46012a8d4c44b540788760b199f8d079eca9883014
+      input_hash: 02bd3d5bc569d4c7f38bc2a9aeb3627a7750ca0517426592fa860627d440b480
     - path: internal/imageitem/box.go
-      input_hash: 230322bb2c15cfab837dd1ee427b5c253e4ce4dba6add5dad2b222ce257d95a6
+      input_hash: ebcf8a122ff1aaff641257d71e3143e3a141e56e1ca067801d7519d942c6a35f
     - path: internal/imageitem/transform.go
       input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: image/heif/heif_test.go

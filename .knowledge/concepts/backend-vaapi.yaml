@@ -263,7 +263,7 @@ verification:
     - path: internal/h264/dpb.go
       input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
     - path: internal/h264/paramsets.go
-      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
@@ -271,7 +271,7 @@ verification:
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
@@ -287,7 +287,7 @@ verification:
     - path: internal/h264/dpb.go
       input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
     - path: internal/h264/paramsets.go
-      input_hash: c90e04841bcc0c4ffa07a55b152d4acbb4eeb8f8681cb2dd33bc9417c747c067
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
@@ -295,7 +295,7 @@ verification:
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c75201437667d5f32d275f308a50c744b411859d8dfc3f99ec0a2aed7878dda7
+      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
     - path: internal/h264/dpb_oracle_test.go
       input_hash: 2ccab55495face2c8e5141ce1f497de8a43e0f8875d482cfdf665c2a44deaa93
     - path: internal/h264/dpb_test.go
@@ -350,9 +350,9 @@ verification:
         against VideoToolbox and may need tuning for VCN.
     basis:
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: c53237595d3e729069818e267a857caa5e4cb612b0ffc17041a7a04ea800a67d
     - path: internal/vaapi/backend.go
-      input_hash: 38e052f030fe567f0280016890303d0226fc9d6cd935cfe3d738d10893013feb
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
     - path: internal/vaapi/display.go
       input_hash: 87576ccfa98564333e09f903c379dbc50b3b1bd56f7371b0e24a0b7ec803883b
     - path: internal/vaapi/sys/sys_linux.go
@@ -363,7 +363,7 @@ verification:
     state: not_run
     method: integration
     authority: inferred
-    test: TestDecodeH264MatchesReference on Linux with a VA-API driver (skips when Probe reports no hardware)
+    test: TestDecodeMatchesReference/h264-bf0 on Linux with a VA-API driver (skips when Probe reports no hardware)
     evidence:
       path: decode_test.go
       note: Needs an AMD (or Intel) Linux machine with ffmpeg+libx264; run go test -count=1 -v . there.
@@ -405,18 +405,18 @@ verification:
     - path: internal/vaapi/testdata/fakedriver/fake_drv_video.c
       input_hash: 0eb39e95797adbcc0012abef48e707650422d5a6c2769b25502a1455aa6410f5
     - path: internal/vaapi/decoder.go
-      input_hash: 3b0a6038183769e7e21024665a1151b691cb34acae79c14a3d3b0271f5d9577f
+      input_hash: 228520aacdea4a64a32683cfa13b278503e21215cc3cc02bbca8ab12865fd59c
     - path: internal/vaapi/hevcdec.go
       input_hash: 5b30a5d9c3065faa3cb9c0d3bd5b6c1f95498b106d7f8a820a391a7b545283c6
     - path: internal/vaapi/encoder.go
-      input_hash: b42681661cdab08bb73bd78fad36e9e31dadd028c7b37cea46d2c0b267e446cb
+      input_hash: c53237595d3e729069818e267a857caa5e4cb612b0ffc17041a7a04ea800a67d
     - path: internal/vaapi/hevcenc.go
       input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
   hevc-reference-linux:
     state: not_run
     method: integration
     authority: inferred
-    test: TestDecodeHEVCMatchesReference, TestDecodeBFramesMatchesReference/hevc, TestDecodeHEVCCodingTools,
+    test: TestDecodeMatchesReference/hevc-bf0, TestDecodeMatchesReference/hevc, TestDecodeHEVCCodingTools,
       TestDecodeHEVCOpenGOP on Linux with a VA-API driver
     evidence:
       path: decode_test.go

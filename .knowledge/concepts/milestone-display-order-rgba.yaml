@@ -101,29 +101,29 @@ verification:
       milestone: display-order-rgba
       platform: darwin
       gpu: apple-silicon
-    test: TestDecodeBFramesMatchesReference
+    test: TestDecodeMatchesReference
     evidence:
       path: decode_test.go
-      locator: TestDecodeBFramesMatchesReference
+      locator: TestDecodeMatchesReference
       note: 60 frames 320x240; H.264 bframes 3 and 8, HEVC bframes 3 and 6; checksums equal ffmpeg's
         display-order output frame for frame
     basis:
     - path: internal/reorder/decoder.go
-      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
+      input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: fbd18e5e72b4c33dd18caa853656ffc8119888af4f0833be1b32a146c61f52d9
+      input_hash: e543706b633a10cc574579287c3a43f607a9d1476ee00f45688925c93221143b
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
       input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   reorder-oracle-test:
@@ -141,11 +141,11 @@ verification:
         streams without B-frames hold nothing back
     basis:
     - path: internal/reorder/decoder.go
-      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
+      input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: fbd18e5e72b4c33dd18caa853656ffc8119888af4f0833be1b32a146c61f52d9
+      input_hash: e543706b633a10cc574579287c3a43f607a9d1476ee00f45688925c93221143b
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
@@ -205,9 +205,9 @@ verification:
       locator: TestDecodeOrderOption
     basis:
     - path: hwmediacodec.go
-      input_hash: 1a9c9ce8e849cf6dbe4441226b355ec11158141e5c9757f71e58da0f00ecfbc6
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
   rgba-decode-test:
     state: passed
     method: integration
@@ -225,15 +225,15 @@ verification:
         channels 4 dB; alpha 255; RGBA == mirror(BGRA)
     basis:
     - path: internal/videotoolbox/decoder.go
-      input_hash: d960d746db13a4e7c7860fa6c0f982e9fcfa76c7f391154fb863b9e12ca8921a
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
     - path: internal/videotoolbox/pixels.go
-      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
     - path: internal/videotoolbox/sys/sys.go
       input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
     - path: internal/codec/codec.go
-      input_hash: 3cb1ebc9de1d422ae3363607c7ce24ef444451ff688b140d3646d42935977260
+      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   rgb-encode-test:
@@ -252,9 +252,9 @@ verification:
         (27.7 dB when decoded with BT.601)
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 8fb996d688474d12f03af435f67a9fd780745a6ac58c6fa408b99c2b8596c35d
+      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
     - path: internal/videotoolbox/pixels.go
-      input_hash: cf26bda3c95b3efd2551ff03eb0ae6073de3f96313528cbaa7939696a94735d8
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: encode_test.go
@@ -295,7 +295,7 @@ verification:
     - path: ebitenvideo/player.go
       input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
     - path: playback/source.go
-      input_hash: 88dfb3e2a3d3acad66a73d884798700c35d431537f767a75d8b7289ccf9817f8
+      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
     - path: playback/timeline.go
       input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
     - path: ebitenvideo/player_darwin_test.go
@@ -384,7 +384,7 @@ facts:
       oracle: ffmpeg/ffprobe 9.0.1 (libx264, libx265 available)
       date: '2026-10-09'
     tests:
-    - TestDecodeBFramesMatchesReference (h264 bf3/bf8, hevc bf3/bf6, exact order)
+    - TestDecodeMatchesReference (h264 bf3/bf8, hevc bf3/bf6, exact order)
     - TestDecodeOrderOption
     - TestDecodeRGBA (h264/hevc x rgba/bgra)
     - TestEncodeRGBAInput (rgba, bgra)

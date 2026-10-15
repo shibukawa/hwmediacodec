@@ -76,7 +76,7 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: mediacontainer/mp4/demux.go
-      input_hash: 8ad77ebe15ed37d8899f0eead4c80fe4f1cd31ee0240f3b8ece07acda7a44a39
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
   player-test:
     state: passed
     method: integration
@@ -94,7 +94,7 @@ verification:
     - path: examples/player/main.go
       input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
     - path: examples/player/main_test.go
-      input_hash: 8000793334244a9b7bfad6b9710b1f36f2f2560a19016e4973d703b58f90060c
+      input_hash: 1ed253526ea0dd482aaf507f63ce9b88dd95dc99610bec3899ac52b81cee9ea1
   mesh-test:
     state: passed
     method: unit

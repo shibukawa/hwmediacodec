@@ -1,66 +1,11 @@
 """Refresh the basis input_hash values (SHA-256 of each file) in the .knowledge
 concept YAML files without reformatting them, after the tests a verification
-entry names were re-run. Known renamed paths are rewritten first.
+entry names were re-run.
 
 Usage: python3 scripts/knowledge_refresh_basis.py . [--apply]
 (without --apply it only reports what would change)."""
 import hashlib, os, re, sys
 
-RENAMES = {
-    "decode_darwin_test.go": "decode_test.go",
-    "encode_darwin_test.go": "encode_test.go",
-    "internal/h264/h264.go": "internal/h264/poc.go",
-    "internal/h264/h264_test.go": "internal/h264/poc_test.go",
-    "internal/nvidia/sys/cuda_linux.go": "internal/nvidia/sys/cuda.go",
-    "internal/nvidia/sys/cuvid_linux.go": "internal/nvidia/sys/cuvid.go",
-    "internal/nvidia/sys/nvenc_linux.go": "internal/nvidia/sys/nvenc.go",
-    "internal/nvidia/sys/sys_linux_test.go": "internal/nvidia/sys/sys_test.go",
-    "examples/screencast/recorder.go": "capture/recorder.go",
-    "examples/screencast/recorder_test.go": "capture/recorder_test.go",
-    "examples/screencast/sinks.go": "capture/sinks.go",
-    "examples/container/demux.go": "mediacontainer/mp4/demux.go",
-    "examples/container/mux.go": "mediacontainer/mp4/mux.go",
-    "examples/container/sample.go": "mediacontainer/mp4/sample.go",
-    "examples/container/stream.go": "mediacontainer/mp4/stream.go",
-    "examples/container/packetsource.go": "mediacontainer/mp4/packetsource.go",
-    "examples/container/segmenter.go": "mediacontainer/mp4/segmenter.go",
-    "examples/container/videofile.go": "mediacontainer/mp4/videofile.go",
-    "examples/container/container_test.go": "mediacontainer/mp4/mp4_test.go",
-    "examples/container/util_test.go": "mediacontainer/mp4/util_test.go",
-    "examples/container/stream_test.go": "mediacontainer/mp4/stream_test.go",
-    "examples/container/packetsource_test.go": "mediacontainer/mp4/packetsource_test.go",
-    "examples/container/segmenter_test.go": "mediacontainer/mp4/segmenter_test.go",
-    "examples/container/videofile_test.go": "mediacontainer/mp4/videofile_test.go",
-    "examples/container/assets_test.go": "examples/assets/assets_test.go",
-    "examples/heifconv/main.go": "examples/imgconv/main.go",
-    "capture/sinks.go": "packetio.go",
-    "ebitenvideo/source.go": "playback/source.go",
-    "ebitenvideo/timeline.go": "playback/timeline.go",
-    "ebitenvideo/timeline_test.go": "playback/timeline_test.go",
-    "ebitenvideo/seek_darwin_test.go": "playback/seek_darwin_test.go",
-    "examples/webrtc/server.go": "net/webrtc/broadcaster.go",
-    "examples/webrtc/server_test.go": "net/webrtc/broadcaster_test.go",
-    "examples/internal/testutil/ffmpeg.go": "internal/mediatest/ffmpeg.go",
-    "examples/hls/server.go": "net/hls/playlist.go",
-    "examples/hls/server_test.go": "net/hls/playlist_test.go",
-    "annexb/annexb.go": "encoding/annexb/annexb.go",
-    "annexb/annexb_test.go": "encoding/annexb/annexb_test.go",
-    "annexb/paramsets.go": "encoding/annexb/paramsets.go",
-    "annexb/paramsets_test.go": "encoding/annexb/paramsets_test.go",
-    "ivf/ivf.go": "mediacontainer/ivf/ivf.go",
-    "ivf/ivf_test.go": "mediacontainer/ivf/ivf_test.go",
-    "examples/heif/box.go": "internal/imageitem/box.go",
-    "image/heif/box.go": "internal/imageitem/box.go",
-    "examples/heif/decode.go": "internal/imageitem/decode.go",
-    "image/heif/decode.go": "internal/imageitem/decode.go",
-    "examples/heif/encode.go": "internal/imageitem/encode.go",
-    "image/heif/encode.go": "internal/imageitem/encode.go",
-    "examples/heif/heif_test.go": "image/heif/heif_test.go",
-    "examples/heif/transform.go": "internal/imageitem/transform.go",
-    "image/heif/transform.go": "internal/imageitem/transform.go",
-    "examples/internal/testutil/image.go": "internal/mediatest/image.go",
-    "internal/mp4test/ffmpeg.go": "internal/mediatest/ffmpeg.go",
-}
 root = sys.argv[1]
 apply = "--apply" in sys.argv
 path_re = re.compile(r"^(\s*(?:- )?path: )(\S+)\s*$")
@@ -70,7 +15,7 @@ def sha(p):
     with open(p, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
-total_renamed = total_updated = 0
+total_updated = 0
 missing = []
 cdir = os.path.join(root, ".knowledge", "concepts")
 for name in sorted(os.listdir(cdir)):
@@ -80,15 +25,11 @@ for name in sorted(os.listdir(cdir)):
     lines = open(fp, encoding="utf-8").read().split("\n")
     out = []
     last_path = None
-    renamed = updated = 0
+    updated = 0
     for line in lines:
         m = path_re.match(line)
         if m:
             p = m.group(2)
-            if p in RENAMES:
-                p = RENAMES[p]
-                line = m.group(1) + p
-                renamed += 1
             last_path = p
             out.append(line)
             continue
@@ -103,12 +44,11 @@ for name in sorted(os.listdir(cdir)):
             else:
                 missing.append((name, last_path))
         out.append(line)
-    if (renamed or updated) and apply:
+    if updated and apply:
         open(fp, "w", encoding="utf-8").write("\n".join(out))
-    if renamed or updated:
-        print(f"{name}: {renamed} renamed, {updated} hashes updated")
-    total_renamed += renamed
+    if updated:
+        print(f"{name}: {updated} hashes updated")
     total_updated += updated
-print(f"total: {total_renamed} renamed, {total_updated} updated, applied={apply}")
+print(f"total: {total_updated} updated, applied={apply}")
 for m in missing:
     print("missing:", m)

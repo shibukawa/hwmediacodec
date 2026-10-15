@@ -108,11 +108,11 @@ verification:
     - path: internal/mediacodec/backend.go
       input_hash: 9d34e03aa492bbc9c9785274841e5c147586d578a151678651420781eb185deb
     - path: internal/mediacodec/decoder.go
-      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
+      input_hash: 400df009104253567f69ee570a1fc079481fbb85de06a808850c7d291cbd4f32
     - path: internal/mediacodec/encoder.go
-      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
+      input_hash: 93ce51dd71783cd97b358950120fb5d7b63ca87e841872a41fe8b9631a1d19dc
     - path: internal/mediacodec/common.go
-      input_hash: 676765d2e770e27ccc44d9a5eff1666dfcdaedc68fba654b2bb35e3760466f21
+      input_hash: 7386ca0c29a30f5763b005b11660787a09ec66421acbbb1336276cc7b5dbcb1b
     - path: internal/mediacodec/sys/sys.go
       input_hash: b8fe1267da557caeaacf13a1b8e1c60734d04db5222777b466170288f2dc53ac
     - path: backends_android.go
@@ -131,9 +131,9 @@ verification:
         AMediaCodecBufferInfo and MediaImage2 sizes
     basis:
     - path: internal/mediacodec/layout.go
-      input_hash: 1288815ffe8caac34ead271c1d8fc072809bb6192b2f801b37e7286ab50b45ce
+      input_hash: d3915fc2370f221adbdcb09c5ae2955a355348b7b37fe924345309e89674fd05
     - path: internal/mediacodec/layout_test.go
-      input_hash: 9d02c906897020775c1d74d8fb4b0401163ec78542a0432f333eae70ca808c5c
+      input_hash: a57131a578a717062d4ccff5eca56b2bf134f59a10abef2d57cea4c61f0d6771
     - path: internal/mediacodec/names.go
       input_hash: 32847ce94c7520bc0c31fc2131f1bb036c4957a9cd1f379023d4fb28288d8409
     - path: internal/mediacodec/names_test.go
@@ -195,11 +195,11 @@ verification:
     - path: scripts/android_device_check.sh
       input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
     - path: internal/mediacodec/decoder.go
-      input_hash: 59259c2c9d5da3407ec8f4ab9cb2dcdabbffa4909968be8ce9958cbc7a5ebea1
+      input_hash: 400df009104253567f69ee570a1fc079481fbb85de06a808850c7d291cbd4f32
     - path: internal/mediacodec/encoder.go
-      input_hash: fd1e535fcfba9a50ceacfdbe8c62e2d89753e8b189bec5e90f3c1cb9e828e67b
+      input_hash: 93ce51dd71783cd97b358950120fb5d7b63ca87e841872a41fe8b9631a1d19dc
     - path: internal/reorder/decoder.go
-      input_hash: e9f1c33e36c9a55c9670a82c8b9742c1576a4cdc5827dbe40b4653c283645a50
+      input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
   emulator-app-run:
     state: passed
     method: manual
@@ -249,7 +249,7 @@ verification:
     - path: scripts/mobilebuild.sh
       input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
     - path: scripts/crossbuild.sh
-      input_hash: 0f32c8396fd689a4afa8165cadf0d8df269ea3f3e19b142355d9f04606b2ab0d
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
 relations:
 - relation: implements
   to: requirement:hwmediacodec
