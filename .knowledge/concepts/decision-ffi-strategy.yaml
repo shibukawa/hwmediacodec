@@ -100,10 +100,10 @@ facts:
       layout.
   evidence_from_linux_decode:
     date: '2026-10-09'
-    summary: 'Option B holds on Linux: libva and libva-drm dlopen through purego with CGO_ENABLED=0
-      (purego fakecgo runtime), 30 entry points bind on Debian bookworm libva 2.17 (arm64 container),
-      purego.NewCallback supplies the vaSetErrorCallback/vaSetInfoCallback handlers, and struct-by-pointer
-      VA buffers are plain Go structs whose layout is asserted against clang offsetof values.'
+    summary: 'Option B holds on Linux: libva and libva-drm dlopen through purego with CGO_ENABLED=0 (purego
+      fakecgo runtime), 30 entry points bind on Debian bookworm libva 2.17 (arm64 container), purego.NewCallback
+      supplies the vaSetErrorCallback/vaSetInfoCallback handlers, and struct-by-pointer VA buffers are
+      plain Go structs whose layout is asserted against clang offsetof values.'
     blockers_hit: none
     notes:
     - The slice-level nature of VA-API cost a Go H.264 parser and DPB (about 1.5k lines plus tests), as
@@ -112,24 +112,24 @@ facts:
   evidence_from_m3:
     date: '2026-10-09'
     summary: 'Option B applied to Windows without cgo: golang.org/x/sys/windows lazy DLLs for mfplat.dll
-      and d3d11.dll, COM interfaces (IMFTransform, IMFAttributes, IMFSample, IMFDXGIBuffer,
-      IMFDXGIDeviceManager, ID3D11Device/Context/Texture2D/VideoDevice, ID3D10Multithread) called
-      through hand-written vtable structs with syscall.SyscallN. Cross-compiles and vets from macOS.'
+      and d3d11.dll, COM interfaces (IMFTransform, IMFAttributes, IMFSample, IMFDXGIBuffer, IMFDXGIDeviceManager,
+      ID3D11Device/Context/Texture2D/VideoDevice, ID3D10Multithread) called through hand-written vtable
+      structs with syscall.SyscallN. Cross-compiles and vets from macOS.'
     blockers_hit: none at compile time; runtime unverified
     notes:
-    - By-value GUID arguments (MFTEnumEx) differ per architecture (pointer to copy on x64, two
-      registers on ARM64) and need per-GOARCH wrappers.
+    - By-value GUID arguments (MFTEnumEx) differ per architecture (pointer to copy on x64, two registers
+      on ARM64) and need per-GOARCH wrappers.
     - Struct sizes are asserted at compile time with unsafe.Sizeof array-length tricks; GUIDs, vtable
       orders and HRESULTs were extracted from the mingw-w64 headers rather than typed from memory.
-    - "No Go-implemented COM object was needed: the synchronous decoder MFTs avoid IMFAsyncCallback and
-      the asynchronous encoder MFTs are driven with IMFMediaEventGenerator::GetEvent instead of
-      BeginGetEvent callbacks, so no syscall.NewCallback-backed vtable exists yet."
+    - 'No Go-implemented COM object was needed: the synchronous decoder MFTs avoid IMFAsyncCallback and
+      the asynchronous encoder MFTs are driven with IMFMediaEventGenerator::GetEvent instead of BeginGetEvent
+      callbacks, so no syscall.NewCallback-backed vtable exists yet.'
   evidence_from_ios:
     date: '2026-10-12'
-    summary: 'Option B carries to iOS unchanged in source: the darwin VideoToolbox binding compiles and runs
-      for ios/arm64. The one blocker is in the toolchain, not the code - purego refuses CGO_ENABLED=0 on
-      iOS (is_ios.go) and on Android (dlfcn_android.go uses the cgo runtime), so mobile builds set CGO_ENABLED=1
-      with the platform clang. ebitenmobile/gomobile require that anyway.'
+    summary: 'Option B carries to iOS unchanged in source: the darwin VideoToolbox binding compiles and
+      runs for ios/arm64. The one blocker is in the toolchain, not the code - purego refuses CGO_ENABLED=0
+      on iOS (is_ios.go) and on Android (dlfcn_android.go uses the cgo runtime), so mobile builds set
+      CGO_ENABLED=1 with the platform clang. ebitenmobile/gomobile require that anyway.'
     blockers_hit: purego needs the cgo runtime on ios and android (toolchain-level; no cgo source added)
     notes:
     - macOS-only CFString keys are bound as optional and skipped when absent instead of platform branches.
@@ -137,9 +137,9 @@ facts:
       run, 2026-10-12).
   evidence_from_browser:
     date: '2026-10-12'
-    summary: The browser target has nothing to load - the "foreign" side is the page's JavaScript API, and
-      syscall/js is the standard library's binding for it. No purego, no cgo, no JavaScript source; the
-      decision's intent (no C toolchain, plain go build) holds unchanged on GOOS=js GOARCH=wasm.
+    summary: The browser target has nothing to load - the "foreign" side is the page's JavaScript API,
+      and syscall/js is the standard library's binding for it. No purego, no cgo, no JavaScript source;
+      the decision's intent (no C toolchain, plain go build) holds unchanged on GOOS=js GOARCH=wasm.
     notes:
     - JavaScript exceptions arrive as panics of js.Error and are recovered into errors at every call site
       that can throw.
@@ -167,8 +167,8 @@ history:
   validated-2026-10-09:
     summary: M1 implementation confirmed the purego approach on the first platform.
   validated-linux-2026-10-09:
-    summary: The Linux decoder slice confirmed purego dlopen/callbacks against libva on Linux without cgo (container smoke
-      test; hardware pending).
+    summary: The Linux decoder slice confirmed purego dlopen/callbacks against libva on Linux without
+      cgo (container smoke test; hardware pending).
   applied-windows-2026-10-09:
     summary: M3 applied the decision to Windows (x/sys/windows + raw COM vtables); no cgo escape hatch
       was needed.

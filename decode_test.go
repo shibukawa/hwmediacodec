@@ -252,35 +252,16 @@ func compareChecksums(t *testing.T, got, want [][32]byte) {
 	t.Fatalf("%d of %d frames differ from the ffmpeg reference", mismatches, len(want))
 }
 
-func TestDecodeH264MatchesReference(t *testing.T) {
-	requireHardwareDecode(t, hwmediacodec.H264)
-	s := testutil.GenerateStream(t, hwmediacodec.H264, 320, 240, 60)
-	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
-
-	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.H264)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
-	defer dec.Close()
-	got, sizes := decodeAll(t, dec, hwmediacodec.H264, testutil.ReadFile(t, s.Path))
-	for i, sz := range sizes {
-		if sz != [2]int{320, 240} {
-			t.Fatalf("frame %d size %v", i, sz)
-		}
-	}
-	compareChecksums(t, got, want)
-}
-
-// TestDecodeBFramesMatchesReference checks that streams with B-frames come
-// back in display order: the frame sequence must equal ffmpeg's output
-// frame for frame.
-func TestDecodeBFramesMatchesReference(t *testing.T) {
+// TestDecodeMatchesReference decodes streams without and with B-frames:
+// every frame must have the stream's size and the frame sequence must
+// equal ffmpeg's output frame for frame, in display order.
+func TestDecodeMatchesReference(t *testing.T) {
 	cases := []struct {
 		codec   hwmediacodec.Codec
 		bframes int
 	}{
-		{hwmediacodec.H264, 3}, {hwmediacodec.H264, 8},
-		{hwmediacodec.HEVC, 3}, {hwmediacodec.HEVC, 6},
+		{hwmediacodec.H264, 0}, {hwmediacodec.H264, 3}, {hwmediacodec.H264, 8},
+		{hwmediacodec.HEVC, 0}, {hwmediacodec.HEVC, 3}, {hwmediacodec.HEVC, 6},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%s-bf%d", c.codec, c.bframes), func(t *testing.T) {
@@ -292,7 +273,12 @@ func TestDecodeBFramesMatchesReference(t *testing.T) {
 				t.Fatalf("NewDecoder: %v", err)
 			}
 			defer dec.Close()
-			got, _ := decodeAll(t, dec, c.codec, testutil.ReadFile(t, s.Path))
+			got, sizes := decodeAll(t, dec, c.codec, testutil.ReadFile(t, s.Path))
+			for i, sz := range sizes {
+				if sz != [2]int{320, 240} {
+					t.Fatalf("frame %d size %v", i, sz)
+				}
+			}
 			compareChecksums(t, got, want)
 		})
 	}
@@ -397,20 +383,6 @@ func TestDecodeRGBA(t *testing.T) {
 
 func sortChecksums(s [][32]byte) {
 	sort.Slice(s, func(i, j int) bool { return bytes.Compare(s[i][:], s[j][:]) < 0 })
-}
-
-func TestDecodeHEVCMatchesReference(t *testing.T) {
-	requireHardwareDecode(t, hwmediacodec.HEVC)
-	s := testutil.GenerateStream(t, hwmediacodec.HEVC, 320, 240, 60)
-	want := testutil.ReferenceNV12(t, s.Path, s.Codec, s.Width, s.Height)
-
-	dec, err := hwmediacodec.NewDecoder(context.Background(), hwmediacodec.HEVC)
-	if err != nil {
-		t.Fatalf("NewDecoder: %v", err)
-	}
-	defer dec.Close()
-	got, _ := decodeAll(t, dec, hwmediacodec.HEVC, testutil.ReadFile(t, s.Path))
-	compareChecksums(t, got, want)
 }
 
 // TestDecodeParameterSetChange decodes two streams of different sizes

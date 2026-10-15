@@ -255,12 +255,9 @@ public API behaves as on macOS. What differs:
   only the encoders and `NewDecoder` needs `WithSoftwareFallback`; the
   Simulator's VideoToolbox accepts the hardware-encoder requirement and
   lists `h264 encode` and `hevc encode` as hardware.
-- **Status.** Verified in the iOS 26 Simulator on an M3 with the
-  `hwmediacodec` CLI built for `ios/arm64`: `probe`; decoding a 30-frame
-  H.264 stream with B-frames to NV12 and RGBA gives the same frames in the
-  same display order as the Mac's hardware decoder; H.264 and HEVC encoding
-  produces streams ffmpeg decodes (about 48 dB luma PSNR against the input);
-  H.264 to HEVC transcoding works. **No run on an iPhone yet**; the
+- **Status.** Verified in the iOS Simulator with the `hwmediacodec` CLI
+  built for `ios/arm64` (probe, decoding to NV12 and RGBA in display order,
+  H.264 and HEVC encoding, transcoding). **No run on an iPhone yet**; the
   `examples/mobile` app is the way to do it.
 ### Android notes
 
@@ -332,20 +329,13 @@ MediaTek, Tensor) sit behind it.
   the frame given to the encoder at the same position minus one frame.
 - **Status.** Verified on the Android 14 (API 34, arm64) emulator with
   `scripts/android_device_check.sh`, which pushes the `hwmediacodec` CLI
-  over adb: `Probe` lists the emulator's `c2.goldfish` H.264 and HEVC
-  decoders (they decode on the host and go by a hardware name) and refuses
-  the software AV1 decoder and encoders without `-software`; decoding a
-  30-frame B-frame H.264 stream, an HEVC stream and an SVT-AV1 IVF stream
-  gives frames identical to ffmpeg's, in display order; H.264 and HEVC
-  encoding with the framework's software encoders produce streams ffmpeg
-  decodes (about 47 and 56 dB luma PSNR); H.264 to HEVC transcoding works.
-  The emulator run found the MediaImage2 type value, the
-  `prepend-sps-pps-to-idr-frames` rejection and the timestamp ordering,
-  all fixed. The same script runs against a device
-  (`ARCH=arm64`, without `SOFTWARE=1`), which is the step still open; the
-  module, its test binaries and the CLI compile for `android/arm64` and
-  `android/amd64` with NDK r27. `examples/mobile/android` is the app to
-  run on a device; the author's Android tablet is the first target.
+  over adb: `Probe` lists the emulator's `c2.goldfish` decoders (they decode
+  on the host and go by a hardware name) and refuses the software codecs
+  without `-software`; H.264, HEVC and AV1 streams decode to ffmpeg's
+  frames in display order, and the framework's software encoders produce
+  streams ffmpeg decodes. The same script runs against a device
+  (`ARCH=arm64`, without `SOFTWARE=1`), which is the step still open;
+  `examples/mobile/android` is the app to run on one.
 
 ### Browser notes
 
@@ -547,51 +537,15 @@ Foundation, VA-API or MediaCodec behind it.
     the browser's business; an odd rate may be resampled without notice.
 - **Not done.** No AV1 encoding, as on every backend.
 
-**Verification (2026-10-12).** `scripts/browser_test.sh` builds a `go
-test -exec` wrapper (`internal/browserexec`) that serves the js/wasm test
-binary to a headless browser and lends it the host's ffmpeg and temporary
-files over a loopback port, so the same conformance tests as on the other
-platforms run against WebCodecs. In Chrome on an Apple M3 (hardware H.264,
-HEVC and AV1 decoders, H.264 and HEVC encoders behind it) the whole root
-suite passes: H.264, HEVC and AV1 frames bit-exact with ffmpeg, B-frame
-streams in display order, RGBA and BGRA output at 86 dB or more against
-ffmpeg's conversion (8x8-block PSNR), a 10-bit AV1 stream to BGRA, H.264
-and HEVC encoding
-with the bitrate modes, constant quality, keyframe interval and forced
-keyframes, RGB input, and the packet and frame pipelines. The browser's
-software decoders (planar frames packed to NV12 in Go) are bit-exact with
-ffmpeg for H.264 and AV1, the software H.264 encoder's output decodes
-with ffmpeg, and a decoder that the browser closed after a broken keyframe
-decodes the next stream. `examples/player` plays the bundled 720x1280 HEVC
-clip in the browser at 60 frames per second without a skipped frame, with
-seeking. In Firefox 146 on the same Mac (headless and with a window, the
-same results) the suite runs with the limits listed above: H.264 and AV1
-decode to RGBA and BGRA (AV1 at 41 dB against ffmpeg, a 10-bit AV1 stream
-included), H.264 encoding with the bitrate modes, keyframe controls,
-profiles and low-latency fallback (45 dB), and the software H.264 encoder
-pass; every NV12 decode test skips, and four tests fail for the colour
-and quality reasons above. In Safari the same script decodes H.264 and
-HEVC to within one step of the fixture in WebKit's frame form (see
-above; the checksum tests skip there), passes the RGBA / BGRA, flush,
-keyframe, profile, bitrate and low-latency tests and encodes H.264 at
-48.7 dB; the AV1
-decode tests pass bit-exact in a page where Safari offers AV1 and skip
-where it does not. Chrome on Windows,
-Linux and Android has not been run.
-
-**Audio (2026-10-13).** The audio tests of the root package run through
-the same script: Chrome 153, Firefox 157 and Safari 27 on an Apple M3.
-In Chrome all of them pass: AAC (ADTS and MP4, mono to 5.1) and Opus
-(10, 20 and 60 ms packets) decode to ffmpeg's samples in place (75 dB),
-HE-AAC and HE-AAC v2 decode at the full rate, AAC and Opus encoded in the
-page decode with ffmpeg to the input in place (47 dB and 39 dB), from an
-ADTS file and from an MP4 file with the delay in its edit list, and the
-bitrate, flush, error and garbage tests pass; the 64 kbit/s stereo AAC
-cases skip as unsupported. In Safari the same tests pass with the workarounds
-above (AAC round trips at 51 to 56 dB once the lost first samples are
-compensated, Opus at 17 dB in its telephony mode). In Firefox the Opus
-tests and the AAC decoding tests pass and the tests that need an AAC
-encoder, HE-AAC or 4.0 skip.
+**Verification.** `scripts/browser_test.sh` runs the root package's
+conformance tests, video and audio, in a real browser against the host's
+ffmpeg (see [Testing](#testing)). In Chrome on an Apple M3 the whole suite
+passes, bit-exact where the other backends are. Firefox and Safari run it
+with the limits listed above: in Firefox the NV12 decode tests skip and the
+colour and quality points show up as failures, in Safari the checksum
+tests give way to the fixture comparison, and the AV1 tests pass or skip
+with what Safari offers the page. Chrome on Windows, Linux and Android has
+not been run.
 
 ### AV1 on Linux and Windows
 
@@ -1313,18 +1267,12 @@ builds and serves it on `http://localhost:8080/`:
 cd examples && go run github.com/hajimehoshi/wasmserve@latest ./player
 ```
 
-The player takes RGBA frames from the decoder there as everywhere else.
-Uploading the browser's `VideoFrame` straight into the texture behind the
-player's image was built and measured on an Apple M3: per frame on the
-page's one thread it cost about 1.3 ms in Chrome whatever the picture
-size, against 0.9 ms (720p), 1.7 ms (1080p) and 9.4 ms (4K) for RGBA
-frames and `WritePixels`, and it was the slower way in Firefox. It was
-taken out again, because Ebitengine does not hand out its textures and the
-upload had to find them from the outside, by watching the WebGL context,
-which holds only as long as Ebitengine's internals stay as they are. The
-frames themselves are available (`hwmediacodec.Native`, see [Browser
-notes](#browser-notes)); what is missing is a way to give Ebitengine an
-image source for a texture.
+The player takes RGBA frames from the decoder there as everywhere else,
+not the browser's own `VideoFrame`s (`hwmediacodec.Native`, see [Browser
+notes](#browser-notes)): Ebitengine does not hand out its textures, so an
+upload straight into the player's image would depend on its internals
+staying as they are. What is missing is a way to give Ebitengine an image
+source for a texture.
 
 Inside the repository the modules build against each other's working tree
 through `go.work`. Consumers get the version named in the `require` line of
@@ -1401,145 +1349,6 @@ VA-API capability, rather than an error, when any of these is missing.
 
 ## Testing
 
-Unit tests run everywhere. The H.264 parser, decoded-picture-buffer logic
-and header writer are checked against ffmpeg's own view of the stream
-(`trace_headers`, `-debug mmco`, `-debug pict`), so they run on any machine
-with ffmpeg; the reorder logic is also checked without hardware, against
-the presentation timestamps ffmpeg writes into an MP4 of the same stream.
-The HEVC side is checked the same way: every parsed syntax element and the
-position where slice data starts against `trace_headers`, picture order
-counts and both reference lists of every picture against the lists the
-`x265` command line encoder reports it used (these tests skip when `x265` is
-not installed), and inter-predicted reference picture sets against the
-reference encoder's random-access configuration. The VA-API parameter
-buffers built from HEVC streams (reference frames and their set flags,
-reference list indices, `slice_data_byte_offset`, `st_rps_bits`, prediction
-weights) are compared with the same two oracles on any platform, and the
-parameter sets and slice headers the HEVC encoder writes are read back by
-ffmpeg and ffprobe. The AV1 OBU splitter and sequence header parser are
-checked against `trace_headers` on SVT-AV1 streams (8-bit and 10-bit), and
-the `av1C` record against the one ffmpeg writes into an MP4 of the same
-stream; the `mediacontainer/ivf` package is checked against ffmpeg's own IVF
-files. The AV1
-frame header parser is checked the same way on 32 stream configurations
-written by SVT-AV1, libaom (through ffmpeg and through `aomenc`) and rav1e,
-chosen to reach the branches of the header syntax: tiles and tile groups,
-film grain, super-resolution, reference scaling, S-frames and error
-resilience with frame numbers, screen content tools, lossless and
-segmented coding, quantiser matrices, global motion, 4:4:4, monochrome and
-still pictures. Every syntax element ffmpeg prints must match, and so must
-the length of every header, with the headers parsed against the reference
-state the parser keeps itself. These tests skip the configurations whose
-encoder is missing (a plain ffmpeg with libsvtav1 runs three of them; the
-container of the fake VA driver below has all the encoders). The AV1 decode
-conformance tests need libdav1d as well: every NV12 frame of an 8-bit
-stream with hidden frames and `show_existing_frame` must equal dav1d's
-output exactly, and a 10-bit stream is compared by PSNR.
-
-The audio codecs are checked against ffmpeg in both directions. Decoding:
-AAC streams from ffmpeg's encoder (mono, stereo, 5.1; ADTS and MP4) and
-Opus streams from libopus (10, 20 and 60 ms packets) must give the samples
-ffmpeg's decoders give, in the same place, within the rounding of two
-implementations (the tests ask for 50 dB; AAC measures 57 to 86 dB against
-ffmpeg's decoder and Opus 107 dB against libopus), and the part
-the edit list presents must be the signal that was encoded. Encoding: what
-ffmpeg decodes from the encoder's packets (through an ADTS file and through
-an MP4 file) must be the input in place, which checks the reported delay to
-the sample, and ffprobe must see the stream parameters, the packet count
-and the duration; a second track that starts later must start later in the
-file by the same amount. HE-AAC files come from `afconvert`, since ffmpeg
-has no free HE-AAC encoder, so that test runs on macOS only
-(`scripts/browser_test.sh` lends it to the browser like ffmpeg). The test
-signal is a tone per channel plus a sweep that never repeats, so that a
-shift by one sample or two swapped channels show up. The header code in
-`internal/aac`, `internal/opus` and `encoding/adts` is plain Go and tested
-on every platform.
-
-The VA-API backend itself runs without a GPU against a fake VA driver
-(`internal/vaapi/testdata/fakedriver`, about 1,600 lines of C).
-`scripts/vaapi_fake_driver_test.sh` builds it in a container and runs the
-backend through the real libva, for H.264 and HEVC, decoding and encoding,
-and for AV1 decoding.
-The driver decodes nothing; it checks what it is handed through the libva C
-headers (buffer sizes, that every reference picture is in the surface the
-backend names, reference list indices, slice data offsets, the encoder's
-sequence, picture, slice, rate control and packed header buffers) and paints
-each decoded surface with a pattern that names its picture order count, so
-the tests can tell that the right surface is copied out for every frame,
-cropped and in display order. It runs as several driver personalities
-(packed headers as Mesa or as Intel, with and without HEVC capability
-attributes, with and without `vaDeriveImage`), and `PLATFORM=linux/amd64`
-runs it on that architecture through emulation.
-
-For AV1 the same driver serves as a second oracle. It logs the picture
-parameters and the tile parameters of every frame, with surfaces named by
-the number of the picture they hold, and each test stream is decoded twice
-against it: by the backend, and by ffmpeg's own VA-API AV1 decoder (`ffmpeg
--hwaccel vaapi -c:v av1`). The two logs must be identical byte for byte, for
-every frame of 22 stream configurations, which covers the values no header
-trace shows: reference slot contents, global motion parameters carried from
-frame to frame, loop filter and segmentation state inherited from the
-primary reference frame, tile offsets, and the two surfaces of a frame with
-film grain. No encoder at hand writes `frame_refs_short_signaling`, so two
-further streams are rewritten in the test to signal two references and
-leave five to the decoder; the references the backend derives must again be
-ffmpeg's. The frames that come back are checked as for the other codecs:
-each temporal unit must show the right picture (the grained one where film
-grain applies) at the frame's own size.
-The decode and encode conformance tests run where `Probe` reports a
-hardware engine (Apple Silicon, Linux with an NVIDIA, Intel VPL or VA-API
-driver, or Windows with a GPU) and use `ffmpeg` and `ffprobe` as the reference. Decoded B-frame
-streams must match ffmpeg's output frame for frame in display order. RGB
-output and input are compared to ffmpeg's conversion by block-averaged PSNR
-(the two converters interpolate chroma differently) and RGBA must be the
-exact mirror of BGRA. Encoded streams are decoded by ffmpeg and compared to
-the source by PSNR, and their keyframe and B-frame structure is checked
-with ffprobe. All of them are skipped when ffmpeg is not installed, and the
-encoder tests for optional controls skip when the hardware encoder rejects
-them.
-
-The `mediacontainer/mp4` tests need only ffmpeg and ffprobe: they compare
-sample tables, presentation times and decoded frame checksums with
-ffprobe's view of the same files and feed ffmpeg-made streams through the
-segmenter, and the `net/hls` test lets ffprobe play the served
-playlist over HTTP. The `capture` tests and the recorder-to-MP4 test need a
-hardware encoder and skip otherwise. The `image/heif` and `image/avif` tests use macOS
-ImageIO (`sips`) and ffmpeg as references and need the hardware codecs.
-
-The Android backend is checked against an emulator or a device over adb:
-`scripts/android_device_check.sh` builds the CLI with the NDK, pushes it
-with ffmpeg-made streams, and compares decoded frames with ffmpeg's and
-encoded streams with ffprobe and ffmpeg (`SOFTWARE=1` for emulators, whose
-codecs are the framework's software ones; `android emulator create` and
-`android emulator start --headless` from the command-line tools make one).
-The iOS build is checked from the Mac: `scripts/mobilebuild.sh` compiles
-the module for the device and the Simulator with cgo enabled, and the
-`hwmediacodec` CLI built for the Simulator runs inside it with
-`xcrun simctl spawn booted`, which is how the decode, encode and transcode
-results under [iOS notes](#ios-notes) were obtained (the Simulator's
-decoder is software, so `decode` needs `-software` there). The
-session-invalidation recovery that iOS needs is tested on macOS by
-invalidating the session by hand.
-
-The browser backend is checked in a real browser, since Node.js (which the
-Go toolchain runs js/wasm tests in) has no WebCodecs.
-`scripts/browser_test.sh` builds `internal/browserexec` as the
-`go_js_wasm_exec` wrapper "go test" looks for: it serves the test binary
-and a page that starts it on a loopback port, opens the page in headless
-Chrome (Chromium or Edge; `HWMEDIACODEC_BROWSER` names another browser,
-`HWMEDIACODEC_BROWSER_HEADED=1` shows the window) and relays the output
-and the exit code. Firefox works the same way
-(`HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox`;
-on macOS the wrapper starts it through `open`, since a Firefox started by
-the path of its binary cannot start its content processes). A browser has neither processes nor files, so
-`internal/testutil` sends its ffmpeg and ffprobe calls and its temporary
-files to the wrapper instead (a random path token, 127.0.0.1 only, the
-tools named in the wrapper's list, files below its own temporary
-directory). That way the root package's conformance tests are the same
-ones as on every other platform, with ffmpeg on the host as the oracle.
-`./internal/webcodecs` adds the browser-only cases: software codecs and
-recovery from a decoder error. Under Node.js the same tests build and skip.
-
 ```sh
 go test ./...
 CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
@@ -1553,6 +1362,60 @@ HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
 (cd net/webrtc && go test ./...)    # separate module: a pion viewer receives an ffmpeg-made stream (ffmpeg only)
 (cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
 ```
+
+ffmpeg is the test oracle throughout and never a run-time dependency; tests
+that need it (or `ffprobe`, `x265`, `aomenc`, `rav1e`, libdav1d, `sips`,
+`afconvert`) skip when it is missing. What runs where:
+
+- **Everywhere.** The bitstream code is checked against ffmpeg's own view
+  of the stream: the H.264, HEVC and AV1 header parsers element by element
+  against `trace_headers` (the AV1 frame header on 32 encoder
+  configurations), the decoded-picture-buffer logic against `-debug mmco`
+  and `-debug pict` and against the reference lists `x265` reports, the
+  reorder logic against the presentation times ffmpeg writes into an MP4,
+  the header writers by reading them back with ffmpeg, the VA-API parameter
+  buffers built from HEVC streams against the same traces, and the AAC,
+  Opus and ADTS header code on its own. The MP4 tests compare sample
+  tables, presentation times and frame checksums with ffprobe, and the
+  `net/hls` test lets ffprobe play the served playlist.
+- **With a hardware engine** (where `Probe` reports one): decoded frames
+  must equal ffmpeg's frame for frame in display order (the AV1 tests also
+  need libdav1d); RGB output and input are compared with ffmpeg's
+  conversion by block PSNR and RGBA must mirror BGRA; encoded streams are
+  decoded by ffmpeg and compared with the source by PSNR, and their
+  keyframe and B-frame structure is checked with ffprobe; the audio codecs
+  are compared with ffmpeg's in both directions (HE-AAC input comes from
+  `afconvert`, so that test runs on macOS). The `capture`, `playback`,
+  `ebitenvideo` and image tests need the hardware codecs too; `image/heif`
+  uses macOS ImageIO (`sips`) as its reference.
+- **VA-API without a GPU.** `scripts/vaapi_fake_driver_test.sh` runs the
+  backend through the real libva in a container against a fake VA driver
+  (`internal/vaapi/testdata/fakedriver`) that decodes nothing but checks
+  every buffer it is handed and paints each surface with its picture
+  number, so the tests see that the right picture comes out, cropped and in
+  display order. It runs as several driver personalities (packed headers as
+  Mesa or Intel, with and without HEVC attributes and `vaDeriveImage`), and
+  for AV1 it logs the picture and tile parameters so that the backend's
+  buffers can be compared byte for byte with the ones ffmpeg's own VA-API
+  decoder submits (24 stream configurations, two of them rewritten to use
+  `frame_refs_short_signaling`). `PLATFORM=linux/amd64` runs it on that
+  architecture through emulation.
+- **Mobile.** `scripts/android_device_check.sh` builds the CLI with the
+  NDK, pushes it over adb with ffmpeg-made streams and compares the results
+  with ffmpeg and ffprobe (`SOFTWARE=1` for emulators). `scripts/mobilebuild.sh`
+  compiles for the iOS device and Simulator; the CLI built for the
+  Simulator runs inside it with `xcrun simctl spawn booted`. The
+  session-invalidation recovery iOS needs is tested on macOS by
+  invalidating the session by hand.
+- **Browser.** Node.js has no WebCodecs, so `scripts/browser_test.sh`
+  builds `internal/browserexec` as the `go_js_wasm_exec` wrapper `go test`
+  looks for: it serves the test binary and a page to a headless browser
+  (Chrome, Chromium or Edge; `HWMEDIACODEC_BROWSER` names another,
+  `HWMEDIACODEC_BROWSER_HEADED=1` shows the window) and lends the tests
+  the host's ffmpeg and temporary files over a loopback port (a random
+  path token, 127.0.0.1 only, a fixed list of tools, files below its own
+  directory), so the root package's conformance tests are the same ones
+  as everywhere else. `./internal/webcodecs` adds the browser-only cases.
 
 Project knowledge (requirements, decisions, backend notes) lives in
 `.knowledge/` and is maintained with the knowledge-memory skill. After

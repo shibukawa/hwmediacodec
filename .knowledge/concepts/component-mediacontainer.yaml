@@ -1,0 +1,399 @@
+id: component:mediacontainer
+type: component
+title: 'Containers: mediacontainer/mp4 (demuxer, muxer, fMP4 segmenter, audio tracks) and mediacontainer/ivf'
+summary: 'mediacontainer/mp4 reads and writes MP4/MOV around the codec API on top of mp4ff: Annex-B access
+  units with parameter sets in front of keyframes out of avc1/hvc1/av01 tracks, a progressive muxer fed
+  with encoder packets (DTS shift and edit list for B-frames, parameter sets into the sample entry), passthrough
+  tracks, AAC and Opus audio tracks with the encoder delay in the edit list, PacketSource/AudioPacketSource
+  for playback with keyframe seeking, VideoFile as an encoder sink and the CMAF/fMP4 Segmenter for HLS.
+  mediacontainer/ivf reads and writes IVF (AV1). Consolidated on 2026-10-16 from milestone:mediacontainer-mp4
+  and the container parts of the sample milestones.'
+lifecycle: active
+authority: authored
+aliases:
+- mp4 package
+- mediacontainer
+- MP4 demuxer
+- MP4 muxer
+- Segmenter
+- ivf
+- コンテナ
+constraints:
+- 'The earlier "two dependencies" wording (purego and golang.org/x/sys only) was a description in the
+  READMEs, not a requirement of the author: asked on 2026-10-10, the author said a dependency on mp4ff
+  is fine. Ebitengine and pion still stay out of the core module (ebitenvideo and examples are separate
+  modules for that).'
+- mp4ff is pure Go, so CGO_ENABLED=0 and the cross builds are unaffected. Programs that do not import
+  mediacontainer/mp4 do not link it; it only shows in go.mod and go.sum (mp4ff itself requires go-test/deep
+  for its tests).
+- 'Path mediacontainer/mp4, package name mp4: mediacontainer is a namespace directory without Go files,
+  leaving room for other formats. Inside the package github.com/Eyevinn/mp4ff/mp4 is imported as mp4ff;
+  a program that uses both needs the same alias.'
+- The tests need the ffmpeg helpers that lived in examples/internal/testutil; they are now internal/mediatest
+  (first named internal/mp4test) in the core module. The first move kept a copy in examples on the wrong
+  assumption that another module cannot import a core internal package; the internal rule goes by import
+  path, so examples and net/webrtc import internal/mediatest and the copy is gone (ebitenvideo had been
+  importing internal/testutil all along). The bundled-clip test needs examples/assets and stayed in the
+  examples module (examples/assets/assets_test.go).
+- VideoToolbox with B-frames numbers decode times from the first PTS, so reordered pictures carry DTS
+  > PTS (observed - the first P has pts 2048 / dts 512, a pyramid B has pts 512 / dts 1536 at 15360 Hz).
+  MP4 requires DTS <= PTS, so the muxer shifts every DTS back by the largest lag and writes an edit list
+  (elst media_time = first presentation time) that hides the start delay; ffprobe then reports presentation
+  times identical to the source.
+- Demuxed access units are Annex-B with the parameter sets from avcC/hvcC prepended to every sync sample,
+  so decoding can start at any keyframe; the muxer learns VPS/SPS/PPS from the packets and strips them
+  from the samples (avc1/hvc1 sample entries).
+- Track.MediaTimeOffset exposes the edit-list offset; thumbnails are named with presentation time (PTS
+  minus that offset), and KeyframeAtOrBefore works in presentation time.
+- The segmenter needs PTS == DTS (no B-frames) and cuts at the first keyframe after the target length,
+  so the HLS sample sets the encoder keyframe interval to fps*segment and WithLowLatency; segments are
+  styp+moof+mdat with per-sample flags, tfdt continuing across segments, init segment from mp4ff CreateEmptyInit
+  + SetAVCDescriptor/SetHEVCDescriptor.
+- ElementaryStream supports only Seek(0, io.SeekStart) (ebitenvideo loops by rewinding); other seeks return
+  an error.
+acceptance:
+  av1mac-ivf-round-trip:
+    text: ivf.Writer output is read back by ivf.Reader (and by ffprobe) with the same frames, timestamps,
+      frame count and timebase, is byte-identical to ffmpeg's IVF of the same frames, and truncated files
+      and bad signatures are errors.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-ivf-unit-test
+  mp4-tests-follow:
+    text: The demuxer, muxer, elementary-stream, packet-source, segmenter and recorder-to-MP4 tests pass
+      in the core module unchanged apart from imports.
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - mp4-mp4-tests
+  mp4-builds:
+    text: The core module builds on its own (GOWORK=off), with CGO_ENABLED=0 and for linux and windows;
+      examples and ebitenvideo build against it.
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - mp4-build-check
+  mp4-samples-follow:
+    text: Every examples test passes with the samples importing mediacontainer/mp4.
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - mp4-examples-tests
+  exmp4-demux-matches-ffprobe:
+    text: For H.264 (B-frames) and HEVC (hvc1 and hev1) files written by ffmpeg, the demuxer reports the
+      same sample count, the same normalised presentation-time sequence and the same number of keyframes
+      as ffprobe, and the Annex-B access units it emits decode with ffmpeg to the same per-frame MD5s
+      as the MP4 itself.
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exmp4-container-demux-test
+  exmp4-mux-round-trip:
+    text: Remuxing the demuxed access units plus the audio track yields a file that ffmpeg decodes without
+      errors, with the same codecs, packet counts, size, has_b_frames, hvc1 tag, per-frame MD5s, presentation
+      times and duration (within 50 ms) as the source.
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exmp4-container-mux-test
+  exscreen-segmenter:
+    text: An ffmpeg-made stream with a keyframe every 10 frames at 30 fps segmented at 1 s gives three
+      1 s segments, each one fragment of 30 samples starting with a sync sample and tfdt continuing; init
+      + segments decode with ffmpeg to the source's frame MD5s; a 100 ms target cuts at every keyframe.
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exscreen-segmenter-test
+  extex-elementary-stream:
+    text: ElementaryStream yields exactly the concatenation of AccessUnit(i), annexb.Reader splits it
+      back into the same access units after a rewind, and seeking elsewhere fails.
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - extex-stream-test
+verification:
+  av1mac-ivf-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestRoundTripSeekable, TestRoundTripStream, TestEmptyFile, TestErrors, TestFFmpegInterop
+    evidence:
+      path: mediacontainer/ivf/ivf_test.go
+      locator: TestFFmpegInterop
+      note: 2026-10-09; the copy of ffmpeg's IVF is byte-identical and ffprobe reads it as 96x64, 1/30,
+        12 packets
+    basis:
+    - path: mediacontainer/ivf/ivf.go
+      input_hash: d36202342917da0d13a7115bfd60a350fc4401dbd2c62424a41cc72078ec71c7
+    - path: mediacontainer/ivf/ivf_test.go
+      input_hash: 1fec34a3681e50b65e92c37574074ff86627e40a051aa8fc3c966a5204f7adc4
+  mp4-mp4-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./mediacontainer/... ./capture/
+    evidence:
+      path: mediacontainer/mp4/mp4_test.go
+      locator: TestDemuxMatchesFFprobe
+      note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
+    basis:
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+    - path: mediacontainer/mp4/sample.go
+      input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
+    - path: mediacontainer/mp4/packetsource.go
+      input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
+    - path: mediacontainer/mp4/stream.go
+      input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
+    - path: mediacontainer/mp4/videofile.go
+      input_hash: ee6fdd1d8ee49fd15ee36e920a7d0e32e34e326adbd002a9e22c9720ae6abaad
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: mediacontainer/mp4/segmenter_test.go
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
+    - path: mediacontainer/mp4/packetsource_test.go
+      input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
+    - path: mediacontainer/mp4/stream_test.go
+      input_hash: 462cf73e816f88864da210d31f46654af9f4ebf2ac63ca69f61fd6b12159b35d
+    - path: mediacontainer/mp4/videofile_test.go
+      input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
+  mp4-build-check:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    test: GOWORK=off go build ./...; CGO_ENABLED=0 go build ./...; GOOS=linux and GOOS=windows go build
+      ./...; go build ./... in examples and ebitenvideo
+    evidence:
+      path: go.mod
+      locator: require
+      note: 2026-10-10 - go.mod requires mp4ff v0.59.0, purego v0.11.1, x/sys v0.48.0
+    basis:
+    - path: go.mod
+      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+    - path: go.sum
+      input_hash: 5077878216cdac94a8e763a5d1356735917af0ae270d24e3c6364b5073867a2e
+  mp4-examples-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: mediacontainer-mp4
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... in examples
+    evidence:
+      path: examples/assets/assets_test.go
+      locator: TestBundledClip
+      note: 2026-10-10 - assets, convert, heif, hls, fireworks, player, texture, thumbnails and webrtc
+        pass
+    basis:
+    - path: examples/assets/assets_test.go
+      input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
+  exmp4-container-demux-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDemuxMatchesFFprobe
+    evidence:
+      path: mediacontainer/mp4/mp4_test.go
+      locator: TestDemuxMatchesFFprobe
+      note: no hardware needed; ffmpeg 9.0.1 generated the inputs (libx264 bf=2 with AAC, libx265 bf=2
+        hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
+    basis:
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
+  exmp4-container-mux-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-mp4-tools
+      platform: darwin
+      gpu: apple-silicon
+    test: TestMuxRoundTrip
+    evidence:
+      path: mediacontainer/mp4/mp4_test.go
+      locator: TestMuxRoundTrip
+      note: no hardware needed; H.264 bf=2 with audio, H.264 bf=0, HEVC bf=2 with audio; run 2026-10-09
+    basis:
+    - path: mediacontainer/mp4/mux.go
+      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+    - path: mediacontainer/mp4/demux.go
+      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+    - path: mediacontainer/mp4/mp4_test.go
+      input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
+    - path: internal/mediatest/ffmpeg.go
+      input_hash: 6c547bf283cc5844cc7ad7cd6dbc0d5ad0f134bd5c84c671c79be5c1e494ae2f
+  exscreen-segmenter-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-screencast-hls
+      platform: darwin
+      gpu: apple-silicon
+    test: TestSegmenter (h264, hevc), TestSegmenterShortTarget
+    evidence:
+      path: mediacontainer/mp4/segmenter_test.go
+      locator: TestSegmenter
+      note: no hardware - packets come from demuxing ffmpeg-made files; run 2026-10-09
+    basis:
+    - path: mediacontainer/mp4/segmenter.go
+      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
+    - path: mediacontainer/mp4/sample.go
+      input_hash: b6db0e61380533cbbbd30aa3dd957180a6abb33d7c4c0d5bf3567a81140f5156
+    - path: mediacontainer/mp4/segmenter_test.go
+      input_hash: 0765423416bfc50c90060c5380c32d25e53280fa24636ee50c1ab3c850d9dc10
+  extex-stream-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-texture
+      platform: darwin
+      gpu: apple-silicon
+    test: TestElementaryStream
+    evidence:
+      path: mediacontainer/mp4/stream_test.go
+      locator: TestElementaryStream
+      note: ffmpeg-made H.264 bf=2 file; run 2026-10-09
+    basis:
+    - path: mediacontainer/mp4/stream.go
+      input_hash: 276b23b71e207beba68b88da155265869a87d0dcedbeba9b803ffd72ac216099
+    - path: mediacontainer/mp4/stream_test.go
+      input_hash: 462cf73e816f88864da210d31f46654af9f4ebf2ac63ca69f61fd6b12159b35d
+open_questions:
+  mp4-next-candidates:
+    text: Which other sample code should follow - the HLS playlist server (examples/hls/server.go, standard
+      library only, depends on mp4.Segment), the HEIC/AVIF codec (examples/heif, mp4ff) or the WebRTC
+      broadcaster (pion)?
+    state: open
+    resolution: The HLS playlist followed on 2026-10-10 (milestone:mediacontainer-hls); heif is discussed
+      as image/heif, pending a standard-library-style API (delivered, milestone:image-heif).
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  mp4-ivf-annexb-placement:
+    text: annexb and ivf sit at the module root while MP4 is under mediacontainer; should ivf move or
+      be aliased there for consistency?
+    state: answered
+    resolution: Moved without aliases on 2026-10-10 (milestone:package-layout) - ivf to mediacontainer/ivf,
+      annexb to encoding/annexb.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  exmp4-encoder-dts-semantics:
+    text: Should the VideoToolbox encoder (and the Encoder contract in general) guarantee DTS <= PTS by
+      shifting decode times itself, instead of leaving it to the muxer? ffmpeg's videotoolbox encoder
+      does such a shift.
+    state: open
+    resolution: Left in the muxer for now because the shift needs the whole stream's largest lag (or the
+      encoder's reorder depth) and the current packets are still internally consistent; revisit if a second
+      consumer of DTS appears (fMP4/HLS segmenter in the next slice).
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  api:
+    ivf: ivf.NewReader(io.Reader) (*Reader, error) with Header() {FourCC, Width, Height, TimebaseNum,
+      TimebaseDen, FrameCount} and Next() (frame, pts, error); ivf.NewWriter(io.Writer, fourcc, width,
+      height, timebaseNum, timebaseDen) with WriteFrame(data, pts) and Close() (patches the frame count
+      when the writer can seek)
+    mp4: import github.com/shibukawa/hwmediacodec/mediacontainer/mp4; Open(path) / NewDemuxer(io.ReadSeeker)
+      -> Demuxer{Video, Others, Duration, Close}; VideoTrack{Packet, AccessUnit, Keyframes, KeyframeAtOrBefore,
+      FrameRate, PacketSource, ElementaryStream}; Create(path) / NewMuxer(io.WriteSeeker) -> Muxer{AddVideoTrack,
+      AddPassthroughTrack, Close}; CreateVideoFile(path, codec, timeScale); NewSegmenter(codec, timeScale,
+      target, onInit, onSegment)
+    container: Open/NewDemuxer -> Demuxer{Video() *VideoTrack, Others() []*Track, Duration()}; Track{ID,
+      Handler, TimeScale, MediaTimeOffset, SampleCount, Sample(i), Info(i), TimeOf, PresentationTime};
+      VideoTrack{Codec, Width, Height, FrameRate, Keyframes, KeyframeAtOrBefore, AccessUnit(i), Packet(i)};
+      Create/NewMuxer -> Muxer{AddVideoTrack(codec, timeScale) *VideoWriter, AddPassthroughTrack(*Track)
+      *TrackWriter, Close}; VideoWriter.WritePacket(hwmediacodec.Packet); TrackWriter.WriteSample(Sample)
+    segmenter: NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
+      Data, Start, Duration}
+    container_extex: VideoTrack.ElementaryStream() io.ReadSeeker
+  delivery_results:
+    milestone:mediacontainer-mp4:
+      result:
+        status: delivered 2026-10-10
+  milestone_notes:
+    exmp4:
+      implementation:
+        demux: mp4.DecodeFile with DecModeLazyMdat; sample offsets expanded from stsc/stco/co64, times
+          from stts/ctts, sync from stss; Mdat.ReadData per sample
+        mux: ftyp + 64-bit-size mdat written up front and patched at Close, moov last; stbl built from
+          mp4ff box structs (stts/ctts/stss/stsc/stsz/stco|co64); passthrough tracks reuse the source
+          stsd, hdlr, media header, language and edit list
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:darwin-av1-decode
+- relation: supersedes
+  to: milestone:mediacontainer-mp4
+- relation: supersedes
+  to: milestone:examples-mp4-tools
+- relation: supersedes
+  to: milestone:examples-screencast-hls
+- relation: supersedes
+  to: milestone:examples-texture
+- relation: depends_on
+  to: component:core-api
+history:
+  mp4-delivered-2026-10-10:
+    summary: After capture, the author asked what else in the samples was generally useful, accepted the
+      mp4ff dependency and proposed the mediacontainer/mp4 path; the package moved with its tests.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:darwin-av1-decode, milestone:mediacontainer-mp4,
+      milestone:examples-mp4-tools, milestone:examples-screencast-hls, milestone:examples-texture was
+      folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as evidence
+      notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:darwin-av1-decode
+    - milestone:mediacontainer-mp4
+    - milestone:examples-mp4-tools
+    - milestone:examples-screencast-hls
+    - milestone:examples-texture
