@@ -66,8 +66,8 @@ github.com/shibukawa/hwmediacodec v0.3.2 h1:mffmoM+wyKJsgx0jBusqod77xAn7jbdkwMNh
 github.com/shibukawa/hwmediacodec v0.3.2/go.mod h1:SXQ4zBw9BJdqX+kjunxqXyrJXTj4mTV9rkDjVvlL0v8=
 github.com/shibukawa/hwmediacodec/ebitenvideo v0.3.1 h1:q4oAXB/jbZbMpgKP7NGPqd0ngpGp2qvatEmaC/hx/p8=
 github.com/shibukawa/hwmediacodec/ebitenvideo v0.3.1/go.mod h1:yQirZPlQA3D5HJtpga2V6iZBv+zoLmXkgB+QHMcawEo=
-github.com/shibukawa/hwmediacodec/net/webrtc v0.3.0 h1:yxA9kVo4rdcRV73nOIAp4/Af3hdvrYbooMGUM+hvHFk=
-github.com/shibukawa/hwmediacodec/net/webrtc v0.3.0/go.mod h1:RvAjAvRCvztpqBRp1flqW2gaioXFL5MH4j6/d6dPhH8=
+github.com/shibukawa/hwmediacodec/net/webrtc v0.3.1 h1:3CuROBxjktsHC4HR8W6FiwYob6c3gBA7XXEFfTfRQYw=
+github.com/shibukawa/hwmediacodec/net/webrtc v0.3.1/go.mod h1:RvAjAvRCvztpqBRp1flqW2gaioXFL5MH4j6/d6dPhH8=
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef h1:Ch6Q+AZUxDBCVqdkI8FSpFyZDtCVBc2VmejdNrm5rRQ=
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef/go.mod h1:nXTWP6+gD5+LUJ8krVhhoeHjvHTutPxMYl5SvkcnJNE=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
