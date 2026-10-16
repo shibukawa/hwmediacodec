@@ -99,6 +99,12 @@ func (e *encoder) notify(message uint32, name string) error {
 // the output type (which encoders require first) and the input type, and
 // starts streaming.
 func (e *encoder) configure() error {
+	// An asynchronous MFT answers every IMFTransform call except
+	// GetAttributes with MF_E_TRANSFORM_ASYNC_LOCKED until it is unlocked,
+	// so unlocking comes first.
+	if err := e.unlockAsync(); err != nil {
+		return err
+	}
 	var in, out uint32
 	switch hr := e.transform.GetStreamIDs(1, &in, 1, &out); {
 	case hr == sys.E_NOTIMPL:
@@ -106,9 +112,6 @@ func (e *encoder) configure() error {
 		return backendErr("IMFTransform::GetStreamIDs", hr)
 	default:
 		e.inputID, e.outputID = in, out
-	}
-	if err := e.unlockAsync(); err != nil {
-		return err
 	}
 	var api *sys.ICodecAPI
 	if e.transform.Unknown().QueryInterface(&sys.IID_ICodecAPI, unsafe.Pointer(&api)) == sys.S_OK && api != nil {
