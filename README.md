@@ -26,6 +26,7 @@ web) the engine is the WebCodecs API, reached through `syscall/js`; see
 | `.../encoding/annexb` | H.264/HEVC Annex-B byte streams: split into NAL units and access units, classify NAL units |
 | `.../encoding/adts` | AAC in ADTS framing (`.aac` files): reader and writer around the codec's packets |
 | `.../mediacontainer/mp4` | MP4/MOV demuxer and muxer around the codec's packets (video, AAC and Opus audio), fMP4 segmenter |
+| `.../mediacontainer/webm` | WebM demuxer and muxer for AV1 video and Opus audio |
 | `.../mediacontainer/ivf` | IVF reader and writer (AV1) |
 | `.../image/heif` | HEIC still images (HEVC), registered with the standard `image` package |
 | `.../image/avif` | AVIF still images (AV1), registered with the standard `image` package |
@@ -146,7 +147,9 @@ Known limitations:
   frame or an ISOBMFF `av01` sample holds, with or without temporal
   delimiters); use `ivf.Reader` to split an IVF file. The codec API does
   not parse containers; the `mediacontainer/mp4` package reads and writes
-  MP4 files around it (see [MP4 files](#mp4-files)). MKV and TS are not
+  MP4 files around it (see [MP4 files](#mp4-files)) and
+  `mediacontainer/webm` WebM files with AV1 and Opus (see
+  [WebM files](#webm-files)). Other Matroska codecs and TS are not
   covered, and AVCC/HVCC output is not offered by the encoders themselves.
 - On an M3, 1080p H.264 with B-frames decodes at roughly 780 frames per
   second to NV12 in display order, 350 to BGRA and 250 to RGBA, including
@@ -808,8 +811,8 @@ four small interfaces that the other packages implement:
 
 | Interface | Role | Implemented by |
 | --- | --- | --- |
-| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader`; consumed by `DecodeReader` and `playback` |
-| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
+| `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, `webm.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader`; consumed by `DecodeReader` and `playback` |
+| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webm.VideoWriter`, `webm.AudioWriter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
 | `FrameReader` | raw frames out | `DecodeReader` (a `Decoder` fed from a `PacketReader`) |
 | `FrameWriter` | raw frames in | `EncodeWriter` (an `Encoder` drained into a `PacketWriter`) |
 
@@ -1091,6 +1094,69 @@ What the package takes care of:
   whatever the file's size; lower it for a program that opens files from
   anywhere. The reader may start at any offset (an MP4 embedded in another
   file); offsets are taken from there.
+
+## WebM files
+
+`github.com/shibukawa/hwmediacodec/mediacontainer/webm` reads and writes
+WebM, the Matroska subset of the web, for the pair every browser records
+and plays: AV1 video (`V_AV1`) and Opus audio (`A_OPUS`). It is written
+from the Matroska and WebM specifications without a dependency; VP8, VP9
+and Vorbis tracks are listed by `Demuxer.Tracks` but not read.
+
+```go
+d, _ := webm.Open("movie.webm")
+v := d.Video()                      // AV1, size, PacketSource with keyframe seeking
+a := d.Audio()                      // Opus: Format() for NewAudioDecoder, PacketSource
+p, _ := ebitenvideo.NewPlayerFromSource(v.PacketSource(), ebitenvideo.WithAudio(a.PacketSource()))
+
+m, _ := webm.Create("out.webm")
+vw, _ := m.AddVideoTrack(hwmediacodec.AV1, timeScale) // configuration from the first keyframe's sequence header
+aw, _ := m.AddAudioTrack(enc.Format(), 48000)         // packets from an Opus AudioEncoder
+vw.WritePacket(p)
+aw.WritePacket(q)
+m.Close()                           // Cues, SeekHead, duration, Segment size
+```
+
+Opus needs no Ogg container here: a block holds one Opus packet as the
+encoder gives it, the OpusHead goes into the track's `CodecPrivate`, the
+encoder's delay into `CodecDelay` and the padding of the last packet into
+`DiscardPadding`, so ffmpeg and browsers start and stop at the real
+samples. (A `.opus`/`.ogg` file is a different container that this
+library does not write.)
+
+What the package takes care of:
+
+- The demuxer indexes every AV1 and Opus frame when it opens the file
+  instead of trusting `Cues`, so the files a browser's `MediaRecorder`
+  leaves behind (Segment and Clusters of unknown size, no Cues, no
+  duration) open and seek like any other, and a file cut off while it
+  was being written opens with the frames it has. Xiph, EBML and fixed
+  lacing are read. Files are untrusted input: element sizes are checked
+  against their parents and the file, and more than `MaxFrames` (8
+  million) frames are refused.
+- Video packets carry the block timestamps (milliseconds in nearly every
+  file, `TimeScale` 1000). A keyframe whose block lacks the sequence
+  header gets the one from the track's `av1C` in front, so a decoder can
+  start at any keyframe.
+- Audio packets are in samples at 48 kHz on the presentation's time line:
+  the first packet starts the codec delay before 0, as an encoder's
+  packets do, and `Duration` leaves the `DiscardPadding` out. Seeking
+  lands the track's `SeekPreRoll` (80 ms) early, so drop the samples
+  before the target.
+- The muxer writes temporal delimiters out of the AV1 blocks, starts a
+  Cluster at every video keyframe (every 5 s for audio only), puts a
+  CuePoint on each and interleaves the tracks by time: a track that runs
+  more than `InterleaveWindow` (1 s) ahead of another is written anyway.
+  The output must be seekable; no hwmediacodec backend encodes AV1 yet,
+  so the video comes from a remux (an `mp4.VideoTrack` with AV1, an IVF
+  file, another WebM file).
+
+The tests generate files with ffmpeg (SVT-AV1 and libopus, also in its
+live mode with unknown sizes) and compare every packet with ffprobe,
+remux them and check that ffmpeg decodes the copy to the same pictures,
+decode the AV1 of a written file bit-exactly against libdav1d, and take
+Opus from the system's encoder through a WebM file to ffmpeg's decoder
+and back.
 
 ## Live HLS
 
@@ -1509,6 +1575,7 @@ go run ./cmd/hwmediacodec decode -codec av1 -hash input.ivf                  # A
 go run ./cmd/hwmediacodec encode -size 1920x1080 -bitrate 8M -gop 60 -o out.h264 input.nv12
 go run ./cmd/hwmediacodec encode -size 1920x1080 -format rgba -o out.h264 input.rgba
 go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc input.h264
+go run ./cmd/hwmediacodec encode-audio -codec opus -o out.webm input.pcm         # Opus into WebM (decode-audio reads .webm too)
 ```
 
 ### Linux notes

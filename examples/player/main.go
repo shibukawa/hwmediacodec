@@ -1,18 +1,20 @@
-// Command player plays an MP4 file in an Ebitengine window with the
-// hardware decoder: the plain video-player sample.
+// Command player plays an MP4 or WebM file in an Ebitengine window with
+// the hardware decoder: the plain video-player sample.
 //
 //	go run ./player                     # the bundled waterfall clip
 //	go run ./player movie.mp4
+//	go run ./player movie.webm          # AV1 with Opus
 //	go run ./player -codec h264 -fps 30 stream.h264
 //
 // Space pauses, the left and right arrow keys seek five seconds, Home
 // restarts, M mutes, the up and down arrow keys change the volume. The
 // window takes the video's aspect ratio. MP4 files go through
 // mp4.VideoTrack.PacketSource, which gives ebitenvideo presentation times,
-// the sync-sample table for seeking and the length; raw streams go
-// through ebitenvideo.NewPlayer.
+// the sync-sample table for seeking and the length; WebM files go through
+// webm.VideoTrack.PacketSource the same way; raw streams go through
+// ebitenvideo.NewPlayer.
 //
-// The audio track of an MP4 file (AAC or Opus) is decoded with the
+// The audio track of an MP4 or WebM file (AAC or Opus) is decoded with the
 // system's codec and played through Ebitengine's audio, and the pictures
 // follow the sound. On a platform without an audio backend the film plays
 // silently; -mute does the same on purpose.
@@ -39,6 +41,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/examples/internal/bundled"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fatal"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/webm"
 )
 
 type game struct {
@@ -211,6 +214,25 @@ func open(path, codecName string, fps float64, sound bool, opts []ebitenvideo.Op
 			return nil, nil, "", 0, 0, err
 		}
 		return p, io.NopCloser(nil), v.Name, v.Width, v.Height, nil
+	case strings.EqualFold(filepath.Ext(path), ".webm"):
+		d, err := webm.Open(path)
+		if err != nil {
+			return nil, nil, "", 0, 0, err
+		}
+		v := d.Video()
+		if v == nil {
+			d.Close()
+			return nil, nil, "", 0, 0, fmt.Errorf("%s has no AV1 video track", path)
+		}
+		if a := d.Audio(); sound && a != nil {
+			opts = append(opts[:len(opts):len(opts)], ebitenvideo.WithAudio(a.PacketSource()))
+		}
+		p, err := ebitenvideo.NewPlayerFromSource(v.PacketSource(), opts...)
+		if err != nil {
+			d.Close()
+			return nil, nil, "", 0, 0, err
+		}
+		return p, d, filepath.Base(path), v.Width, v.Height, nil
 	case isMP4(path):
 		name = filepath.Base(path)
 		if d, err = mp4.Open(path); err != nil {
