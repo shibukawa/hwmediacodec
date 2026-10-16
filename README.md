@@ -53,7 +53,7 @@ Ebitengine and pion are only pulled in by the separate modules
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples); H.264 and AV1 decode not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample); HEVC encode and AMD not run yet** |
 
 AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
 decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
@@ -70,7 +70,7 @@ false):
 | Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
 | Android | MediaCodec (the framework's software codecs, through the NDK) | AAC-LC to 5.1, HE-AAC as the device has it; Opus mono and stereo; **compared with ffmpeg on the Android 14 emulator** | AAC-LC (the rates of the AAC table) and Opus (48 kHz), mono and stereo; the encoder's delay is measured on the device; **ffmpeg decodes the streams to the input on the emulator** |
 | Linux | the distribution's libraries, loaded when present: `libopus`, `libavcodec` (FFmpeg 4 to 8), `libfdk-aac` | Opus mono and stereo (`libopus`); AAC-LC to 5.1, HE-AAC and HE-AAC v2 (`libavcodec`, or `libfdk-aac` without it); **the tests of macOS pass in containers of Debian 12 and 13, Ubuntu 22.04 and 24.04 and Fedora, on arm64 and amd64** | Opus (48 kHz, `libopus`); AAC-LC (`libfdk-aac`), mono and stereo; **same** |
-| Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **not yet run on Windows** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **not yet run on Windows** |
+| Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **AAC verified on Windows with the player sample** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **not yet run on Windows** |
 
 See [Audio](#audio) for the API and for what using the system's codecs
 means for AAC licensing.
@@ -663,9 +663,12 @@ is given it declares 30 fps.
   GPU, so those tests run on any Windows machine with ffmpeg.
 - The backend was written and cross-compiled on macOS against the Windows
   SDK headers (GUIDs, vtable layouts and structure sizes are checked at
-  compile time) and has **not been run on Windows hardware yet**. Run
+  compile time). It has been run on Intel integrated graphics: the player
+  and texture samples decode the bundled HEVC clip and play its AAC sound, and the webrtc
+  sample encodes H.264 through the Quick Sync encoder MFT. H.264 and AV1
+  decode, HEVC encode, audio encode and AMD GPUs have not been run yet. Run
   `go test ./...` on a Windows machine with ffmpeg and ffprobe installed to
-  verify; the conformance tests skip when `Probe` reports no hardware engine,
+  verify further; the conformance tests skip when `Probe` reports no hardware engine,
   and the encoder tests for optional controls skip when the vendor MFT
   rejects them.
 

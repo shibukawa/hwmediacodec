@@ -72,7 +72,8 @@ capabilities:
     evidence:
       path: internal/mediafoundation/decoder.go
       note: Implemented in milestone:windows-media-foundation (HEVC Video Extensions decoder MFT + D3D11/DXVA,
-        8-bit NV12 only); not yet verified on Windows hardware.
+        8-bit NV12 only); verified 2026-10-16 on Intel integrated graphics by the user (examples player and
+        texture play the bundled HEVC clip).
   decode/av1:
     state: partial
     about: capability:hwmediacodec/decode-av1
@@ -89,7 +90,9 @@ capabilities:
     evidence:
       path: internal/mediafoundation/encoder.go
       note: Implemented in milestone:windows-media-foundation (vendor hardware encoder MFT, async event
-        model, ICodecAPI controls); not yet verified on Windows hardware.
+        model, ICodecAPI controls); verified 2026-10-16 on Intel integrated graphics by the user (examples
+        webrtc through the Intel Quick Sync H.264 encoder MFT, after the async unlock was moved before
+        GetStreamIDs, PR #28).
   encode/hevc:
     state: partial
     about: capability:hwmediacodec/encode-hevc
@@ -556,7 +559,9 @@ verification:
       input_hash: fa710ae2501ad987fa3430c72a0ef8ba856586b832e90359ef36f758cc4d2dfe
 open_questions:
   mf-hardware-verification:
-    text: Does the implementation work on real Intel hardware? The riskiest unverified points are (1)
+    text: Partly answered 2026-10-16 - on Intel integrated graphics HEVC decode, H.264 encode through
+      the Quick Sync MFT with system-memory NV12 and no D3D manager (point 5), and AAC decode work, as
+      seen through the examples (not go test). Still open - does the rest work on real hardware? The riskiest unverified points are (1)
       DXGI sample readback through CopySubresourceRegion/Map on decoder-bound texture arrays, (2) whether
       the Microsoft decoders attach the input sample time to the matching output frame when input timestamps
       are in decode order, (3) HEVC extension discovery through MFTEnumEx (first without, then with MFT_ENUM_FLAG_UNTRUSTED_STOREMFT),
@@ -700,8 +705,9 @@ facts:
     windows/arm64 is tier 1. Codec coverage unverified.
   support_tier: tier1 for Intel/AMD/NVIDIA; tier2 for Qualcomm Snapdragon X
   implementation:
-    status: decode and encode implemented 2026-10-09 (milestone:windows-media-foundation), unverified
-      on hardware
+    status: decode and encode implemented 2026-10-09 (milestone:windows-media-foundation); HEVC decode,
+      H.264 encode and AAC decode run on Intel integrated graphics 2026-10-16 (examples player, texture,
+      webrtc); H.264/AV1 decode, HEVC encode, audio encode and AMD unverified
     package: internal/mediafoundation (+ sys for bindings)
     ffi: golang.org/x/sys/windows NewLazySystemDLL for mfplat.dll/d3d11.dll flat functions; COM interfaces
       through hand-written vtable structs and syscall.SyscallN; MFTEnumEx's by-value GUID has per-architecture
@@ -754,7 +760,7 @@ facts:
           in {Video, NV12}, out {Video, subtype}); keep candidates whose MF_TRANSFORM_FLAGS_Attribute
           has HARDWARE; with AllowSoftware and no hardware candidate, enumerate without HARDWARE for the
           Microsoft software encoder. Candidates are tried in order until one configures.
-        encoder_setup: if MF_TRANSFORM_ASYNC then set MF_TRANSFORM_ASYNC_UNLOCK and QI IMFMediaEventGenerator (first: a locked
+        encoder_setup: if MF_TRANSFORM_ASYNC then set MF_TRANSFORM_ASYNC_UNLOCK and QI IMFMediaEventGenerator (first, because a locked
           async MFT answers GetStreamIDs and every other call with MF_E_TRANSFORM_ASYNC_LOCKED, seen on Intel Quick Sync); GetStreamIDs;
           QI ICodecAPI; apply controls; SetOutputType (first type with the subtype from GetOutputAvailableType
           or a fresh one, with FRAME_SIZE, FRAME_RATE, PAR 1:1, progressive, AVG_BITRATE, MPEG2_PROFILE);
@@ -782,7 +788,8 @@ facts:
           height) is deferred to the first sequence header for AV1 and sets MF_MT_FRAME_SIZE; sendAV1
           strips temporal delimiters and makes one sample per unit.
   known_risks:
-  - Everything above the compile-time checks is unverified on real hardware; see open_questions.hardware-verification.
+  - Only HEVC decode, H.264 encode (Intel Quick Sync) and AAC decode have run on real hardware (Intel
+    integrated graphics, 2026-10-16); the rest is unverified, see open_questions.mf-hardware-verification.
   - The Microsoft H.264 decoder silently uses software above 1920x1088 when DXVA cannot; Probe reports
     Hardware=true regardless.
   - MF_TRANSFORM_FLAGS_Attribute may be absent on some activation objects; it is then treated as synchronous
