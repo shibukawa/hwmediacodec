@@ -20,6 +20,13 @@ const (
 	ObjectTypePS   = 29
 )
 
+// SBRDecoderDelay is the number of samples (at the output rate) by which
+// a decoder's band replication holds the signal back: the delay of its
+// filter banks. The decoders of FFmpeg and of the FDK library leave it in
+// their output; the library's decoders take it out, as Apple's does, so
+// that HE-AAC lies where AAC-LC would.
+const SBRDecoderDelay = 962
+
 // sampleRates is the sampling frequency index table.
 var sampleRates = [...]int{96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350}
 
@@ -208,6 +215,18 @@ func ParseConfig(asc []byte) (Config, error) {
 		}
 	}
 	return c, nil
+}
+
+// StandardRate reports whether a sample rate is one of those in the
+// sampling frequency table, which is what ADTS can carry and what most
+// encoders take.
+func StandardRate(sampleRate int) bool {
+	for _, r := range sampleRates {
+		if r == sampleRate {
+			return true
+		}
+	}
+	return false
 }
 
 // LCConfig builds the AudioSpecificConfig of an AAC-LC stream.

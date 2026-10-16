@@ -1,0 +1,36 @@
+id: milestone:audio-media-foundation
+type: milestone
+title: Audio codecs on Windows through Media Foundation (AAC decode and encode, Opus decode)
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in backend:media-foundation (keys prefixed audiomf-). Original summary: Requested on 2026-10-14 ("つぎはWindows/Linux/Android対応をお願いします"). internal/mediafoundation gained
+  an audio half that drives the system''s synchronous software transforms: the AAC decoder, the AAC encoder
+  and, where one is registered, an Opus decoder (Media Foundation has no Opus encoder). Registered by
+  backends_windows.go. Written on a Mac against the documentation and cross-compiled for windows/amd64
+  and windows/arm64; it has not been run on Windows.'
+lifecycle: superseded
+authority: authored
+aliases:
+- Windows audio
+- Windows音声対応
+- Media Foundation audio
+- AAC MFT
+- MFAudioFormat_AAC
+scope:
+  platform: windows
+  milestone: audio-media-foundation
+non_goals:
+- Opus encoding on Windows (no system encoder exists).
+- HE-AAC encoding, 5.1 encoding, ADTS input to the decoder.
+- Third-party audio transforms and DirectShow or ACM codecs.
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: extends
+  to: milestone:windows-media-foundation
+- relation: superseded_by
+  to: backend:media-foundation
+history:
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into backend:media-foundation on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

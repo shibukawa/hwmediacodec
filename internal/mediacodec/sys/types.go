@@ -111,13 +111,28 @@ const (
 	KeyColorRange       = "color-range"
 	KeyColorTransfer    = "color-transfer"
 	KeyPrependHeaders   = "prepend-sps-pps-to-idr-frames"
+
+	// Audio.
+	KeySampleRate   = "sample-rate"
+	KeyChannelCount = "channel-count"
+	KeyAACProfile   = "aac-profile"
+	KeyPCMEncoding  = "pcm-encoding"
 )
+
+// AudioFormat.ENCODING_PCM_16BIT, the sample format of every audio codec's
+// PCM side unless another one is negotiated.
+const EncodingPCM16 int32 = 2
+
+// MediaCodecInfo.CodecProfileLevel.AACObjectLC.
+const AACObjectLC int32 = 2
 
 // MIME types.
 const (
 	MimeH264 = "video/avc"
 	MimeHEVC = "video/hevc"
 	MimeAV1  = "video/av01"
+	MimeAAC  = "audio/mp4a-latm"
+	MimeOpus = "audio/opus"
 )
 
 // BufferInfo mirrors AMediaCodecBufferInfo.

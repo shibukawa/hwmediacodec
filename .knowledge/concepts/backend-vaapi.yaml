@@ -522,9 +522,9 @@ verification:
     - path: internal/vaapi/h264fill.go
       input_hash: 978c940fe3fd451e314f02f6a78bc5325ab289875ff219304a64c22ef9e38069
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
   vah264-hardware-conformance:
     state: not_run
     method: integration
@@ -583,7 +583,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   vahevc-hevc-va-buffer-test:
@@ -750,7 +750,7 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_linux.go
-      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
   av1lw-fake-vaapi-av1-test:
     state: passed
     method: integration

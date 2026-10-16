@@ -1,0 +1,39 @@
+id: milestone:audio-mediacodec
+type: milestone
+title: Audio codecs (AAC, Opus) on Android through MediaCodec
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in backend:mediacodec (keys prefixed audiomc-). Original summary: Requested on 2026-10-14 together with Windows and Linux ("つぎはWindows/Linux/Android対応をお願いします"):
+  internal/mediacodec gained the audio half of the backend on the NDK AMediaCodec API (the framework''s
+  software AAC and Opus decoders and encoders), registered by backends_android.go. Same public API and
+  timestamp rules as the other audio backends. What the audio backends share moved into internal/audioutil
+  (delay trial, frame queue, packet timestamps, sample conversion), and the hwmediacodec CLI gained
+  decode-audio and encode-audio, which scripts/android_device_check.sh uses to compare the device with
+  ffmpeg.'
+lifecycle: superseded
+authority: authored
+aliases:
+- Android audio
+- Android音声対応
+- MediaCodec audio
+- audioutil
+- decode-audio
+- encode-audio
+scope:
+  platform: android
+  milestone: audio-mediacodec
+non_goals:
+- A run on a physical Android device (the author's tablet), as for video.
+- HE-AAC encoding, more than two channels on the encoder.
+- Sound output on Android in examples/mobile.
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: extends
+  to: milestone:android-mediacodec
+- relation: superseded_by
+  to: backend:mediacodec
+history:
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into backend:mediacodec on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

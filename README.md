@@ -68,7 +68,9 @@ false):
 | --- | --- | --- | --- |
 | macOS, iOS | AudioToolbox (`AudioConverter`) | AAC-LC from mono to 5.1, HE-AAC and HE-AAC v2 (with the band replication and parametric stereo, at the full sample rate); Opus mono and stereo, any packet length; 16-bit or float samples | AAC-LC and Opus (48 kHz), mono and stereo; bitrate with VBR or CBR; **compared with ffmpeg on macOS, round trips verified in the iOS Simulator** |
 | Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
-| Android, Windows, Linux | none yet | `ErrUnsupported` | `ErrUnsupported` |
+| Android | MediaCodec (the framework's software codecs, through the NDK) | AAC-LC to 5.1, HE-AAC as the device has it; Opus mono and stereo; **compared with ffmpeg on the Android 14 emulator** | AAC-LC (the rates of the AAC table) and Opus (48 kHz), mono and stereo; the encoder's delay is measured on the device; **ffmpeg decodes the streams to the input on the emulator** |
+| Linux | the distribution's libraries, loaded when present: `libopus`, `libavcodec` (FFmpeg 4 to 8), `libfdk-aac` | Opus mono and stereo (`libopus`); AAC-LC to 5.1, HE-AAC and HE-AAC v2 (`libavcodec`, or `libfdk-aac` without it); **the tests of macOS pass in containers of Debian 12 and 13, Ubuntu 22.04 and 24.04 and Fedora, on arm64 and amd64** | Opus (48 kHz, `libopus`); AAC-LC (`libfdk-aac`), mono and stereo; **same** |
+| Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **not yet run on Windows** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **not yet run on Windows** |
 
 See [Audio](#audio) for the API and for what using the system's codecs
 means for AAC licensing.
@@ -336,6 +338,12 @@ MediaTek, Tensor) sit behind it.
   streams ffmpeg decodes. The same script runs against a device
   (`ARCH=arm64`, without `SOFTWARE=1`), which is the step still open;
   `examples/mobile/android` is the app to run on one.
+- **Audio.** AAC and Opus go through the same MediaCodec bindings (see
+  [Audio](#audio)). On the emulator the script's audio part passes: AAC
+  from an MP4 file and from ADTS and Opus from an MP4 file decode to
+  ffmpeg's samples in place (63 and 70 dB), and what the device encodes
+  ffmpeg decodes to the input in place (AAC with a measured delay of 2048
+  samples, Opus with 312).
 
 ### Browser notes
 
@@ -547,6 +555,14 @@ tests give way to the fixture comparison, and the AV1 tests pass or skip
 with what Safari offers the page. Chrome on Windows, Linux and Android has
 not been run.
 
+**Playback with sound (2026-10-14).** The audio stream tests of package
+`playback` pass in Chrome through the same script. The bundled clip was
+played with its sound in a real Ebitengine loop in headless Chrome
+(WebCodecs for both tracks, WebAudio for the output, muted): before the
+page had its first input event the film ran on the tick clock, and from
+the event on the clock was the audio player's position, through a seek
+and the loop, with one skipped frame in nine seconds.
+
 ### AV1 on Linux and Windows
 
 A `Packet` is one temporal unit in the low-overhead OBU format, with or
@@ -642,6 +658,9 @@ is given it declares 30 fps.
   reporting it.
 - 32-bit Windows is out of scope; the backend builds only for `windows/amd64`
   and `windows/arm64`.
+- Audio (AAC decode and encode, Opus decode) uses the system's software
+  transforms through the same bindings; see [Audio](#audio). It needs no
+  GPU, so those tests run on any Windows machine with ffmpeg.
 - The backend was written and cross-compiled on macOS against the Windows
   SDK headers (GUIDs, vtable layouts and structure sizes are checked at
   compile time) and has **not been run on Windows hardware yet**. Run
@@ -886,7 +905,9 @@ m.Close()
   whatever the recording had) and the encoder takes what it is given
   (Opus: 48 kHz only). The library does not resample.
 - **No device.** The library neither plays nor records sound: it stops at
-  PCM, like the video side stops at pixels.
+  PCM, like the video side stops at pixels. `playback` lines the samples
+  up with the pictures for a device to play, and `ebitenvideo` plays them
+  through Ebitengine (see [Sound](#sound)).
 
 What the backend does on macOS and iOS:
 
@@ -903,6 +924,57 @@ What the backend does on macOS and iOS:
   record the delay in iTunes metadata alone (`iTunSMPB`, as `afconvert`
   writes) report 0.
 
+On Android the codecs are MediaCodec's, as for video (the framework's
+software AAC and Opus codecs; nothing is tied to a GPU). MediaCodec does
+not report an encoder's delay, so the first encoder for a rate and channel
+count encodes a short noise signal, decodes it on the device and looks for
+it in the result (2048 samples for AAC and 312 for Opus on the emulator).
+The Opus decoder is given an identification header without pre-skip and
+zero codec delay, so that it returns every sample like the other backends.
+
+On Linux there is no system codec, so each backend stands for a library of
+the distribution, opened at run time and absent without it (`Probe` lists
+what is there under the names below):
+
+| Backend | Library (Debian/Ubuntu package, Fedora package) | Serves |
+| --- | --- | --- |
+| `libopus` | `libopus.so.0` (`libopus0`, `opus`) | Opus decode and encode |
+| `libavcodec` | `libavcodec.so.58` to `.62`, FFmpeg 4 to 8 (`libavcodec61` and its siblings, `libavcodec-free`) | AAC decode |
+| `fdk-aac` | `libfdk-aac.so.2` or `.so.1` (`libfdk-aac2`, in Debian's non-free section; `fdk-aac-free`) | AAC encode, and AAC decode on a machine without libavcodec |
+
+- AAC decodes with libavcodec where both libraries are installed. The
+  build of the FDK library that Fedora and Ubuntu 24.04 ship
+  (`fdk-aac-free`) has AAC-LC only: it refuses an HE-AAC stream with
+  `ErrUnsupported` instead of playing its core at half the rate.
+- The libavcodec backend only decodes, and only through the part of the
+  library that has kept its shape from FFmpeg 4 to 8 (the functions and the
+  first fields of three structures). A libavcodec outside that range is not
+  loaded.
+- Both AAC decoders are set up to return a packet's samples with the
+  packet: the FDK decoder without its limiter and its interpolating
+  concealment (each of which delays the output), and both with the 962
+  samples of the band replication's delay taken out of HE-AAC, as
+  AudioToolbox does.
+- libfdk-aac has one rate control worth the name here, which holds the
+  bitrate on average; `VBR` and `CBR` both select it. Its delay (2048
+  samples) is measured like on Android.
+- `HWMEDIACODEC_AUDIO_BACKENDS` restricts and orders the audio backends
+  like `HWMEDIACODEC_BACKENDS` does the video ones:
+  `HWMEDIACODEC_AUDIO_BACKENDS=libopus,fdk-aac` decodes AAC with the FDK
+  library.
+
+On Windows the audio codecs are transforms of Media Foundation like the
+video ones, but plain software, so no Direct3D device is involved: the AAC
+decoder and encoder that come with Windows, and an Opus decoder where one
+is installed (it is listed by `Probe` only then). The AAC encoder takes
+44.1 and 48 kHz and offers four bitrates (96, 128, 160 and 192 kbit/s);
+anything else is `ErrUnsupported`. Its delay is measured like on Android
+(one packet is assumed if the measurement fails). **None of this has run
+on Windows yet**: it was written against the documentation, cross-compiles
+for `windows/amd64` and `windows/arm64`, and waits for `go test ./...` on a
+Windows machine with ffmpeg, where the audio tests compare it with ffmpeg
+as they do everywhere else.
+
 In a browser the same API sits on `AudioDecoder` and `AudioEncoder`; what
 differs there (the delay of an encoder has to be measured, each browser
 has codecs of its own) is in the [browser notes](#browser-notes).
@@ -917,10 +989,13 @@ way it calls the system's H.264 and HEVC engines; that the codec runs on
 the CPU rather than in hardware makes no difference to that. For the same
 reason there is no pure Go fallback for AAC and there will not be one.
 Opus is royalty-free and the safe choice where a codec has to be picked.
-On Linux, where no vendor ships a codec with the system, an AAC backend
-will only ever use a library the user has installed. This is how the
-situation is commonly understood, not legal advice; a product that ships
-commercially should have it checked.
+On Linux, where no vendor ships a codec with the system, the AAC backends
+only ever use a library that is already installed (libavcodec, libfdk-aac):
+whoever put it there, the distribution or the user, is the one who shipped
+the codec, and a machine without either has no AAC. A program that wants
+AAC on Linux should say which packages it needs rather than carry the
+libraries along. This is how the situation is commonly understood, not
+legal advice; a product that ships commercially should have it checked.
 
 ## MP4 files
 
@@ -963,6 +1038,11 @@ What the package takes care of:
   muxer shifts every DTS back by the largest lag; durations are unchanged and
   the edit list absorbs the start delay. The tests check that ffprobe sees
   the same presentation times as in the source.
+- The demuxer applies an empty edit in front of a track the same way:
+  the wait is taken off `MediaTimeOffset`, so the times of every packet
+  source count from the start of the presentation and two tracks of a
+  file line up. The tracks of one `Demuxer` may be read from different
+  goroutines.
 - An audio track's edit list starts at the encoder's delay, so players
   begin at the first real sample, and the last sample is as short as the
   signal's end makes it. The tracks written from packets share a clock:
@@ -1219,7 +1299,7 @@ timestamps and copies audio (`examples/convert`), a keyframe thumbnail
 extractor (`examples/thumbnails`), an Ebitengine screen recorder on top
 of the `capture` package (`examples/record`), live HLS and WebRTC
 servers for a fireworks show (`examples/hls`, `examples/webrtc`), a video
-player
+player with sound
 (`examples/player`), video as a texture on a box and in a Kage shader
 (`examples/texture`), a HEIC/AVIF converter (`examples/imgconv`) and the
 player as an Ebitengine mobile game with an Xcode project for the iPhone
@@ -1273,6 +1353,55 @@ if f != nil {
 - `WithOutputFormat(NV12)` hands out the decoder's native format instead,
   for renderers that convert in a shader.
 
+### Sound
+
+`WithAudio` gives the player the audio track that goes with the pictures.
+The package still opens no device: the sound comes out as a stream of
+samples for one to play, and the device tells the player how far it has
+got.
+
+```go
+p, err := playback.New(video.PacketSource(),           // *mp4.VideoTrack
+	playback.WithAudio(audio.PacketSource()),          // *mp4.AudioTrack
+	playback.WithAudioChannels(2))
+stream := p.Audio()                                    // nil: no decoder for the track, see p.AudioErr()
+dev := newDevice(stream, stream.SampleRate())          // yours: plays the stream, implements playback.AudioDevice
+p.AttachAudioDevice(dev)
+p.Play()
+// Advance(dt) as before: the frame returned is the one for the sample at the loudspeaker.
+```
+
+- **`AudioStream`** is an `io.ReadSeeker` of interleaved samples (float by
+  default, 16-bit with `WithAudioFormat`; the track's channels, or mono or
+  stereo with `WithAudioChannels`) laid out on the time line of the
+  pictures: the byte at offset n belongs to the time n / bytes per second.
+  The encoder's delay and padding are cut off, a track that starts later
+  or ends earlier than the pictures is silence there, and with `WithLoop`
+  the stream goes on with the next pass behind the end of the presentation
+  (one pass is as long as the longer track). It never ends and never
+  blocks for long: samples the decoder does not have in time are silence.
+- **`AudioDevice`** is five methods around whatever plays the stream:
+  `Ready`, `Position` (the time of the sample at the loudspeaker: bytes
+  read less bytes still buffered), `SetPosition` (drop the buffer, seek the
+  stream), `Play` and `Pause`.
+- **The sound is the clock.** With a device attached, `Advance` shows the
+  picture for the device's position and ignores its argument; a late
+  picture is skipped, the sound is never touched. `Play`, `Pause` and
+  `Seek` steer the device along. After a start or a jump the device waits
+  (up to half a second) until the first picture is in, so the two start
+  together.
+- **No device, no sound, still a film.** While the device is not ready (a
+  browser does not let a page make sound before the first click) the
+  player holds the first picture for half a second and then runs on the
+  clock of `Advance` as it does without sound; when the device comes up it
+  is placed where the pictures are and takes over. A platform without an
+  audio backend, or a decoder that gives up, leaves the pictures playing:
+  `Audio` is nil or silent and `AudioErr` says why.
+- The position a device reports usually leaves out the latency of the
+  operating system's output (some tens of milliseconds, more over
+  Bluetooth), so the sound trails the picture by that much, which is the
+  direction in which it is noticed least.
+
 ## Ebitengine
 
 `github.com/shibukawa/hwmediacodec/ebitenvideo` is a separate Go module in
@@ -1297,7 +1426,23 @@ func (g *game) Draw(screen *ebiten.Image) {
 `playback.New`; the options and the methods (`Seek`, `Position`, `Length`,
 `Skipped`, ...) are those of the playback package. One `Update` stands for
 1/TPS seconds, or for the wall-clock time since the previous one when the
-TPS is `SyncWithFPS`. A minimal example plays a raw stream in a window
+TPS is `SyncWithFPS`.
+
+With `ebitenvideo.WithAudio` the film has its sound, played through
+Ebitengine's audio, and the pictures follow it (see [Sound](#sound)):
+
+```go
+d, _ := mp4.Open("movie.mp4")
+player, err := ebitenvideo.NewPlayerFromSource(d.Video().PacketSource(),
+	ebitenvideo.WithAudio(d.Audio().PacketSource()), ebitenvideo.WithLoop())
+player.SetVolume(0.8)
+```
+
+The player uses the game's audio context (`audio.CurrentContext`) and
+creates one at the track's sample rate when the game has none; a track at
+another rate goes through Ebitengine's resampler, and the sound is mixed
+to stereo. `HasAudio`, `AudioErr`, `Volume` and `SetVolume` are the
+additions to the player. A minimal example plays a raw stream in a window
 (space pauses, the arrow keys seek); the MP4-capable player with a bundled
 clip is `examples/player`:
 
@@ -1386,6 +1531,9 @@ comma-separated list of the names `Probe` reports: `HWMEDIACODEC_BACKENDS=vaapi`
 bypasses Intel VPL to exercise the VA-API backend on the same GPU, and
 `HWMEDIACODEC_BACKENDS=vpl,nvidia` prefers the integrated Intel GPU on a
 machine that also has an NVIDIA card. Unknown names are ignored.
+`HWMEDIACODEC_AUDIO_BACKENDS` does the same for the audio backends
+(`libopus`, `libavcodec`, `fdk-aac`), which are libraries rather than
+GPUs: see [Audio](#audio) for which package provides which.
 
 The VA-API backend opens the first DRM render node (`/dev/dri/renderD128`
 and up) that libva can initialise. Set `HWMEDIACODEC_VAAPI_DEVICE` to a
@@ -1405,7 +1553,9 @@ CGO_ENABLED=0 go test ./...   # exercises the cgo-free callback path
 SOFTWARE=1 ./scripts/android_device_check.sh   # Android: the CLI on the attached emulator or device over adb, against ffmpeg
 ./scripts/browser_test.sh . ./internal/webcodecs   # browser: the conformance tests in headless Chrome through WebCodecs, against ffmpeg
 HWMEDIACODEC_BACKENDS=vaapi go test -count=1 .   # Linux: one backend at a time
+./scripts/linux_audio_test.sh   # Linux audio backends (libopus, libavcodec, libfdk-aac) in containers (needs docker)
 ./scripts/vaapi_fake_driver_test.sh   # VA-API backend against the fake driver (needs docker)
+./scripts/linux_audio_test.sh         # Linux audio backends in containers of five distributions (needs docker)
 (cd ebitenvideo && go test ./...)   # separate module: frames reach an *ebiten.Image (hardware)
 (cd net/webrtc && go test ./...)    # separate module: a pion viewer receives an ffmpeg-made stream (ffmpeg only)
 (cd examples && go test ./...)      # separate module: sample end-to-end tests (ffmpeg, most also hardware)
@@ -1455,6 +1605,11 @@ that need it (or `ffprobe`, `x265`, `aomenc`, `rav1e`, libdav1d, `sips`,
   Simulator runs inside it with `xcrun simctl spawn booted`. The
   session-invalidation recovery iOS needs is tested on macOS by
   invalidating the session by hand.
+- **Linux audio.** `scripts/linux_audio_test.sh` cross-compiles the test
+  binaries and runs the audio tests in containers of five distributions
+  with ffmpeg, libopus and libfdk-aac (every libavcodec from 58 to 62, the
+  full and the "free" FDK library), once with every backend, once with
+  libfdk-aac as the AAC decoder and once with libavcodec alone.
 - **Browser.** Node.js has no WebCodecs, so `scripts/browser_test.sh`
   builds `internal/browserexec` as the `go_js_wasm_exec` wrapper `go test`
   looks for: it serves the test binary and a page to a headless browser

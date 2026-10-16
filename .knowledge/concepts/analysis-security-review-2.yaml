@@ -148,9 +148,9 @@ verification:
     - path: internal/audiotoolbox/encoder.go
       input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
     - path: internal/webcodecs/audioencoder.go
-      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
+      input_hash: 1b56c90e87a06ea98fc002b756970a90fd06546cf2482e9c0739abb6d1c4ac19
     - path: internal/codec/audio.go
-      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
+      input_hash: c65f08066a5f81a456d9a8216afe2ebadd684b5ccfb2005634b372f5f500ae9b
   static-analysis:
     state: passed
     method: static

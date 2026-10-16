@@ -5,12 +5,19 @@
 //	hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
 //	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
 //	hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+//	hwmediacodec decode-audio [-format s16|f32] [-o out.pcm] in.aac|in.mp4
+//	hwmediacodec encode-audio [-codec aac|opus] [-rate 48000] [-channels 2] [-bitrate 128k] [-cbr] -o out.aac|out.mp4 in.pcm
 //
 // H.264 and HEVC input is a raw Annex-B stream; AV1 input is an IVF file
 // (one temporal unit per frame, as ffmpeg -f ivf writes it).
 //
 // Encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes
 // -lowlatency -profile baseline|main|high -software.
+//
+// The audio commands go through the system's AAC and Opus codecs:
+// decode-audio writes every sample of an .aac file or of the audio track
+// of an MP4 file as raw interleaved samples, and encode-audio turns raw
+// 16-bit samples into an .aac file or an MP4 file.
 package main
 
 import (
@@ -46,6 +53,10 @@ func main() {
 		err = encode(os.Args[2:])
 	case "transcode":
 		err = transcode(os.Args[2:])
+	case "decode-audio":
+		err = decodeAudio(os.Args[2:])
+	case "encode-audio":
+		err = encodeAudio(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -62,6 +73,8 @@ func usage() {
   hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
   hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
   hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+  hwmediacodec decode-audio [-format s16|f32] [-o out.pcm] in.aac|in.mp4
+  hwmediacodec encode-audio [-codec aac|opus] [-rate 48000] [-channels 2] [-bitrate 128k] [-cbr] -o out.aac|out.mp4 in.pcm
 h264/hevc input is a raw Annex-B stream, av1 input an IVF file
 encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes -lowlatency -profile baseline|main|high -software`)
 }

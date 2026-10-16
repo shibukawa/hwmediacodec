@@ -572,6 +572,10 @@ func TestAudioErrors(t *testing.T) {
 	if _, err := hwmediacodec.NewAudioEncoder(ctx, hwmediacodec.AAC, 48000, 2, hwmediacodec.WithBitrate(-1)); err == nil {
 		t.Error("NewAudioEncoder with a negative bitrate succeeded")
 	}
+	huge := hwmediacodec.AudioFormat{Codec: hwmediacodec.AAC, SampleRate: 48000, Channels: 2, Config: make([]byte, 1<<16+1)}
+	if _, err := hwmediacodec.NewAudioDecoder(ctx, huge); err == nil || errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Errorf("NewAudioDecoder with a %d byte configuration: got %v, want an argument error", len(huge.Config), err)
+	}
 
 	enc := newAudioEncoderOrSkip(t, hwmediacodec.AAC, 48000, 2)
 	// Requests the codecs do not offer.
@@ -592,9 +596,14 @@ func TestAudioErrors(t *testing.T) {
 			return hwmediacodec.NewAudioEncoder(ctx, hwmediacodec.AAC, 48000, 2, hwmediacodec.WithSampleFormat(99))
 		},
 	} {
-		if (name == "aac at 2 Mbit/s" || name == "aac at 12345 Hz") && runtime.GOOS == "js" {
+		if runtime.GOOS == "js" && (name == "aac at 2 Mbit/s" || name == "aac at 12345 Hz") {
 			// A browser may take a bitrate or a rate its encoder does not
 			// offer and encode at another; nothing in the API tells.
+			continue
+		}
+		if runtime.GOOS != "darwin" && name == "aac at 2 Mbit/s" {
+			// AudioToolbox refuses a bitrate it does not offer; the other
+			// encoders code at the nearest one they have.
 			continue
 		}
 		e, err := open()

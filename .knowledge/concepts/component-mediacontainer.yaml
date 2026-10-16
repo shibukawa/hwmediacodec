@@ -163,7 +163,7 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-10
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: mediacontainer/mp4/mux.go
       input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/sample.go
@@ -240,7 +240,7 @@ verification:
         hvc1, libx265 hev1); run 2026-10-09 with go test ./container/
     basis:
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go
@@ -262,7 +262,7 @@ verification:
     - path: mediacontainer/mp4/mux.go
       input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: mediacontainer/mp4/mp4_test.go
       input_hash: 40c6f2415eae5df8d610d88781080770ab804b7994ad9bc656840451fe45da2d
     - path: internal/mediatest/ffmpeg.go

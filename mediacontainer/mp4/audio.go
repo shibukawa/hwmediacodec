@@ -82,9 +82,9 @@ func (d *Demuxer) newAudioTrack(t *Track) *AudioTrack {
 	default:
 		return nil
 	}
-	if t.MediaTimeOffset > 0 {
+	if t.editStart > 0 {
 		// The edit list is where a muxer records the samples to drop.
-		f.Delay = int(codec.Rescale(t.MediaTimeOffset, int64(t.TimeScale), int64(f.SampleRate)))
+		f.Delay = int(codec.Rescale(t.editStart, int64(t.TimeScale), int64(f.SampleRate)))
 	}
 	return a
 }

@@ -1,0 +1,41 @@
+id: milestone:audio-linux
+type: milestone
+title: Audio codecs on Linux through the distribution's libraries (libopus, libavcodec, libfdk-aac)
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in component:audio (keys prefixed audiolx-). Original summary: Requested on 2026-10-14 ("つぎはWindows/Linux/Android対応をお願いします"). Linux has no codec API of its
+  own, so three audio backends each stand for a library that is opened with purego when it is installed
+  and absent otherwise: internal/libopus (Opus decode and encode), internal/libavcodec (AAC decode, FFmpeg
+  4 to 8) and internal/fdkaac (AAC encode, and decode without libavcodec). Nothing is bundled. This answers
+  the question decision:audio-codecs had deferred (which library, opt-in or not): both libraries, used
+  when present, with HWMEDIACODEC_AUDIO_BACKENDS to restrict and reorder. Verified in containers of five
+  distributions on arm64 and amd64; the choice of libraries was made by the implementer and reported
+  to the author as reversible.'
+lifecycle: superseded
+authority: authored
+aliases:
+- Linux audio
+- Linux音声対応
+- libopus
+- libfdk-aac
+- fdk-aac-free
+- libavcodec AAC
+- HWMEDIACODEC_AUDIO_BACKENDS
+- SBR decoder delay 962
+scope:
+  platform: linux
+  milestone: audio-linux
+non_goals:
+- A run on a Linux desktop outside a container (the libraries are the same).
+- AAC encoding through libavcodec, HE-AAC encoding, multichannel encoding.
+- GStreamer or PipeWire codecs, Opus through libavcodec.
+- Bundling or downloading any library.
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: superseded_by
+  to: component:audio
+history:
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into component:audio on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

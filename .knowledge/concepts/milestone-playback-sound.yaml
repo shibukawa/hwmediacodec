@@ -1,0 +1,57 @@
+id: milestone:playback-sound
+type: milestone
+title: Synchronised playback with sound (playback audio stream, ebitenvideo, player sample)
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in component:playback (keys prefixed sound-). Original summary: Requested on 2026-10-14 ("同期再生と発音の実装をお願いします"), the second audio slice agreed in decision:audio-codecs.
+  Package playback gains WithAudio: the audio track is decoded next to the pictures and comes out as an
+  AudioStream, an io.ReadSeeker of samples laid out on the pictures'' time line, for a device of the
+  caller''s to play; AttachAudioDevice makes that device the clock of the player. ebitenvideo plays the
+  stream through Ebitengine''s audio (WithAudio, Volume, SetVolume, HasAudio, AudioErr) and examples/player
+  plays films with their sound. The MP4 demuxer now applies empty edits and lets its tracks be read from
+  different goroutines.'
+lifecycle: superseded
+authority: authored
+aliases:
+- audio sync
+- A/V sync
+- 同期再生
+- 発音
+- AudioStream
+- AudioDevice
+- audio master clock
+- WithAudio
+scope:
+  platform:
+  - darwin
+  - ios
+  - js
+  milestone: playback-sound
+non_goals:
+- Audio output in the core module or in package playback (the device stays the caller's).
+- Smoothing the device clock in playback (Ebitengine's position is already interpolated; a device with
+  a coarse position would need it).
+- Compensating the operating system's output latency, which devices do not report through Ebitengine.
+- Sound for raw elementary streams (NewStream has no audio track to offer) and for the HLS and WebRTC
+  samples.
+- Resampling and time stretching to follow a clock other than the device's.
+- A run on an iPhone or in a browser with a person listening.
+relations:
+- relation: implements
+  to: requirement:hwmediacodec
+- relation: constrained_by
+  to: decision:audio-codecs
+- relation: follows
+  to: milestone:audio-webcodecs
+- relation: extends
+  to: milestone:playback
+- relation: extends
+  to: milestone:audio-audiotoolbox
+- relation: superseded_by
+  to: component:playback
+history:
+  implemented-2026-10-14:
+    summary: Audio stream, device clock and Ebitengine output written and measured in a day; the device
+      tests found the demuxer's unsynchronised reads and the stale ready signal, the fresh module cache
+      of that morning found the go.sum mismatch.
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into component:playback on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

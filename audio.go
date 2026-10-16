@@ -30,6 +30,10 @@ const (
 	F32 = codec.F32
 )
 
+// maxAudioConfig bounds AudioFormat.Config. An AudioSpecificConfig or an
+// OpusHead is a few dozen bytes, a program config element included.
+const maxAudioConfig = 1 << 16
+
 // S16Frame wraps interleaved 16-bit samples as an encoder input frame
 // without copying: the frame shares the slice, which must stay untouched
 // until AudioEncoder.Send has returned. The opposite direction is
@@ -73,9 +77,11 @@ func NewAudioDecoder(ctx context.Context, format AudioFormat, opts ...AudioDecod
 		return nil, fmt.Errorf("hwmediacodec: sample rate and channel count must not be negative, got %d Hz and %d channels", format.SampleRate, format.Channels)
 	case format.SampleRate > math.MaxInt32 || format.Channels > math.MaxInt32 || format.FrameSamples < 0 || format.FrameSamples > math.MaxInt32 || format.Delay < 0 || format.Delay > math.MaxInt32:
 		return nil, fmt.Errorf("hwmediacodec: audio stream format is out of range")
+	case len(format.Config) > maxAudioConfig:
+		return nil, fmt.Errorf("hwmediacodec: an audio configuration of %d bytes is larger than %d", len(format.Config), maxAudioConfig)
 	}
 	var unsupported error
-	for _, b := range codec.AudioBackends() {
+	for _, b := range audioBackends() {
 		d, err := b.NewAudioDecoder(ctx, cfg)
 		if err == nil {
 			return d, nil
@@ -83,10 +89,10 @@ func NewAudioDecoder(ctx context.Context, format AudioFormat, opts ...AudioDecod
 		if !errors.Is(err, ErrUnsupported) {
 			return nil, err
 		}
-		unsupported = err
+		unsupported = codec.PreferUnsupported(unsupported, err)
 	}
 	if unsupported != nil {
-		return nil, unsupported
+		return nil, codec.PlainUnsupported(unsupported)
 	}
 	return nil, &UnsupportedError{Codec: format.Codec, Direction: Decode, Reason: "no audio backend is available on this platform"}
 }
@@ -132,7 +138,7 @@ func NewAudioEncoder(ctx context.Context, c Codec, sampleRate, channels int, opt
 		return nil, fmt.Errorf("hwmediacodec: unknown rate control %s", cfg.RateControl)
 	}
 	var unsupported error
-	for _, b := range codec.AudioBackends() {
+	for _, b := range audioBackends() {
 		e, err := b.NewAudioEncoder(ctx, cfg)
 		if err == nil {
 			return e, nil
@@ -140,10 +146,10 @@ func NewAudioEncoder(ctx context.Context, c Codec, sampleRate, channels int, opt
 		if !errors.Is(err, ErrUnsupported) {
 			return nil, err
 		}
-		unsupported = err
+		unsupported = codec.PreferUnsupported(unsupported, err)
 	}
 	if unsupported != nil {
-		return nil, unsupported
+		return nil, codec.PlainUnsupported(unsupported)
 	}
 	return nil, &UnsupportedError{Codec: c, Direction: Encode, Reason: "no audio backend is available on this platform"}
 }
@@ -178,7 +184,7 @@ func (o sharedEncoderOption) ApplyAudioEncoder(c *codec.AudioEncoderConfig) { o.
 // probeAudio lists what the audio backends offer.
 func probeAudio(ctx context.Context) ([]Capability, error) {
 	var out []Capability
-	for _, b := range codec.AudioBackends() {
+	for _, b := range audioBackends() {
 		caps, err := b.ProbeAudio(ctx)
 		if err != nil {
 			return out, fmt.Errorf("hwmediacodec: probe %s: %w", b.Name(), err)

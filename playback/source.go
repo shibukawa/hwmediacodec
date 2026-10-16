@@ -62,6 +62,9 @@ type source struct {
 	pending *seekRequest
 	err     error
 	closed  bool
+	// length, when set, is the length of one pass through the stream as
+	// the player counts it: with sound it is the longer of the two tracks.
+	length time.Duration
 }
 
 func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool, format hwmediacodec.PixelFormat) (*source, error) {
@@ -101,6 +104,14 @@ func newSource(src hwmediacodec.PacketReader, prefetch int, loop, software bool,
 	}
 	go s.run()
 	return s, nil
+}
+
+// setLength sets the length of one pass through the stream where it is
+// not the video track's own.
+func (s *source) setLength(length time.Duration) {
+	s.mu.Lock()
+	s.length = length
+	s.mu.Unlock()
 }
 
 // streamOf returns the raw-stream source behind src, if that is what it is.
@@ -270,7 +281,12 @@ func (s *source) decode(ctx context.Context, gen, loop int, rebase, dropBefore t
 			return res, err
 		}
 	}
+	s.mu.Lock()
+	length := s.length
+	s.mu.Unlock()
 	switch {
+	case length > last:
+		res.end = length
 	case s.seeker != nil && s.seeker.Length() > last:
 		res.end = s.seeker.Length()
 	case prev >= 0:

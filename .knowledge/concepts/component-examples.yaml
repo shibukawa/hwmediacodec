@@ -75,8 +75,10 @@ constraints:
   the video''s aspect; top and bottom are square. Camera focal 0.75*h, distance 4.2 to fit a 2:1 box.'
 - 'Shader amounts for real footage: barrel 0.05*r2, ripple 0.002, scanline 0.93 +- 0.07, vignette 0.25*r2
   (were 0.10 / 0.004 / 0.85 +- 0.15 / 0.45).'
-- Audio tracks are ignored by the players (no AAC decoder in Ebitengine); the clip's AAC track is copied
-  by convert and listed by the container tests.
+- examples/player plays the audio track of an MP4 file (AAC or Opus) through the system's codec and Ebitengine's
+  audio, with the pictures following the sound (component:playback keys sound-); -mute and platforms
+  without an audio backend play silently. The texture sample still ignores sound. The clip's AAC track
+  is copied by convert and listed by the container tests.
 - 'The author asked for the fallback in the sample converter, not in the library: image/heif and image/avif
   stay hardware-only and the examples module takes the new dependencies (gen2brain/avif v0.6.0 with wazero
   v1.12.0, gen2brain/h265 v0.2.3).'
@@ -289,9 +291,9 @@ verification:
         quad. No console messages.'
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
     - path: playback/source.go
-      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+      input_hash: 136d62719405e7beee38bd6e86ca3e1906bed87ab19e074bc50168487245dac7
     - path: internal/webcodecs/decoder.go
       input_hash: 1af74611e07517c8d885bd7bbc47afc5984bc31f6cfddb39c9c134b50c58af37
   browser-bundled-clip-fallback:
@@ -315,9 +317,9 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: examples/internal/bundled/bundled.go
-      input_hash: c7af81569a624009ab343463076f4c161451a1f9b975d85e8f68af3f4fccefe7
+      input_hash: 7c496af2857489002c987f6a9f893b456007a7cd996bc57ff142df8c5a006de5
     - path: examples/internal/bundled/bundled_test.go
-      input_hash: 2f2a58ecea9b15416c804480dc0cdd0ffef96c15ea2300ceefc51bb594a24e9b
+      input_hash: c9a7dbc71437fff23550ef82bb9fb1ba90c86414495c0670eb69cbdc5859b0dc
   exmp4-convert-test:
     state: passed
     method: integration
@@ -338,7 +340,7 @@ verification:
     - path: mediacontainer/mp4/mux.go
       input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: examples/convert/main_test.go
       input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   exmp4-convert-1080p-run:
@@ -378,7 +380,7 @@ verification:
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: examples/thumbnails/main_test.go
       input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
   exscreen-record-run:
@@ -522,7 +524,7 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
   explayer-player-test:
     state: passed
     method: integration
@@ -538,9 +540,9 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: examples/player/main.go
-      input_hash: 7f1cf286de7f8a35058db0be054da8ec4b2f43718ec2bad9cded0fc46a00cfa6
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
     - path: examples/player/main_test.go
-      input_hash: 1ed253526ea0dd482aaf507f63ce9b88dd95dc99610bec3899ac52b81cee9ea1
+      input_hash: 849377731d0cef2fd940a0c5570991b75eca366badc4db8c41aa56128288ee19
   explayer-mesh-test:
     state: passed
     method: unit

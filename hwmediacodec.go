@@ -51,12 +51,16 @@
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
 //
-// AAC and Opus audio is decoded and encoded on macOS and iOS through
-// AudioToolbox and in the browser through WebCodecs, as far as the browser
-// has the codecs (see NewAudioDecoder and NewAudioEncoder); the other
-// platforms report ErrUnsupported for audio so far. The audio codecs are
-// the operating system's or the browser's own and run in software; the
-// library contains no codec and bundles none.
+// AAC and Opus audio is decoded and encoded through the codecs of the
+// platform (see NewAudioDecoder and NewAudioEncoder): AudioToolbox on
+// macOS and iOS, MediaCodec on Android, Media Foundation on Windows (which
+// has no Opus encoder), WebCodecs in the browser as far as the browser has
+// the codecs, and on Linux, which has no codecs of its own, the libraries
+// of the distribution where they are installed (libopus, libavcodec for
+// AAC decoding, libfdk-aac for AAC encoding). They run in software; the
+// library contains no codec and bundles none. HWMEDIACODEC_AUDIO_BACKENDS
+// restricts and reorders the audio backends ("libopus", "libavcodec",
+// "fdk-aac" on Linux) the way HWMEDIACODEC_BACKENDS does the video ones.
 //
 // On Linux the VA-API backend opens the first usable DRM render node and the
 // Intel VPL backend the first Intel one; set HWMEDIACODEC_VAAPI_DEVICE or
@@ -203,13 +207,24 @@ func backends() []codec.Backend {
 	return selectBackends(codec.Backends(), os.Getenv(backendsEnv))
 }
 
+// audioBackendsEnv is backendsEnv for the audio backends, which have
+// names of their own (for example "libavcodec" to decode AAC with FFmpeg's
+// library on a Linux machine that has libfdk-aac as well).
+const audioBackendsEnv = "HWMEDIACODEC_AUDIO_BACKENDS"
+
+// audioBackends returns the audio backends to consult, honouring
+// audioBackendsEnv.
+func audioBackends() []codec.AudioBackend {
+	return selectBackends(codec.AudioBackends(), os.Getenv(audioBackendsEnv))
+}
+
 // selectBackends picks the backends named in list, in the order given
 // there. Names that match no backend are ignored.
-func selectBackends(all []codec.Backend, list string) []codec.Backend {
+func selectBackends[B interface{ Name() string }](all []B, list string) []B {
 	if strings.TrimSpace(list) == "" {
 		return all
 	}
-	out := []codec.Backend{}
+	out := []B{}
 	seen := map[string]bool{}
 	for _, name := range strings.Split(list, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))

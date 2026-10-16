@@ -2,7 +2,8 @@ id: backend:media-foundation
 type: backend
 title: Media Foundation MFTs (Windows)
 summary: Windows' COM-based media pipeline. Hardware encoders/decoders are exposed as asynchronous Media
-  Foundation Transforms (MFTs) bound to a D3D11 device through IMFDXGIDeviceManager.
+  Foundation Transforms (MFTs) bound to a D3D11 device through IMFDXGIDeviceManager. Audio (AAC decode
+  and encode, Opus decode where installed) goes through software MFTs (keys audiomf-; never run on Windows).
 lifecycle: active
 authority: inferred
 aliases:
@@ -38,6 +39,23 @@ constraints:
   naming the control and the MFT.
 - 'windows/amd64 and windows/arm64 only (author decision 2026-10-09: 32-bit Windows is out of scope).
   windows/386 still builds with no backend.'
+- 'Transforms are found with MFTEnumEx in MFT_CATEGORY_AUDIO_DECODER / MFT_CATEGORY_AUDIO_ENCODER for
+  MFAudioFormat_AAC and MFAudioFormat_Opus (synchronous, local; a second try with MFT_ENUM_FLAG_UNTRUSTED_STOREMFT
+  for codecs from the Store). No Direct3D device is involved. The audio GUIDs were checked against mfapi.h
+  (Wine''s copy) on 2026-10-14.'
+- 'AAC decoder input type: MFAudioFormat_AAC, rate and channels of the output, 16 bits, MF_MT_AAC_PAYLOAD_TYPE
+  0 (raw access units), profile and level 0xFE, MF_MT_USER_DATA = the twelve bytes of HEAACWAVEINFO behind
+  its WAVEFORMATEX followed by the AudioSpecificConfig. Opus decoder input type: MFAudioFormat_Opus at
+  48 kHz with an OpusHead without pre-skip as user data (a guess: the transform is not documented).'
+- 'Output type: of the types the decoder lists, 16-bit PCM before 32-bit float, the channel count of
+  the stream before a downmix; chosen again on MF_E_TRANSFORM_STREAM_CHANGE. Frames are matched to packets
+  by order through audioutil.Frames. Flush drains and then sends MFT_MESSAGE_COMMAND_FLUSH.'
+- 'AAC encoder: 44100 or 48000 Hz, mono or stereo, 96, 128, 160 or 192 kbit/s (what the documentation
+  of the system''s encoder lists; default 96 for mono and 128 for stereo), anything else is ErrUnsupported;
+  one rate control for VBR and CBR. Output type set before the input type, the other order tried on failure.
+  Input goes in one packet''s worth (1024 samples) at a time. The AudioSpecificConfig is read from the
+  user data of the output type. The delay is measured with audioutil.MeasureDelay (assumed 1024 when
+  that fails); a new transform per signal.'
 capabilities:
   decode/h264:
     state: partial
@@ -207,6 +225,28 @@ acceptance:
     - mf-cross-build-check-m3
     - mf-layout-check-m3
     - mf-unit-tests-m3
+  audiomf-builds:
+    text: The module and its tests compile for windows/amd64 and windows/arm64 with CGO_ENABLED=0 and
+      go vet is clean.
+    scope:
+      milestone: audio-media-foundation
+      platform: windows
+    verified_by:
+    - audiomf-cross-build
+  audiomf-windows-audio:
+    text: go test -run 'Audio|TestProbe' . on a Windows machine with ffmpeg passes - AAC decoding against
+      ffmpeg in place, AAC encoding decoded by ffmpeg to the input in place, round trips, flush, errors.
+    scope:
+      milestone: audio-media-foundation
+      platform: windows
+    verified_by:
+    - audiomf-windows-run
+  audiomf-long-frame:
+    text: One Send of a minute of PCM to the Media Foundation AAC encoder queues at most maxAudioPending packets, Receive encodes the rest without the queue passing the bound, and after Flush the packets cover every sample plus the delay.
+    scope:
+      platform: windows
+    verified_by:
+    - audiomf-long-frame-run
 verification:
   mf-decode-reference-test-windows:
     state: not_run
@@ -369,13 +409,13 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: backends_windows.go
-      input_hash: fbdaf75f054445747ac732b818763350786a656e2a1279e687ee9efc818a46ec
+      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
     - path: internal/mediafoundation/backend.go
       input_hash: 7d1f296ce8e2400ca35f5fb905d31b2f9b9ac423e75bf8845d896f96e887c175
     - path: internal/mediafoundation/decoder.go
-      input_hash: 8aa6817e6808c10d946b25502503186cf13a3fb864342f963ed7d83873b23f41
+      input_hash: d24fe8f2c7facdcf296764c881a60756d3839327369e5fd66f14601b42fc6944
     - path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
     - path: internal/mediafoundation/sys/com.go
@@ -460,6 +500,60 @@ verification:
       input_hash: 1815e81c9589a5b1ba012bb7a4cb6fd1342671fa648a2e7371d414dbd9badb8b
     - path: internal/mediafoundation/encodeutil_test.go
       input_hash: 24ea374200a61af9e90c6001cae4c3102390c047b7d889bc93e26c0d0282b211
+  audiomf-cross-build:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: audio-media-foundation
+      platform: windows
+    test: scripts/crossbuild.sh; GOOS=windows GOARCH=amd64 go vet . ./internal/mediafoundation/... (and
+      arm64)
+    evidence:
+      path: internal/mediafoundation/audio.go
+      note: 2026-10-14 on macOS; both architectures build and vet clean
+    basis:
+    - path: internal/mediafoundation/audio.go
+      input_hash: fac99ab704d4114a7e5581c6d7f5592f2d666acf8bb6d705c05b241b33a29912
+    - path: internal/mediafoundation/audiodecoder.go
+      input_hash: b75c6c630dea2a4046fe4ce6ffd98975ffd4c391b8b561acf907ff74530fdef2
+    - path: internal/mediafoundation/audioencoder.go
+      input_hash: 8c2542c59b261d6467c1e256152f8718675270b769360309fc787048dfefc3f3
+    - path: internal/mediafoundation/sys/audio.go
+      input_hash: 038db1a3951851faf5c71ce9ebc9b2ecf65edbcb4d993f9ddfaf63555186e0aa
+    - path: backends_windows.go
+      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
+  audiomf-windows-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: audio-media-foundation
+      platform: windows
+    test: go test -count=1 -run 'Audio|TestProbe' -v . on Windows with ffmpeg and ffprobe on the PATH
+    evidence:
+      path: internal/mediafoundation/audiodecoder.go
+      note: 'no Windows machine was available. Open points a run has to settle: whether the AAC decoder
+        returns the samples of every packet from the first one on (the frame queue assumes it), the encoder''s
+        delay, whether HE-AAC comes out 962 samples late as with FFmpeg, the order of SetOutputType and
+        SetInputType on the encoder, and whether the Opus decoder takes the type at all'
+  audiomf-long-frame-run:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      platform: windows
+    test: go test -count=1 -run LongFrame ./internal/mediafoundation on Windows
+    evidence:
+      path: internal/mediafoundation/audio_longframe_test.go
+      note: 'written 2026-10-16, compiled for windows/amd64 and windows/arm64 only; no Windows machine was available'
+    basis:
+    - path: internal/mediafoundation/audioencoder.go
+      input_hash: 8c2542c59b261d6467c1e256152f8718675270b769360309fc787048dfefc3f3
+    - path: internal/mediafoundation/audio_longframe_test.go
+      input_hash: 578c0cba236f768cb9185d389fc19f83bf31ae18b35866a4bbc41f44d9343fb6
+    - path: internal/testutil/longframe.go
+      input_hash: fa710ae2501ad987fa3430c72a0ef8ba856586b832e90359ef36f758cc4d2dfe
 open_questions:
   mf-hardware-verification:
     text: Does the implementation work on real Intel hardware? The riskiest unverified points are (1)
@@ -712,7 +806,15 @@ relations:
   to: milestone:windows-media-foundation
 - relation: supersedes
   to: milestone:av1-decode-linux-windows
+- relation: supersedes
+  to: milestone:audio-media-foundation
 history:
+  audiomf-restored-2026-10-16:
+    summary: The content of milestone:audio-media-foundation (delivered 2026-10-14 but merged into a stacked branch instead
+      of main) was re-applied onto main on 2026-10-16 and folded into this concept, keys prefixed audiomf-;
+      the milestone file remains as a superseded stub with its timeline.
+    supersedes:
+    - milestone:audio-media-foundation
   decode-implemented-2026-10-09:
     summary: H.264/HEVC decode backend written (milestone:windows-media-foundation); lifecycle moved to
       active. Verification on Windows hardware pending.

@@ -1,11 +1,13 @@
 id: component:audio
 type: component
-title: 'Audio: the AAC/Opus API, the AudioToolbox backend (macOS, iOS) and MP4 audio tracks'
+title: 'Audio: the AAC/Opus API, the AudioToolbox backend (macOS, iOS), the Linux library backends and MP4 audio tracks'
 summary: NewAudioDecoder and NewAudioEncoder with AudioFormat and AudioFrame in the root package; AAC-LC/HE-AAC
   and Opus through AudioToolbox's AudioConverter on darwin and iOS, through WebCodecs in the browser (see
-  backend:webcodecs), ErrUnsupported elsewhere until their slices; encoding/adts for .aac files; audio
+  backend:webcodecs), through MediaCodec on Android (backend:mediacodec, audiomc-), Media Foundation
+  on Windows (backend:media-foundation, audiomf-) and libopus, libavcodec and libfdk-aac on Linux (audiolx-
+  keys here), with the shared helpers in internal/audioutil; encoding/adts for .aac files; audio
   tracks in mediacontainer/mp4 with the encoder delay in the edit list. No bundled codec, PCM in and out,
-  no devices (decision:audio-codecs). Consolidated on 2026-10-16 from milestone:audio-audiotoolbox.
+  no devices (decision:audio-codecs). Consolidated on 2026-10-16 from milestone:audio-audiotoolbox and milestone:audio-linux.
 lifecycle: active
 authority: authored
 aliases:
@@ -72,6 +74,49 @@ constraints:
   one whose presentation starts later gets an empty edit of the difference in front; passthrough tracks
   keep their source''s edit list. Demuxed audio packets have PTS minus the edit offset, so the delay lies
   before 0. AudioPacketSource.SeekKeyframe positions one packet (AAC) or 80 ms (Opus) before the target.'
+- 'Registration order (backends_linux.go): libopus, libavcodec, fdk-aac. AAC decodes with libavcodec
+  where both are installed, because the FDK builds of Fedora and Ubuntu 24.04 (fdk-aac-free) are AAC-LC
+  only; libfdk-aac is there for its encoder and as the decoder of machines without libavcodec.'
+- 'libopus: libopus.so.0; opus_decode / opus_decode_float into a 5760-sample buffer, one frame per packet;
+  encoder at 48 kHz, mono or stereo, OPUS_APPLICATION_AUDIO, 960-sample packets from a FIFO, bitrate
+  and VBR/CBR through opus_encoder_ctl (variadic, called with three fixed arguments, which works on amd64
+  and arm64), delay from OPUS_GET_LOOKAHEAD (312). Decoder and encoder states are recreated on Flush.'
+- 'libavcodec: libavcodec.so.62 down to .58 (anything else is not loaded, and avcodec_version is checked);
+  libavutil symbols are found through the same handle. Only functions and the heads of three structures
+  are used, which are identical from 58 to 62: AVCodecParameters (codec_type@0, codec_id@4, extradata@16,
+  extradata_size@24), AVPacket (data@24, size@32) and AVFrame (data@0, linesize@64, extended_data@96,
+  nb_samples@112, format@116). The AudioSpecificConfig goes in as av_mallocz''d extradata with 64 bytes
+  of padding; the packet borrows the caller''s bytes (no AVBufferRef, so the library copies). The channel
+  count is read from the frame''s planes (planar) or av_opt_get_int "ac" / linesize (packed), the rate
+  from av_opt_get_int "ar". Sample formats S16, S32 and FLT, packed or planar. Decode only: encoding
+  would need AVFrame.ch_layout, whose place changed between versions.'
+- 'libfdk-aac: libfdk-aac.so.2 or .so.1. Decoder: TT_MP4_RAW, aacDecoder_ConfigRaw with the AudioSpecificConfig,
+  AAC_PCM_OUTPUT_CHANNEL_MAPPING 1 (WAV order), AAC_PCM_LIMITER_ENABLE 0 and AAC_CONCEAL_METHOD 1 -
+  the limiter and the default concealment of AAC-LC (energy interpolation) each delay the output, the
+  latter by a whole packet, which showed as a 1024-sample shift against ffmpeg and as a measured encoder
+  delay of 3072 instead of 2048 before it was set. Only the first three fields of CStreamInfo are read.
+  Encoder: AOT 2, bitrate mode 0 (both rate controls), afterburner on, raw access units, input in WAV
+  order; delay measured by audioutil.MeasureDelay with the backend''s own decoder (2048), new handle
+  per signal.'
+- 'aacDecoder_GetLibInfo with 64 zeroed LIB_INFO entries tells whether the FDK library has the SBR decoder
+  module (FDK_SBRDEC = 5). Without it (fdk-aac-free) an explicitly signalled HE-AAC stream is refused
+  with ErrUnsupported instead of being decoded as its core at half the rate.'
+- 'HE-AAC: both libraries leave the 962 samples of the band replication''s delay in their output (aac.SBRDecoderDelay).
+  When the decoded rate differs from the core rate the backends skip that many samples at the start
+  (audioutil.Frames.Skip) so that HE-AAC lies where AudioToolbox puts it; the tail comes from aacDecoder_DecodeFrame
+  with AACDEC_FLUSH for the FDK library and is silence for libavcodec, whose decoder has nothing to
+  drain.'
+- 'HWMEDIACODEC_AUDIO_BACKENDS is a list like HWMEDIACODEC_BACKENDS (selectBackends became generic).
+  When no backend takes a request the error reported is the first one from a backend that implements
+  the codec (codec.NotImplemented marks the others), so a refused bitrate is explained by the encoder
+  and not by the last backend in the list.'
+- 'ffmpeg 7 and older play the padding of AAC behind an MP4 edit list (ffmpeg 9 on the Mac trims it);
+  the mux tests accept both.'
+- 'Every audio encoder takes a frame of any length in parts: Send encodes until maxPending packets wait
+  and keeps the rest, Receive encodes more as it hands packets out, Flush encodes the remainder (the
+  queue may then exceed the bound by what one frame codes to). MediaCodec is asynchronous, so there the
+  bound is on the input handed over; the queue passes it by at most the packets of the codec''s buffers
+  in flight. internal/testutil.CheckLongFrame is the shared regression check.'
 acceptance:
   audioat-aac-decode-matches-ffmpeg:
     text: AAC-LC streams from ffmpeg's encoder (48 kHz stereo, 44.1 kHz mono, 22.05 kHz stereo in ADTS;
@@ -195,6 +240,37 @@ acceptance:
       platform: *id001
     verified_by:
     - audioat-existing-suites
+  audiolx-containers:
+    text: 'scripts/linux_audio_test.sh passes on Debian 12 and 13, Ubuntu 22.04 and 24.04 and Fedora (libavcodec
+      59, 61, 58, 60 and 62; full and "free" FDK builds), each with every backend, with libopus,fdk-aac and
+      with libopus,libavcodec: the audio tests of the root package, playback, mediacontainer/mp4, encoding/adts
+      and internal/audioutil, HE-AAC included (files made by afconvert on the Mac).'
+    scope:
+      milestone: audio-linux
+      platform: linux
+    verified_by:
+    - audiolx-container-run
+  audiolx-amd64:
+    text: The same tests pass on linux/amd64.
+    scope:
+      milestone: audio-linux
+      platform: linux
+    verified_by:
+    - audiolx-amd64-run
+  audiolx-no-libraries:
+    text: On a system without the libraries Probe lists no audio, the constructors return ErrUnsupported
+      naming the missing library, and the tests skip.
+    scope:
+      milestone: audio-linux
+      platform: linux
+    verified_by:
+    - audiolx-bare-run
+  audiolx-long-frame:
+    text: One Send of a minute of PCM to the libopus and libfdk-aac encoders queues at most maxPending packets, a second Send gets ErrAgain, Receive encodes the rest without the queue passing the bound, and after Flush the packets cover every sample plus the delay.
+    scope:
+      platform: linux
+    verified_by:
+    - audiolx-long-frame-run
 verification:
   audioat-root-audio-tests:
     state: passed
@@ -213,11 +289,11 @@ verification:
         Opus CBR 64000/160000'
     basis:
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 134804ac9526816137bc6c298818cdb6f1d36222cd27837704c561602268ff93
     - path: audio.go
-      input_hash: ea935c4f34f7d0a9e122d00db55fbfded56f216833143317797d2aebfe21cf12
+      input_hash: c8616cf0c435ecf4feceed0fc1874c146139bab1eccf0e18c4b63953cc9cd83e
     - path: internal/codec/audio.go
-      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
+      input_hash: c65f08066a5f81a456d9a8216afe2ebadd684b5ccfb2005634b372f5f500ae9b
     - path: internal/audiotoolbox/decoder.go
       input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
@@ -248,15 +324,15 @@ verification:
         duration and ffmpeg plays up to 192 padding samples)'
     basis:
     - path: mediacontainer/mp4/audio_test.go
-      input_hash: b73c85310211174442bafacf727d1f9698b6fb3a96da7af282cf3a030385cbca
+      input_hash: d113a2b9aea5d5ca49df9f732f7abe5e51d20a03af54bbf3d98e96bea834bd96
     - path: audio_mp4_test.go
-      input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
+      input_hash: 24f4903474b1c586ea5c2947e66939b13ab15b6405c57ce47b9b8dc5a4a300ef
     - path: mediacontainer/mp4/audio.go
-      input_hash: a44e93295d8afe309bbfde3d467004803e5630837082afa5ca65b94439e946c7
+      input_hash: 7b3cffc1564fa912b60859ee143efdf199626b0fdb6f5f954d36cbae4e294f70
     - path: mediacontainer/mp4/mux.go
       input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: internal/audiotoolbox/decoder.go
       input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
@@ -275,7 +351,7 @@ verification:
         only
     basis:
     - path: internal/aac/config.go
-      input_hash: c844729f35df4162660648e17bc69c11d1f42931ff71fa3a133a47568bc81a3d
+      input_hash: 2cc320c7f13c65c1ee17bb56a2e09a14db22f632ba706e5ad11ae5a469a79266
     - path: internal/aac/adts.go
       input_hash: 99366d3c51ec008b9ff920e5de9e24abb697b4267e4aaca3e9d5ce1ebeb6a12a
     - path: internal/aac/aac_test.go
@@ -308,7 +384,7 @@ verification:
         cannot run there
     basis:
     - path: audio_test.go
-      input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
+      input_hash: 134804ac9526816137bc6c298818cdb6f1d36222cd27837704c561602268ff93
     - path: internal/audiotoolbox/backend.go
       input_hash: 48e6d2cf9b8402612d13978f7863ff5fdb0b39a858652b8c702ff19302bae6b1
     - path: internal/audiotoolbox/sys/sys.go
@@ -340,11 +416,123 @@ verification:
         check passes
     basis:
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: backends_darwin.go
       input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
+  audiolx-container-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-linux
+      platform: linux
+    test: scripts/linux_audio_test.sh
+    evidence:
+      path: scripts/linux_audio_test.sh
+      note: '2026-10-14, Docker 29.8 on an Apple M3 (linux/arm64): ffmpeg 7.1.5, 5.1.9, 6.1.1, 4.4.2 and
+        8.1.3; AAC decode against ffmpeg 60 to 81 dB (fdk-aac) and 75 to 113 dB (libavcodec) at shift 0;
+        AAC encoded by libfdk-aac decoded by ffmpeg to the input at 50 to 53 dB, delay 2048; Opus 38 to
+        39 dB, delay 312; HE-AAC 32.8 dB and HE-AAC v2 7.2 dB at shift 0 with both decoders; on Ubuntu
+        24.04 and Fedora the fdk-aac-only run skips HE-AAC (no SBR in the library); rerun 2026-10-16 after
+        the bounded encoder pump and the packet size checks, all 15 runs passing'
+    basis:
+    - path: internal/libopus/backend.go
+      input_hash: 65f3e7117f94320e7068a7fec717240bf810eb0c1dba4e8495e170a6718af61b
+    - path: internal/libopus/sys.go
+      input_hash: fc94d18da5073d268c7f98e6d2ed6b794ed0aa68fda901b2cde8f8b006e5ad67
+    - path: internal/libavcodec/backend.go
+      input_hash: 226f019c1544364923a23d0c85b13f6562f01c4396add0965b036ee03d440b3a
+    - path: internal/libavcodec/sys.go
+      input_hash: 4927125eed3ba3c12c60bc40e38202097eb2b3bf9454d15d0ff8f0db2d078bb3
+    - path: internal/fdkaac/backend.go
+      input_hash: c7e9c865d05d126f6996135be23e1f23b27e5ede57f3573d75152add5b1d13b4
+    - path: internal/fdkaac/sys.go
+      input_hash: d6fc14b9149e492ca8513fb39b4704484c7f32a32a5184107d8aea803e29462e
+    - path: internal/audioutil/frames.go
+      input_hash: accca964bc5f2c8ee2fa68003f5ec6760c683ee009d2dde6565d789a4f35e232
+    - path: backends_linux.go
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
+    - path: audio.go
+      input_hash: c8616cf0c435ecf4feceed0fc1874c146139bab1eccf0e18c4b63953cc9cd83e
+    - path: audio_mp4_test.go
+      input_hash: 24f4903474b1c586ea5c2947e66939b13ab15b6405c57ce47b9b8dc5a4a300ef
+    - path: scripts/linux_audio_test.sh
+      input_hash: 5784a7015e6ef3fb8d8c6fc27a6ed727667db727ef962dc62d75d1b55a8ba465
+  audiolx-amd64-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-linux
+      platform: linux
+    test: PLATFORM=linux/amd64 DISTROS=debian:trixie scripts/linux_audio_test.sh
+    evidence:
+      path: scripts/linux_audio_test.sh
+      note: 2026-10-14, Debian 13 under emulation on an Apple M3; all three backend selections pass
+    basis:
+    - path: internal/libopus/sys.go
+      input_hash: fc94d18da5073d268c7f98e6d2ed6b794ed0aa68fda901b2cde8f8b006e5ad67
+    - path: internal/libavcodec/sys.go
+      input_hash: 4927125eed3ba3c12c60bc40e38202097eb2b3bf9454d15d0ff8f0db2d078bb3
+    - path: internal/fdkaac/sys.go
+      input_hash: d6fc14b9149e492ca8513fb39b4704484c7f32a32a5184107d8aea803e29462e
+  audiolx-bare-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-linux
+      platform: linux
+    test: the root test binary (-test.run 'Audio|TestProbe') and the CLI in a plain debian:trixie container
+    evidence:
+      path: backends_linux.go
+      note: '2026-10-14: Probe prints no backend, encode-audio fails with "libfdk-aac is not installed"
+        / "libopus is not installed", the tests pass or skip'
+    basis:
+    - path: backends_linux.go
+      input_hash: b106da06592f5f0280171dc91929743d479457839de6a9edf4eab2349bbcd385
+    - path: internal/codec/audio.go
+      input_hash: c65f08066a5f81a456d9a8216afe2ebadd684b5ccfb2005634b372f5f500ae9b
+  audiolx-long-frame-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: linux
+    test: scripts/linux_audio_test.sh (TestEncoderEncodesLongFrameInParts in internal/libopus and internal/fdkaac)
+    evidence:
+      path: internal/libopus/longframe_test.go
+      note: '2026-10-16 on an Apple M3 through Docker (arm64): Debian 12 and 13, Ubuntu 22.04 and 24.04, Fedora, each with all backends, libopus+fdk-aac and libopus+libavcodec; every audio test of the script passed as well'
+    basis:
+    - path: internal/libopus/backend.go
+      input_hash: 65f3e7117f94320e7068a7fec717240bf810eb0c1dba4e8495e170a6718af61b
+    - path: internal/fdkaac/backend.go
+      input_hash: c7e9c865d05d126f6996135be23e1f23b27e5ede57f3573d75152add5b1d13b4
+    - path: internal/libopus/longframe_test.go
+      input_hash: 16b5b33ba92f1327068452c32a7ea868059d2e9e1e44f5cac04cb98dab13928b
+    - path: internal/fdkaac/longframe_test.go
+      input_hash: f1fc141e02dd36a67c1fe2919b8b5b43803135133db532f2602474de0067ce2c
+    - path: internal/testutil/longframe.go
+      input_hash: fa710ae2501ad987fa3430c72a0ef8ba856586b832e90359ef36f758cc4d2dfe
+    - path: scripts/linux_audio_test.sh
+      input_hash: 5784a7015e6ef3fb8d8c6fc27a6ed727667db727ef962dc62d75d1b55a8ba465
+open_questions:
+  audio-encoder-queue-bound:
+    text: The encoders re-applied on 2026-10-16 (libopus, libfdk-aac, MediaCodec, Media Foundation) check
+      maxPending only before a Send, so one long frame still produces every packet at once - the case
+      the second security review fixed for AudioToolbox and WebCodecs (Send encodes until the queue is
+      full, Receive encodes the rest, Flush the remainder). Their input handling was also not reviewed
+      against the standards of the codec hardening pass.
+    state: answered
+    resolution: 'Answered 2026-10-16 (PR #27): every encoder pumps up to the bound in Send and Receive and
+      encodes the rest in Flush; libopus, libfdk-aac and MediaCodec are verified by the long-frame test
+      (audiolx-long-frame, audiomc-long-frame), Media Foundation only compiles (audiomf-long-frame). Input
+      handling: audioutil.CheckPacket bounds decoder packets at MaxPacketBytes (1 MiB) in the five re-applied
+      decoders, NewAudioDecoder refuses a Config over 64 KiB, and the library-reported sizes are checked
+      (opus_decode sample count, aacEncEncode consumed and written bytes, MediaCodec output ranges through
+      outputRange, IMFMediaBuffer lengths, libavcodec planar line sizes).'
 relations:
 - relation: part_of
   to: requirement:hwmediacodec
@@ -358,7 +546,15 @@ relations:
   to: component:core-api
 - relation: depends_on
   to: component:mediacontainer
+- relation: supersedes
+  to: milestone:audio-linux
 history:
+  audiolx-restored-2026-10-16:
+    summary: The content of milestone:audio-linux (delivered 2026-10-14 but merged into a stacked branch instead
+      of main) was re-applied onto main on 2026-10-16 and folded into this concept, keys prefixed audiolx-;
+      the milestone file remains as a superseded stub with its timeline.
+    supersedes:
+    - milestone:audio-linux
   audioat-reworked-with-browser-2026-10-13:
     summary: While the browser slice (milestone:audio-webcodecs) was added on the same branch - the tests
       that take the codecs through MP4 files moved from mediacontainer/mp4 to the root package (audio_mp4_test.go,

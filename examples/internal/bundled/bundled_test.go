@@ -92,7 +92,7 @@ func TestOpenPrefersHEVC(t *testing.T) {
 func TestOpenH264Clip(t *testing.T) {
 	mediatest.RequireHardware(t, hwmediacodec.H264, hwmediacodec.Decode)
 	clips := assets.Clips()
-	p, v, err := open(clips[1:], [][]ebitenvideo.Option{{ebitenvideo.WithLoop()}})
+	p, v, err := open(clips[1:], [][]ebitenvideo.Option{{ebitenvideo.WithLoop()}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

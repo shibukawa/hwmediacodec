@@ -26,22 +26,33 @@ type Video struct {
 // -software flag, a second round allows the browser's software decoders.
 // The error of the first attempt is returned when nothing works.
 func Open(opts ...ebitenvideo.Option) (*ebitenvideo.Player, Video, error) {
+	return open(assets.Clips(), rounds(opts), false)
+}
+
+// OpenWithSound is Open with the clip's audio track played through
+// Ebitengine's audio. Where the platform has no decoder for the track the
+// player comes back without sound (see ebitenvideo.Player.AudioErr).
+func OpenWithSound(opts ...ebitenvideo.Option) (*ebitenvideo.Player, Video, error) {
+	return open(assets.Clips(), rounds(opts), true)
+}
+
+func rounds(opts []ebitenvideo.Option) [][]ebitenvideo.Option {
 	rounds := [][]ebitenvideo.Option{opts}
 	if runtime.GOOS == "js" {
 		rounds = append(rounds, append(opts[:len(opts):len(opts)], ebitenvideo.WithSoftwareFallback()))
 	}
-	return open(assets.Clips(), rounds)
+	return rounds
 }
 
 // open tries every clip with every round of options, clips first.
-func open(clips []assets.Clip, rounds [][]ebitenvideo.Option) (*ebitenvideo.Player, Video, error) {
+func open(clips []assets.Clip, rounds [][]ebitenvideo.Option, sound bool) (*ebitenvideo.Player, Video, error) {
 	var (
 		player *ebitenvideo.Player
 		video  Video
 	)
 	err := choose(len(rounds), len(clips), func(round, clip int) error {
 		var err error
-		player, video, err = openClip(clips[clip], rounds[round])
+		player, video, err = openClip(clips[clip], rounds[round], sound)
 		return err
 	})
 	return player, video, err
@@ -73,7 +84,7 @@ func choose(rounds, clips int, try func(round, clip int) error) error {
 	return first
 }
 
-func openClip(clip assets.Clip, opts []ebitenvideo.Option) (*ebitenvideo.Player, Video, error) {
+func openClip(clip assets.Clip, opts []ebitenvideo.Option, sound bool) (*ebitenvideo.Player, Video, error) {
 	d, err := mp4.NewDemuxer(clip.Open())
 	if err != nil {
 		return nil, Video{}, fmt.Errorf("%s: %w", clip.Name, err)
@@ -81,6 +92,9 @@ func openClip(clip assets.Clip, opts []ebitenvideo.Option) (*ebitenvideo.Player,
 	v := d.Video()
 	if v == nil {
 		return nil, Video{}, fmt.Errorf("%s has no H.264, HEVC or AV1 video track", clip.Name)
+	}
+	if a := d.Audio(); sound && a != nil {
+		opts = append(opts[:len(opts):len(opts)], ebitenvideo.WithAudio(a.PacketSource()))
 	}
 	p, err := ebitenvideo.NewPlayerFromSource(v.PacketSource(), opts...)
 	if err != nil {
