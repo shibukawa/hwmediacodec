@@ -2,6 +2,8 @@ module github.com/shibukawa/hwmediacodec/ebitenvideo
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	github.com/shibukawa/hwmediacodec v0.2.0

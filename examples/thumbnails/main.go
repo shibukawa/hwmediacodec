@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -127,21 +128,21 @@ func run(ctx context.Context, o options, path string) ([]string, error) {
 		}
 		at := video.PresentationTime(f.PTS)
 		name := filepath.Join(o.outDir, fmt.Sprintf("%s_%s.%s", base, stamp(at), o.format))
-		w, err := os.Create(name)
+		var buf bytes.Buffer
+		switch o.format {
+		case "png":
+			err = png.Encode(&buf, img)
+		default:
+			err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: o.quality})
+		}
 		if err != nil {
 			return err
 		}
-		defer w.Close()
-		switch o.format {
-		case "png":
-			err = png.Encode(w, img)
-		default:
-			err = jpeg.Encode(w, img, &jpeg.Options{Quality: o.quality})
+		if err := os.WriteFile(name, buf.Bytes(), 0o644); err != nil {
+			return err
 		}
-		if err == nil {
-			files = append(files, name)
-		}
-		return err
+		files = append(files, name)
+		return nil
 	}
 	// Only the chosen keyframes go into the decoder.
 	frames := hwmediacodec.NewDecodeReader(dec, &keyframes{v: video, picks: pick(video, o)})

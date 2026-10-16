@@ -92,6 +92,9 @@ func (p *PPS) TileRowHeights(sps *SPS) []int {
 	return tileSizes(p.NumTileRows, sps.PicHeightInCtbs(), p.UniformSpacing, p.RowHeightMinus1)
 }
 
+// tileSizes returns nil when explicit sizes do not leave at least one
+// coding tree block for every column or row: the PPS is parsed without
+// its SPS, so the sum is only checked here.
 func tileSizes(n, total int, uniform bool, minus1 []uint32) []int {
 	if n < 1 {
 		n = 1
@@ -103,14 +106,17 @@ func tileSizes(n, total int, uniform bool, minus1 []uint32) []int {
 		}
 		return out
 	}
-	rest := total
+	rest := int64(total)
 	for i := 0; i < n-1; i++ {
 		if i < len(minus1) {
 			out[i] = int(minus1[i]) + 1
 		}
-		rest -= out[i]
+		rest -= int64(out[i])
 	}
-	out[n-1] = rest
+	if rest < 1 || rest > int64(total) {
+		return nil
+	}
+	out[n-1] = int(rest)
 	return out
 }
 

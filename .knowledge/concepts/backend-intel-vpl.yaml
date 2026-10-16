@@ -239,7 +239,7 @@ verification:
     - path: internal/vpl/sys/sys_linux_test.go
       input_hash: 5ea74658f7bbf3ac6e91e051170528db1e1bd3a6c60cdb827537ebd1172c9565
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
   hardware-decode:
     state: not_run
     method: integration
@@ -254,9 +254,9 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/decoder.go
-      input_hash: f775c7ba8d74f9195f0cfa4bdb57870a901c33c3c6fcac64eb434ae8f4cf8d1b
+      input_hash: 2763179b8adc0bf4cc1e796331a036daa324e6fbf7c36e5fbe0b3733c6f83a05
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
   hardware-encode:
@@ -272,7 +272,7 @@ verification:
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 670e8242ef303b110e60be805d70ff2dd2127b6509801e66760e5813f833f0df
+      input_hash: ccb6b24a920c4d248f82b35e848f0f2d5b87af9b3e7c73e194a2436917d3b2af
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/backend.go
@@ -319,7 +319,7 @@ verification:
     - path: internal/vpl/sys/sys_linux_test.go
       input_hash: 5ea74658f7bbf3ac6e91e051170528db1e1bd3a6c60cdb827537ebd1172c9565
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: internal/vpl/backend_linux_test.go
@@ -378,9 +378,9 @@ verification:
         Flush.'
     basis:
     - path: internal/vpl/decoder.go
-      input_hash: f775c7ba8d74f9195f0cfa4bdb57870a901c33c3c6fcac64eb434ae8f4cf8d1b
+      input_hash: 2763179b8adc0bf4cc1e796331a036daa324e6fbf7c36e5fbe0b3733c6f83a05
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: internal/vpl/pixels.go
@@ -410,11 +410,11 @@ verification:
         flag although the stream is in display order; the CBR/VBR thresholds came from VideoToolbox.'
     basis:
     - path: internal/vpl/encoder.go
-      input_hash: 670e8242ef303b110e60be805d70ff2dd2127b6509801e66760e5813f833f0df
+      input_hash: ccb6b24a920c4d248f82b35e848f0f2d5b87af9b3e7c73e194a2436917d3b2af
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/session.go
-      input_hash: ac7b69baa5c672fb14af2e7166b71e1813f73a5c2e3bf049c639f4d8b39cf07a
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
     - path: encode_test.go

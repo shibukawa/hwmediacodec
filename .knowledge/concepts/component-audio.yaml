@@ -217,13 +217,13 @@ verification:
     - path: audio.go
       input_hash: ea935c4f34f7d0a9e122d00db55fbfded56f216833143317797d2aebfe21cf12
     - path: internal/codec/audio.go
-      input_hash: c6df88743aa866e0c552cf904d9c76c7fbe1191b505f202d856cad2a400c98f1
+      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
     - path: internal/audiotoolbox/decoder.go
-      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
+      input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
     - path: internal/audiotoolbox/converter.go
-      input_hash: 82ddf10c9ad450751ba041e409354bf7b5a4f333c0a546d360cc6640710c3885
+      input_hash: 9f0b11730025cd6c5e07d4bb0a044ce3cb6641c7b3da8dcf04cf990188b7fb0f
     - path: internal/audiotoolbox/sys/sys.go
       input_hash: 57abcf75926bd4f69aeb42020ccceed1483fcd6a86f0a0ebcb5563bc2ad8a112
     - path: encoding/adts/adts.go
@@ -252,15 +252,15 @@ verification:
     - path: audio_mp4_test.go
       input_hash: 7a67e9c96dc38ca3104872aeedb4ec79167997eb51cbb723562377bf0674a8e0
     - path: mediacontainer/mp4/audio.go
-      input_hash: 23d5f094a712f78596564ba08c1bd1333a988dab0558b9f1c968106f145ee9ab
+      input_hash: a44e93295d8afe309bbfde3d467004803e5630837082afa5ca65b94439e946c7
     - path: mediacontainer/mp4/mux.go
-      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: internal/audiotoolbox/decoder.go
-      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
+      input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
   audioat-header-unit-tests:
     state: passed
     method: unit
@@ -342,7 +342,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: backends_darwin.go
       input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
 relations:

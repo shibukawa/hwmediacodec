@@ -64,7 +64,7 @@ func TestIrefVersionOneUses16BitCount(t *testing.T) {
 }
 
 func TestPayloadRejectsExtentAmplification(t *testing.T) {
-	f := &file{data: make([]byte, 8)}
+	f := &file{src: bytesSource(make([]byte, 8))}
 	if _, err := f.payload(&item{extents: [][2]uint64{{0, 8}, {0, 8}}}); err == nil {
 		t.Fatal("repeated extents amplified the payload")
 	}
@@ -74,7 +74,7 @@ func TestGridRejectsUnrepresentableDimensions(t *testing.T) {
 	data := []byte{0, 1, 0, 0}
 	data = binary.BigEndian.AppendUint32(data, math.MaxUint32)
 	data = binary.BigEndian.AppendUint32(data, math.MaxUint32)
-	f := &file{data: data, items: map[uint32]*item{2: {id: 2, typ: "hvc1"}}}
+	f := &file{src: bytesSource(data), items: map[uint32]*item{2: {id: 2, typ: "hvc1"}}}
 	if _, err := f.grid(&item{extents: [][2]uint64{{0, uint64(len(data))}}, dimg: []uint32{2}}); err == nil {
 		t.Fatal("overflowing grid accepted")
 	}

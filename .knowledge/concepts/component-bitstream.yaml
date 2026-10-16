@@ -197,17 +197,17 @@ verification:
       note: ffmpeg 9.0.1 / libx264 on the author's M3, 2026-10-09; six streams, every element compared
     basis:
     - path: internal/h264/dpb.go
-      input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
+      input_hash: 824035313eaa9a6ae7af7feb7090d70d898556293763c07ce4c226cc89171e51
     - path: internal/h264/paramsets.go
       input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
-      input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
+      input_hash: 47109749b1821b017309c38ac118700aad2128eb27303514209f4604b1592049
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
+      input_hash: d26ccdd3456c981a69670049ced1a0707bb9435b1fd57dda69502f69b6634a70
     - path: internal/h264/oracle_test.go
       input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
     - path: internal/testutil/h264.go
@@ -228,17 +228,17 @@ verification:
       path: internal/h264/dpb_oracle_test.go
     basis:
     - path: internal/h264/dpb.go
-      input_hash: 2b89dd14648d1ab7eeac0fac8ccfa83bb072846e3f44c09ee9693d0f65df7b18
+      input_hash: 824035313eaa9a6ae7af7feb7090d70d898556293763c07ce4c226cc89171e51
     - path: internal/h264/paramsets.go
       input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
     - path: internal/h264/pps.go
       input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
     - path: internal/h264/scaling.go
-      input_hash: 491897848a2f7c2362bbfe920175e7e319c4690094bf75246132db00cd1062e0
+      input_hash: 47109749b1821b017309c38ac118700aad2128eb27303514209f4604b1592049
     - path: internal/h264/slice.go
       input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
     - path: internal/h264/sps.go
-      input_hash: c2da4851889cb3b8f4e30d9396ad99363acd40915071b8017b0774ef8e70ac0c
+      input_hash: d26ccdd3456c981a69670049ced1a0707bb9435b1fd57dda69502f69b6634a70
     - path: internal/h264/dpb_oracle_test.go
       input_hash: 2ccab55495face2c8e5141ce1f497de8a43e0f8875d482cfdf665c2a44deaa93
     - path: internal/h264/dpb_test.go
@@ -299,9 +299,9 @@ verification:
     - path: internal/hevc/sps.go
       input_hash: 1374983ce37a6610377a25f0c5b14aca43b9af613141f7fb2c7d18127bbdefdf
     - path: internal/hevc/pps.go
-      input_hash: e77afbbb3211faff364fd819840e0e5fd348a8e536876bf327b8d15fa5084a11
+      input_hash: 1c3e21cc8c7c1ae01f8963fd4324502808cccd15fc2f98869b9bdace18a8a3a5
     - path: internal/hevc/slice.go
-      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
     - path: internal/hevc/paramsets.go
       input_hash: 960c560c9686df382fdf1b439059cfe96a87aaff1b4c0b2ea9fa743e388c4626
     - path: internal/hevc/oracle_test.go
@@ -330,7 +330,7 @@ verification:
     - path: internal/hevc/rps.go
       input_hash: 3ee4ab2fe14bd6349211998461d72b7d18ca9bb58b17270bd89224d21812a46f
     - path: internal/hevc/slice.go
-      input_hash: 95cdbd9e9fcec7bfdeb9c58c5f35466323bb7e7acf6a0486a6718ae2043cf084
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
     - path: internal/hevc/dpb_oracle_test.go
       input_hash: be2e3cda47e259fb407748d1fa4f787e89723173fdacf30b64e3493367a60437
     - path: internal/hevc/dpb_test.go

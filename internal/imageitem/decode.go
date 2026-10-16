@@ -2,6 +2,7 @@ package imageitem
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -27,6 +28,55 @@ type Info struct {
 	Mirror   bool
 }
 
+// Limits bound what a file can make the decoder do. A HEIF file declares
+// the size of its pictures and of a grid's canvas itself, and iloc extents
+// may alias, so a few hundred bytes can describe a 16 GiB canvas stitched
+// from 65,536 decodes of the same tile. Decode refuses such a file with an
+// error wrapping ErrTooLarge before it allocates the canvas or opens a
+// decoder; DecodeInfo and DecodeConfig keep reporting the declared size,
+// as image/png's DecodeConfig does. The defaults are those of libavif and
+// libheif. A zero field means the default.
+type Limits struct {
+	// MaxPixels bounds the picture a single coded item declares (ispe)
+	// and the canvas of a grid (its output size and each tile).
+	MaxPixels int
+	// MaxTiles bounds the number of tiles a grid is stitched from, which
+	// is the number of pictures decoded.
+	MaxTiles int
+	// MaxInputBytes bounds the file size. A reader that cannot seek is
+	// read into memory up to this size and refused beyond it.
+	MaxInputBytes int64
+}
+
+// DefaultLimits are the values a zero Limits field stands for.
+var DefaultLimits = Limits{MaxPixels: 16384 * 16384, MaxTiles: 4096, MaxInputBytes: 256 << 20}
+
+// ErrTooLarge is wrapped by the error Decode returns for a file that
+// exceeds its Limits; test for it with errors.Is.
+var ErrTooLarge = errors.New("image exceeds the decode limits")
+
+// withDefaults fills the zero fields.
+func (l Limits) withDefaults() Limits {
+	if l.MaxPixels <= 0 {
+		l.MaxPixels = DefaultLimits.MaxPixels
+	}
+	if l.MaxTiles <= 0 {
+		l.MaxTiles = DefaultLimits.MaxTiles
+	}
+	if l.MaxInputBytes <= 0 {
+		l.MaxInputBytes = DefaultLimits.MaxInputBytes
+	}
+	return l
+}
+
+// checkPixels is the MaxPixels test for a what of w x h.
+func (l Limits) checkPixels(what string, w, h int) error {
+	if w < 0 || h < 0 || uint64(w)*uint64(h) > uint64(l.MaxPixels) {
+		return fmt.Errorf("%w: %s is %dx%d, the limit is %d pixels", ErrTooLarge, what, w, h, l.MaxPixels)
+	}
+	return nil
+}
+
 type property struct {
 	typ       string
 	data      []byte
@@ -43,8 +93,77 @@ type item struct {
 	dimg    []uint32 // derived-image sources (grid tiles), in order
 }
 
+// source is where the item data lives: the whole file in memory, or a
+// seekable reader from which the extents are read when they are needed,
+// so that a file on disk costs only its headers until a picture is
+// decoded.
+type source interface {
+	// slice returns the n bytes at off, which the caller has checked
+	// against size; the in-memory source returns a view, the reader
+	// allocates.
+	slice(off, n uint64) ([]byte, error)
+	size() uint64
+}
+
+type bytesSource []byte
+
+func (b bytesSource) slice(off, n uint64) ([]byte, error) { return b[off : off+n], nil }
+func (b bytesSource) size() uint64                        { return uint64(len(b)) }
+
+// seekSource reads from base in r, which is where r stood when decoding
+// began, as an io.Reader would have.
+type seekSource struct {
+	r    io.ReadSeeker
+	base int64
+	n    uint64
+}
+
+func (s *seekSource) size() uint64 { return s.n }
+
+func (s *seekSource) slice(off, n uint64) ([]byte, error) {
+	if _, err := s.r.Seek(s.base+int64(off), io.SeekStart); err != nil {
+		return nil, err
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(s.r, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+// readSource makes a source of r. A reader that can seek is used in
+// place: its size comes from the end, and nothing is read until a box or
+// an extent is wanted. Anything else is read into memory up to the limit
+// and refused beyond it, so that a stream cannot make the decoder hold an
+// unbounded buffer. os.Stdin is an *os.File whose Seek fails on a pipe,
+// which falls back to reading as well.
+func readSource(r io.Reader, l Limits) (source, error) {
+	if rs, ok := r.(io.ReadSeeker); ok {
+		if cur, err := rs.Seek(0, io.SeekCurrent); err == nil {
+			end, err := rs.Seek(0, io.SeekEnd)
+			if err == nil && end >= cur {
+				if end-cur > l.MaxInputBytes {
+					return nil, fmt.Errorf("%w: the file is %d bytes, the limit is %d", ErrTooLarge, end-cur, l.MaxInputBytes)
+				}
+				return &seekSource{r: rs, base: cur, n: uint64(end - cur)}, nil
+			}
+			if _, err := rs.Seek(cur, io.SeekStart); err != nil {
+				return nil, err
+			}
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(r, l.MaxInputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > l.MaxInputBytes {
+		return nil, fmt.Errorf("%w: the input exceeds %d bytes", ErrTooLarge, l.MaxInputBytes)
+	}
+	return bytesSource(data), nil
+}
+
 type file struct {
-	data    []byte
+	src     source
 	idat    []byte
 	primary uint32
 	items   map[uint32]*item
@@ -71,19 +190,20 @@ func wrongCodec(got, want hwmediacodec.Codec) error {
 
 var (
 	registerMu sync.Mutex
-	registered = map[hwmediacodec.Codec]bool{}
+	registered = map[hwmediacodec.Codec]func() Limits{}
 	genericSet bool
 )
 
 // Register is called by the public packages from init: it notes that
-// codec c is linked into the program and registers the generic brands
-// (mif1, msf1), which do not say how the pictures are coded, with the
-// image package once. Files with these brands are decoded when the
-// package for their codec is linked.
-func Register(c hwmediacodec.Codec) {
+// codec c is linked into the program, with the function that reads the
+// package's current limits, and registers the generic brands (mif1,
+// msf1), which do not say how the pictures are coded, with the image
+// package once. Files with these brands are decoded when the package for
+// their codec is linked, under that package's limits.
+func Register(c hwmediacodec.Codec, limits func() Limits) {
 	registerMu.Lock()
 	defer registerMu.Unlock()
-	registered[c] = true
+	registered[c] = limits
 	if genericSet {
 		return
 	}
@@ -93,32 +213,38 @@ func Register(c hwmediacodec.Codec) {
 	}
 }
 
-func linked(c hwmediacodec.Codec) error {
+// linked returns the limits of the package for codec c, or the error
+// telling which package to import when none is linked.
+func linked(c hwmediacodec.Codec) (Limits, error) {
 	registerMu.Lock()
 	defer registerMu.Unlock()
-	if registered[c] {
-		return nil
+	if limits, ok := registered[c]; ok {
+		return limits().withDefaults(), nil
 	}
 	pkg := "image/heif"
 	if c == hwmediacodec.AV1 {
 		pkg = "image/avif"
 	}
-	return fmt.Errorf("the file is %s; import github.com/shibukawa/hwmediacodec/%s to decode it", name(c), pkg)
+	return Limits{}, fmt.Errorf("the file is %s; import github.com/shibukawa/hwmediacodec/%s to decode it", name(c), pkg)
+}
+
+// genericLimits are the limits for reading a file whose codec is not yet
+// known: the most permissive input size among the linked packages, which
+// each package's own limits replace once the codec is known.
+func genericLimits() Limits {
+	registerMu.Lock()
+	defer registerMu.Unlock()
+	l := DefaultLimits
+	for _, limits := range registered {
+		if n := limits().withDefaults().MaxInputBytes; n > l.MaxInputBytes {
+			l.MaxInputBytes = n
+		}
+	}
+	return l
 }
 
 func decodeGeneric(r io.Reader) (image.Image, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	info, err := DecodeInfo(data, 0)
-	if err != nil {
-		return nil, fmt.Errorf("heif: %w", err)
-	}
-	if err := linked(info.Codec); err != nil {
-		return nil, fmt.Errorf("heif: %w", err)
-	}
-	img, _, err := DecodeBytes(data, info.Codec)
+	img, _, err := Decode(r, 0, genericLimits())
 	if err != nil {
 		return nil, fmt.Errorf("heif: %w", err)
 	}
@@ -126,7 +252,7 @@ func decodeGeneric(r io.Reader) (image.Image, error) {
 }
 
 func decodeConfigGeneric(r io.Reader) (image.Config, error) {
-	cfg, err := DecodeConfig(r, 0)
+	cfg, err := DecodeConfig(r, 0, genericLimits())
 	if err != nil {
 		return cfg, fmt.Errorf("heif: %w", err)
 	}
@@ -134,46 +260,140 @@ func decodeConfigGeneric(r io.Reader) (image.Config, error) {
 }
 
 // Decode reads a file from r and returns its primary image; see
-// DecodeBytes for only.
-func Decode(r io.Reader, only hwmediacodec.Codec) (image.Image, error) {
-	data, err := io.ReadAll(r)
+// DecodeBytes for only, l and opts. When r can seek (an *os.File, a
+// bytes.Reader) only the headers and the items of the primary image are
+// read; otherwise r is read into memory up to l.MaxInputBytes.
+func Decode(r io.Reader, only hwmediacodec.Codec, l Limits, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+	l = l.withDefaults()
+	src, err := readSource(r, l)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	img, _, err := DecodeBytes(data, only)
-	if err != nil {
-		return nil, err
-	}
-	return img, nil
+	return decode(src, only, l, opts)
 }
 
 // DecodeConfig returns the colour model and the dimensions of the image
-// Decode would return, without decoding it.
-func DecodeConfig(r io.Reader, only hwmediacodec.Codec) (image.Config, error) {
-	data, err := io.ReadAll(r)
+// Decode would return, without decoding it. When r can seek, only the
+// headers are read.
+func DecodeConfig(r io.Reader, only hwmediacodec.Codec, l Limits) (image.Config, error) {
+	src, err := readSource(r, l.withDefaults())
 	if err != nil {
 		return image.Config{}, err
 	}
-	info, err := DecodeInfo(data, only)
+	f, err := parse(src)
 	if err != nil {
 		return image.Config{}, err
 	}
-	return image.Config{ColorModel: color.RGBAModel, Width: info.Width, Height: info.Height}, nil
+	d, err := f.describe(only)
+	if err != nil {
+		return image.Config{}, err
+	}
+	return image.Config{ColorModel: color.RGBAModel, Width: d.info.Width, Height: d.info.Height}, nil
 }
 
 // DecodeInfo describes the primary image of a file held in data from the
-// file structure alone: nothing is decoded. A non-zero only rejects files
-// coded with another codec.
+// file structure alone: nothing is decoded and no limit applies, so the
+// size of a file Decode refuses is still reported. A non-zero only
+// rejects files coded with another codec.
 func DecodeInfo(data []byte, only hwmediacodec.Codec) (*Info, error) {
-	f, err := parse(data)
+	f, err := parse(bytesSource(data))
 	if err != nil {
 		return nil, err
 	}
+	d, err := f.describe(only)
+	if err != nil {
+		return nil, err
+	}
+	return d.info, nil
+}
+
+// DecodeBytes decodes the primary image of a file held in data. Grid
+// images are decoded tile by tile and stitched; clap, irot and imir are
+// applied. The result is opaque RGBA. A non-zero only rejects files coded
+// with another codec before a decoder is opened, and so does a file
+// beyond l (see Limits). The options are passed to the decoder.
+func DecodeBytes(data []byte, only hwmediacodec.Codec, l Limits, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+	l = l.withDefaults()
+	if int64(len(data)) > l.MaxInputBytes {
+		return nil, nil, fmt.Errorf("%w: the file is %d bytes, the limit is %d", ErrTooLarge, len(data), l.MaxInputBytes)
+	}
+	return decode(bytesSource(data), only, l, opts)
+}
+
+// decode parses, checks the codec and the limits, then decodes.
+func decode(src source, only hwmediacodec.Codec, l Limits, opts []hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
+	f, err := parse(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	d, err := f.describe(only)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The generic brands reach here with only == 0 and the limits of
+	// whichever package is linked; a package's own call always finds
+	// itself registered.
+	if only == 0 {
+		if l, err = linked(d.info.Codec); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := d.checkLimits(l); err != nil {
+		return nil, nil, err
+	}
+	info := &Info{Codec: d.info.Codec, Tiles: d.info.Tiles}
+	var img *image.RGBA
+	if d.grid != nil {
+		img, err = f.decodeGrid(d.grid, opts)
+	} else {
+		img, _, err = f.decodeCoded([]*item{d.prim}, nil, opts)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	// Transformative properties apply in their ipma order.
+	for _, p := range d.prim.props {
+		switch p.typ {
+		case "clap":
+			img, err = cleanAperture(img, p.data)
+			if err != nil {
+				return nil, nil, err
+			}
+		case "irot":
+			if len(p.data) > 0 {
+				angle := int(p.data[0]&3) * 90
+				img = rotate(img, angle)
+				info.Rotation = (info.Rotation + angle) % 360
+			}
+		case "imir":
+			if len(p.data) > 0 {
+				img = mirror(img, p.data[0]&1 == 1)
+				info.Mirror = !info.Mirror
+			}
+		}
+	}
+	info.Width, info.Height = img.Rect.Dx(), img.Rect.Dy()
+	return img, info, nil
+}
+
+// description is what the file structure says about the primary image:
+// the Info DecodeInfo reports, the primary item and, for a grid, its
+// layout.
+type description struct {
+	info *Info
+	prim *item
+	grid *gridLayout // nil for a single coded picture
+}
+
+// describe reads the primary image's structure. A non-zero only rejects
+// another codec.
+func (f *file) describe(only hwmediacodec.Codec) (*description, error) {
 	prim, ok := f.items[f.primary]
 	if !ok {
 		return nil, fmt.Errorf("primary item %d not found", f.primary)
 	}
-	info := &Info{Tiles: 1}
+	d := &description{info: &Info{Tiles: 1}, prim: prim}
+	info := d.info
 	coded := prim
 	var w, h int
 	switch prim.typ {
@@ -186,6 +406,7 @@ func DecodeInfo(data []byte, only hwmediacodec.Codec) (*Info, error) {
 		if err != nil {
 			return nil, err
 		}
+		d.grid = g
 		w, h, info.Tiles, coded = g.outW, g.outH, len(g.tiles), g.tiles[0]
 	default:
 		return nil, fmt.Errorf("primary item is a %q, which this decoder does not handle", prim.typ)
@@ -224,79 +445,101 @@ func DecodeInfo(data []byte, only hwmediacodec.Codec) (*Info, error) {
 		return nil, wrongCodec(info.Codec, only)
 	}
 	info.Width, info.Height = w, h
-	return info, nil
+	return d, nil
 }
 
-// DecodeBytes decodes the primary image of a file held in data. Grid
-// images are decoded tile by tile and stitched; clap, irot and imir are
-// applied. The result is opaque RGBA. A non-zero only rejects files coded
-// with another codec before a decoder is opened. The options are passed
-// to the decoder.
-func DecodeBytes(data []byte, only hwmediacodec.Codec, opts ...hwmediacodec.DecoderOption) (*image.RGBA, *Info, error) {
-	if only != 0 {
-		if _, err := DecodeInfo(data, only); err != nil {
-			return nil, nil, err
+// checkLimits refuses a primary image beyond l before anything is
+// allocated or decoded. The sizes come from the declared properties: a
+// grid's canvas and tile count from its descriptor, each coded picture
+// from its ispe, which the specification requires every coded item to
+// carry.
+func (d *description) checkLimits(l Limits) error {
+	coded := []*item{d.prim}
+	if g := d.grid; g != nil {
+		if len(g.tiles) > l.MaxTiles {
+			return fmt.Errorf("%w: the grid has %d tiles, the limit is %d", ErrTooLarge, len(g.tiles), l.MaxTiles)
+		}
+		if err := l.checkPixels("the grid", g.outW, g.outH); err != nil {
+			return err
+		}
+		coded = g.tiles
+	}
+	for _, it := range coded {
+		w, h, ok := it.ispe()
+		if !ok {
+			return fmt.Errorf("item %d has no ispe property", it.id)
+		}
+		if err := l.checkPixels(fmt.Sprintf("item %d", it.id), w, h); err != nil {
+			return err
 		}
 	}
-	f, err := parse(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	prim, ok := f.items[f.primary]
-	if !ok {
-		return nil, nil, fmt.Errorf("primary item %d not found", f.primary)
-	}
-	info := &Info{Tiles: 1}
-	var img *image.RGBA
-	switch prim.typ {
-	case "hvc1", "hev1", "av01":
-		img, info.Codec, err = f.decodeCoded([]*item{prim}, nil, opts)
-	case "grid":
-		img, info.Codec, info.Tiles, err = f.decodeGrid(prim, opts)
-	default:
-		return nil, nil, fmt.Errorf("primary item is a %q, which this decoder does not handle", prim.typ)
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-	// Transformative properties apply in their ipma order.
-	for _, p := range prim.props {
-		switch p.typ {
-		case "clap":
-			img, err = cleanAperture(img, p.data)
+	return nil
+}
+
+// topLevel walks the top-level boxes of src and returns the ftyp and meta
+// payloads. Nothing else is read: mdat, which holds the pictures and is
+// most of the file, is skipped by its size, so a seekable source costs
+// only the headers until an item is wanted.
+func topLevel(src source) (ftyp, meta box, err error) {
+	var haveFtyp, haveMeta bool
+	size := src.size()
+	for off := uint64(0); off < size; {
+		if size-off < 8 {
+			return box{}, box{}, errors.New("truncated box header")
+		}
+		hdr, err := src.slice(off, 8)
+		if err != nil {
+			return box{}, box{}, err
+		}
+		size64 := uint64(binary.BigEndian.Uint32(hdr))
+		typ := string(hdr[4:8])
+		hdrLen := uint64(8)
+		switch size64 {
+		case 0:
+			size64 = size - off
+		case 1:
+			if size-off < 16 {
+				return box{}, box{}, errors.New("truncated large box header")
+			}
+			large, err := src.slice(off+8, 8)
 			if err != nil {
-				return nil, nil, err
+				return box{}, box{}, err
 			}
-		case "irot":
-			if len(p.data) > 0 {
-				angle := int(p.data[0]&3) * 90
-				img = rotate(img, angle)
-				info.Rotation = (info.Rotation + angle) % 360
+			size64 = binary.BigEndian.Uint64(large)
+			hdrLen = 16
+		}
+		if size64 < hdrLen || size64 > size-off {
+			return box{}, box{}, fmt.Errorf("box %q has size %d beyond the data", typ, size64)
+		}
+		want := (typ == "ftyp" && !haveFtyp) || (typ == "meta" && !haveMeta)
+		if want {
+			data, err := src.slice(off+hdrLen, size64-hdrLen)
+			if err != nil {
+				return box{}, box{}, err
 			}
-		case "imir":
-			if len(p.data) > 0 {
-				img = mirror(img, p.data[0]&1 == 1)
-				info.Mirror = !info.Mirror
+			b := box{typ: typ, data: data, start: int(off + hdrLen)}
+			if typ == "ftyp" {
+				ftyp, haveFtyp = b, true
+			} else {
+				meta, haveMeta = b, true
 			}
 		}
+		off += size64
 	}
-	info.Width, info.Height = img.Rect.Dx(), img.Rect.Dy()
-	return img, info, nil
+	if !haveFtyp || len(ftyp.data) < 8 {
+		return box{}, box{}, errors.New("no ftyp box")
+	}
+	if !haveMeta {
+		return box{}, box{}, errors.New("no meta box")
+	}
+	return ftyp, meta, nil
 }
 
 // parse reads the meta box into items and properties.
-func parse(data []byte) (*file, error) {
-	top, err := parseBoxes(data, 0)
+func parse(src source) (*file, error) {
+	_, meta, err := topLevel(src)
 	if err != nil {
 		return nil, err
-	}
-	ftyp, ok := find(top, "ftyp")
-	if !ok || len(ftyp.data) < 8 {
-		return nil, errors.New("no ftyp box")
-	}
-	meta, ok := find(top, "meta")
-	if !ok {
-		return nil, errors.New("no meta box")
 	}
 	_, _, metaPayload, err := fullBox(meta)
 	if err != nil {
@@ -306,7 +549,7 @@ func parse(data []byte) (*file, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &file{data: data, items: map[uint32]*item{}}
+	f := &file{src: src, items: map[uint32]*item{}}
 	if hdlr, ok := find(children, "hdlr"); ok {
 		if _, _, p, err := fullBox(hdlr); err == nil && len(p) >= 8 && string(p[4:8]) != "pict" {
 			return nil, fmt.Errorf("handler is %q, not a picture file", p[4:8])
@@ -415,6 +658,11 @@ func (f *file) parseIinf(b box) error {
 	return nil
 }
 
+// maxExtents bounds the iloc extents of one file: a grid of the most tiles
+// the encoder writes (65,534) with one extent each, plus metadata items,
+// fits with room to spare.
+const maxExtents = 1 << 17
+
 func (f *file) parseIloc(b box) error {
 	v, _, p, err := fullBox(b)
 	if err != nil {
@@ -435,6 +683,7 @@ func (f *file) parseIloc(b box) error {
 	} else {
 		count = int(r.u32())
 	}
+	extents := 0
 	for i := 0; i < count && r.err == nil; i++ {
 		var id uint32
 		if v < 2 {
@@ -449,6 +698,19 @@ func (f *file) parseIloc(b box) error {
 		r.u16() // data reference index
 		base := r.uint(baseOffsetSize)
 		n := int(r.u16())
+		// A length_size of 0 means the extent runs to the end of the
+		// data, which only makes sense for a single extent. With
+		// offset_size 0 as well an extent costs no bytes in the box, so
+		// 65,535 of them per item would otherwise be parsed for free:
+		// requiring a length field for multiple extents makes every
+		// extent cost at least one byte of the file, and the total cap
+		// bounds the memory the extent table can take from a large file.
+		if lengthSize == 0 && n > 1 {
+			return fmt.Errorf("item %d has %d extents without a length field", id, n)
+		}
+		if extents += n; extents > maxExtents {
+			return fmt.Errorf("the iloc box has more than %d extents", maxExtents)
+		}
 		for k := 0; k < n && r.err == nil; k++ {
 			if indexSize > 0 {
 				r.uint(indexSize)
@@ -563,32 +825,37 @@ func (f *file) parseIprp(b box) error {
 
 // payload concatenates the extents of an item.
 func (f *file) payload(it *item) ([]byte, error) {
-	src := f.data
+	src := f.src
 	if it.method == 1 {
-		src = f.idat
+		src = bytesSource(f.idat)
 	} else if it.method != 0 {
 		return nil, fmt.Errorf("item %d uses construction method %d", it.id, it.method)
 	}
+	size := src.size()
 	var total uint64
 	for _, e := range it.extents {
 		off, n := e[0], e[1]
-		if off > uint64(len(src)) || n > uint64(len(src))-off {
+		if off > size || n > size-off {
 			return nil, fmt.Errorf("item %d extent [%d, %d) is outside the data", it.id, off, off+n)
 		}
 		if len(it.extents) == 1 {
-			return src[off : off+n], nil
+			return src.slice(off, n)
 		}
 		// Extents may overlap, so their sum is not bounded by the input
 		// length. Bound it before allocating to avoid amplification by a
 		// small malicious iloc table that repeats the same large range.
-		if n > uint64(len(src))-total {
+		if n > size-total {
 			return nil, fmt.Errorf("item %d extents exceed the data size", it.id)
 		}
 		total += n
 	}
 	out := make([]byte, 0, int(total))
 	for _, e := range it.extents {
-		out = append(out, src[e[0]:e[0]+e[1]]...)
+		b, err := src.slice(e[0], e[1])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b...)
 	}
 	return out, nil
 }
@@ -788,6 +1055,8 @@ func (f *file) grid(grid *item) (*gridLayout, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
+	// Only unrepresentable sizes are rejected here, so that DecodeInfo
+	// still describes a file Decode will refuse under its Limits.
 	if g.outW <= 0 || g.outH <= 0 || uint64(g.outW) > uint64(^uint(0)>>1)/4/uint64(g.outH) {
 		return nil, errors.New("grid dimensions are invalid or too large")
 	}
@@ -806,12 +1075,9 @@ func (f *file) grid(grid *item) (*gridLayout, error) {
 }
 
 // decodeGrid decodes a grid derived image: tiles in row-major order,
-// stitched and cropped to the grid's output size.
-func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image.RGBA, hwmediacodec.Codec, int, error) {
-	g, err := f.grid(grid)
-	if err != nil {
-		return nil, 0, 0, err
-	}
+// stitched and cropped to the grid's output size. The caller has checked
+// the layout against its Limits.
+func (f *file) decodeGrid(g *gridLayout, opts []hwmediacodec.DecoderOption) (*image.RGBA, error) {
 	rows, cols, outW, outH, tiles := g.rows, g.cols, g.outW, g.outH, g.tiles
 	var canvas *image.RGBA
 	var tileW, tileH int
@@ -836,11 +1102,10 @@ func (f *file) decodeGrid(grid *item, opts []hwmediacodec.DecoderOption) (*image
 		}
 		return nil
 	}
-	_, codec, err := f.decodeCoded(tiles, place, opts)
-	if err != nil {
-		return nil, 0, 0, err
+	if _, _, err := f.decodeCoded(tiles, place, opts); err != nil {
+		return nil, err
 	}
-	return canvas, codec, len(tiles), nil
+	return canvas, nil
 }
 
 // cleanAperture crops img to a clap property: a width x height window

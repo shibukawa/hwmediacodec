@@ -135,6 +135,14 @@ func (d *DPB) Start(sps *SPS, sh *SliceHeader, handle any) (*Picture, error) {
 func (d *DPB) fillFrameNumGap(sps *SPS, frameNum int) error {
 	maxFrameNum := sps.MaxFrameNum()
 	unused := (d.prevRefFrameNum + 1) % maxFrameNum
+	// Only the last max_num_ref_frames inferred frames can survive the
+	// sliding window, so a gap of up to 65535 frames (a stream that lost
+	// its connection, or a hostile one) costs no more than that many
+	// surfaces and iterations.
+	limit := max(int(sps.MaxNumRefFrames), 1)
+	if gap := (frameNum - unused + maxFrameNum) % maxFrameNum; gap > limit {
+		unused = (frameNum - limit + maxFrameNum) % maxFrameNum
+	}
 	for unused != frameNum {
 		p := &Picture{FrameNum: unused, Reference: true, NonExisting: true}
 		if d.surfaces != nil {
@@ -335,7 +343,7 @@ func (d *DPB) findLongTermIdx(idx int) int {
 }
 
 // applyMMCO implements 8.2.5.4 for frames.
-func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) {
+func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) error {
 	for _, m := range sh.MMCOs {
 		switch m.Op {
 		case 1:
@@ -350,6 +358,12 @@ func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) {
 		case 3:
 			picNumX := cur.FrameNum - (int(m.DifferenceOfPicNumsMinus1) + 1)
 			idx := int(m.LongTermFrameIdx)
+			// Streams in the wild use indices without a preceding
+			// MMCO 4, so only impossible values are refused; the
+			// shedding in Finish bounds the long-term set.
+			if idx >= maxRefFrames {
+				return syntaxErr("long_term_frame_idx %d out of range", idx)
+			}
 			if j := d.findLongTermIdx(idx); j >= 0 && d.refs[j].PicNum != picNumX {
 				d.remove(j)
 			}
@@ -360,6 +374,9 @@ func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) {
 				p.LongTermPicNum = idx
 			}
 		case 4:
+			if m.MaxLongTermFrameIdxPlus1 > maxRefFrames {
+				return syntaxErr("max_long_term_frame_idx_plus1 %d out of range", m.MaxLongTermFrameIdxPlus1)
+			}
 			d.maxLongTermFrameIdx = int(m.MaxLongTermFrameIdxPlus1) - 1
 			for i := 0; i < len(d.refs); {
 				if p := d.refs[i]; p.LongTerm && p.LongTermFrameIdx > d.maxLongTermFrameIdx {
@@ -374,6 +391,12 @@ func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) {
 			cur.MMCO5 = true
 		case 6:
 			idx := int(m.LongTermFrameIdx)
+			// Streams in the wild use indices without a preceding
+			// MMCO 4, so only impossible values are refused; the
+			// shedding in Finish bounds the long-term set.
+			if idx >= maxRefFrames {
+				return syntaxErr("long_term_frame_idx %d out of range", idx)
+			}
 			if j := d.findLongTermIdx(idx); j >= 0 {
 				d.remove(j)
 			}
@@ -382,6 +405,7 @@ func (d *DPB) applyMMCO(sps *SPS, sh *SliceHeader, cur *Picture) {
 			cur.LongTermPicNum = idx
 		}
 	}
+	return nil
 }
 
 // Finish completes the current picture: reference marking (8.2.5) and the
@@ -406,9 +430,14 @@ func (d *DPB) Finish(sh *SliceHeader) error {
 				d.maxLongTermFrameIdx = -1
 			}
 		case sh.AdaptiveRefPicMarking:
-			d.applyMMCO(sps, sh, cur)
+			if err := d.applyMMCO(sps, sh, cur); err != nil {
+				return err
+			}
 			// A conforming stream never exceeds max_num_ref_frames after
-			// adaptive marking; shed the oldest short-term frames if it does.
+			// adaptive marking; shed the oldest short-term frames if it
+			// does, then the oldest long-term ones, so that a stream that
+			// keeps marking long-term references cannot pin every surface
+			// of the pool.
 			limit := int(sps.MaxNumRefFrames)
 			if limit < 1 {
 				limit = 1
@@ -417,7 +446,7 @@ func (d *DPB) Finish(sh *SliceHeader) error {
 				n := len(d.refs)
 				d.slidingWindow(sps, cur.FrameNum)
 				if len(d.refs) == n {
-					break
+					d.remove(0)
 				}
 			}
 		default:

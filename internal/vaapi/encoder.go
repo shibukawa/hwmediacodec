@@ -392,6 +392,10 @@ func (e *encoder) createContext() error {
 	}
 	e.input = [2]uint32{e.ids[0], e.ids[1]}
 	e.recon = [2]uint32{e.ids[2], e.ids[3]}
+	// The render targets of an encode context are the reconstructed
+	// pictures; the input surfaces are named per picture by vaBeginPicture
+	// (the fake driver of the tests refuses an input that is also a
+	// render target).
 	if st := sys.CreateContext(dpy, e.config, int32(e.alignedW), int32(e.alignedH), sys.Progressive, &e.ids[2], 2, &e.context); st != sys.StatusSuccess {
 		return vaError("vaCreateContext", st)
 	}
@@ -709,11 +713,17 @@ func (e *encoder) readCodedBuffer() ([]byte, error) {
 		return nil, vaError("vaMapBuffer(coded)", st)
 	}
 	defer sys.UnmapBuffer(dpy, e.codedBuf)
-	var out []byte
+	total := 0
 	for seg := (*sys.CodedBufferSegment)(unsafe.Pointer(base)); seg != nil; seg = seg.Next {
 		if seg.Status&sys.CodedBufStatusSliceOverflow != 0 {
 			return nil, &codec.BackendError{Backend: Name, Op: "encode", Message: "coded buffer overflow"}
 		}
+		if seg.Buf != nil && seg.Size > 0 {
+			total += int(seg.Size)
+		}
+	}
+	out := make([]byte, 0, total)
+	for seg := (*sys.CodedBufferSegment)(unsafe.Pointer(base)); seg != nil; seg = seg.Next {
 		if seg.Buf != nil && seg.Size > 0 {
 			out = append(out, unsafe.Slice(seg.Buf, int(seg.Size))...)
 		}
@@ -753,9 +763,11 @@ func (e *encoder) packetFromStream(data []byte, pts int64) codec.Packet {
 		// the same single-layer stream.
 		prefix = append([]byte{0, 0, 0, 1}, hevc.WriteVPS(e.hevc.vps)...)
 	}
-	out := make([]byte, 0, len(prefix)+len(data))
-	out = append(append(out, prefix...), data...)
-	return codec.Packet{Data: out, PTS: pts, DTS: pts, Keyframe: keyframe}
+	if len(prefix) > 0 {
+		out := make([]byte, 0, len(prefix)+len(data))
+		data = append(append(out, prefix...), data...)
+	}
+	return codec.Packet{Data: data, PTS: pts, DTS: pts, Keyframe: keyframe}
 }
 
 func (e *encoder) fillSequenceParameters() {

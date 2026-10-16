@@ -256,7 +256,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	// The access unit this call completes is taken from the queue inside
 	// submit, so the frame has to be in it first.
 	e.inputPTS = append(e.inputPTS, f.PTS)
-	accepted, err := e.submit(ctrl, s)
+	accepted, err := e.submit(ctx, ctrl, s)
 	if !accepted {
 		e.inputPTS = e.inputPTS[:len(e.inputPTS)-1]
 		return err
@@ -271,7 +271,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 // for none to drain, and collects the access unit it may complete.
 // accepted reports whether the runtime took the frame or, when draining,
 // whether it may hold more access units.
-func (e *encoder) submit(ctrl *sys.EncodeCtrl, s *surface) (accepted bool, err error) {
+func (e *encoder) submit(ctx context.Context, ctrl *sys.EncodeCtrl, s *surface) (accepted bool, err error) {
 	const op = "MFXVideoENCODE_EncodeFrameAsync"
 	var in *sys.FrameSurface
 	if s != nil {
@@ -283,7 +283,9 @@ func (e *encoder) submit(ctrl *sys.EncodeCtrl, s *surface) (accepted bool, err e
 		st := sys.EncodeFrameAsync(e.ses.ses, ctrl, in, e.bs, &syncPoint)
 		switch {
 		case st == sys.WrnDeviceBusy || st == sys.WrnInExecution:
-			if !busyWait(&busy) {
+			if ok, err := busyWait(ctx, &busy); err != nil {
+				return false, err
+			} else if !ok {
 				return false, mfxError(op, st)
 			}
 			continue
@@ -398,7 +400,7 @@ func (e *encoder) Flush(ctx context.Context) error {
 	var err error
 	for calls := 2*len(e.inputPTS) + 2; e.running && len(e.inputPTS) > 0 && calls > 0; calls-- {
 		var more bool
-		if more, err = e.submit(nil, nil); err != nil || !more {
+		if more, err = e.submit(ctx, nil, nil); err != nil || !more {
 			break
 		}
 		if err = ctx.Err(); err != nil {

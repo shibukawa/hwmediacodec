@@ -340,7 +340,7 @@ verification:
       note: Needs an NVIDIA GPU with driver 470.57+ and ffmpeg; not yet run.
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 02dba1cc13f221737ce10a0e340020b9740bd104e812103bcec37739afbb7c79
+      input_hash: 5d73da66bd053e7e88d3e65fe7ff793f997494228ffd8f3c7251de027e79ede4
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/nvidia/device.go
@@ -462,7 +462,7 @@ verification:
         min_num_decode_surfaces + 2 as the surface count.'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 02dba1cc13f221737ce10a0e340020b9740bd104e812103bcec37739afbb7c79
+      input_hash: 5d73da66bd053e7e88d3e65fe7ff793f997494228ffd8f3c7251de027e79ede4
     - path: internal/nvidia/backend.go
       input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
     - path: internal/nvidia/device.go
@@ -680,7 +680,7 @@ verification:
         system stack (2 MB reserve in a non-cgo Windows binary).'
     basis:
     - path: internal/nvidia/decoder.go
-      input_hash: 02dba1cc13f221737ce10a0e340020b9740bd104e812103bcec37739afbb7c79
+      input_hash: 5d73da66bd053e7e88d3e65fe7ff793f997494228ffd8f3c7251de027e79ede4
     - path: internal/nvidia/device.go
       input_hash: 485608c7683c4aa2c1c7ed242037581c5be51f3e26deb6eb17716ec9b35e6b91
     - path: internal/nvidia/sys/types_cuvid.go

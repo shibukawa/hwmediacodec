@@ -1,0 +1,203 @@
+id: analysis:security-review-2
+type: analysis
+title: Second security and performance review (2026-10-16) - bounds the first review missed, server hardening, image and container limits
+summary: 'A second whole-tree audit after the feature set was complete (2026-10-16; PR description of
+  branch claude/performance-security-review-949eb1). Four
+  read-only audits (core and parsers, containers and images, native backends, capture/net/examples) found
+  what the 2026-10-14 pass (PR #22) missed: unbounded H.264
+  long-term references pinning the VA-API surface pool, a 13-byte HEVC slice allocating 64 MiB through
+  num_entry_point_offsets, decoder output queues without a bound in VPL and NVDEC, an indefinitely blocking
+  event wait in the Media Foundation encoder, a VA-API display leak, unlimited keyframe requests and peers in
+  net/webrtc, samples listening on every interface, HEIF grid canvases and iloc extent floods bounded only by
+  the file, mp4 samples read from the wrong offset when the reader did not start at 0. Everything reproducible
+  got a regression test; govulncheck, staticcheck and gosec were run as well.'
+lifecycle: active
+authority: observed
+aliases:
+- security review round 2
+- セキュリティレビュー第2回
+- performance review 2026-10-16
+scope:
+  milestone: security-review-2
+constraints:
+- 'Decoder parsers refuse what the specification forbids only where a hostile value has a cost: H.264
+  long_term_frame_idx and max_long_term_frame_idx_plus1 are bounded by 16 (not by MaxLongTermFrameIdx,
+  which real streams exceed without MMCO 4) and the DPB sheds the oldest long-term reference past
+  max_num_ref_frames; HEVC num_entry_point_offsets follows 7.4.7.1 and the offsets are read one at a time.'
+- 'Every backend decoder answers ErrAgain once it holds 8 (VPL, NVDEC) or its own bound of decoded frames;
+  the Send/Receive contract promises that Receive then makes progress.'
+- 'net/webrtc merges keyframe requests closer than 500 ms, caps viewers at MaxViewers (32, counting
+  connections in setup), serves every viewer from a goroutine with a 64-packet queue and drops one that
+  overflows; ServeHTTP answers 400 for a bad offer and 503 when full or closed. net/hls serves GET and HEAD
+  and caches a segment only for the duration the window lists.'
+- 'image/heif and image/avif refuse files beyond MaxPixels (16384 x 16384), MaxTiles (4096) and
+  MaxInputBytes (256 MiB) with ErrTooLarge before a decoder is opened; DecodeConfig and DecodeInfo keep
+  reporting the declared size. A seekable reader is read header-first, another one up to MaxInputBytes.'
+- 'The examples hls and webrtc listen on 127.0.0.1:8080 unless -addr says otherwise, because the streams
+  are unauthenticated.'
+- 'An audio encoder encodes a frame longer than its queue in parts: Send stops at maxPending packets
+  (256 on AudioToolbox, 64 in the browser), Receive encodes the rest as it hands packets out, Flush
+  encodes what is left at once. The unencoded samples are at most the frame Send accepted last.'
+non_goals:
+- 'GPU/CPU overlap in the VA-API, VPL and NVDEC paths (one synchronous wait per frame), a staging texture
+  ring for Media Foundation, pinned host memory for NVDEC: left for a session with the hardware.'
+acceptance:
+  parsers-bounded:
+    text: A stream that marks every picture long-term keeps at most max_num_ref_frames references; a slice
+      header announcing 16M entry points is refused without allocating for them; crop sums, tile sums,
+      scaling deltas and weighted-prediction offsets outside the specification are syntax errors.
+    scope:
+      milestone: security-review-2
+    verified_by:
+    - parser-tests
+  servers-bounded:
+    text: 100 picture loss indications reach the encoder once; a stalled viewer is dropped at 65 queued
+      packets; a full or closed Broadcaster answers 503, a bad offer 400; HLS answers 405 to POST.
+    scope:
+      milestone: security-review-2
+    verified_by:
+    - webrtc-tests
+  images-bounded:
+    text: A grid beyond MaxTiles or MaxPixels is refused with ErrTooLarge before decoding; an iloc of
+      65,535 free extents per item parses in microseconds; a seekable file is read header-first.
+    scope:
+      milestone: security-review-2
+    verified_by:
+    - image-tests
+  audio-queue-bounded:
+    text: One frame of a minute of PCM leaves at most maxPending packets queued after Send, a second Send
+      gets ErrAgain, Receive encodes the rest without the queue growing past the bound, and after Flush
+      the packets cover every sample plus the encoder's delay.
+    scope:
+      milestone: security-review-2
+    verified_by:
+    - audio-queue-tests
+verification:
+  parser-tests:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: TestDPBBoundsLongTermReferences, TestDPBFrameNumGapIsBounded, TestParseSPSRejectsCropLargerThanPicture,
+      TestParseScalingListRejectsDeltaOutOfRange, TestSliceHeaderBoundsEntryPoints, TestSliceHeaderRejectsTilesLargerThanPicture,
+      TestFrameReleaseOnce
+    evidence:
+      path: internal/h264/dpb_safety_test.go
+      locator: TestDPBBoundsLongTermReferences
+      note: run 2026-10-16 with -race; the whole internal tree also passed under go test -race
+    basis:
+    - path: internal/h264/dpb.go
+      input_hash: 824035313eaa9a6ae7af7feb7090d70d898556293763c07ce4c226cc89171e51
+    - path: internal/h264/sps.go
+      input_hash: d26ccdd3456c981a69670049ced1a0707bb9435b1fd57dda69502f69b6634a70
+    - path: internal/hevc/slice.go
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
+    - path: internal/hevc/pps.go
+      input_hash: 1c3e21cc8c7c1ae01f8963fd4324502808cccd15fc2f98869b9bdace18a8a3a5
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+  webrtc-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: TestBroadcasterMergesKeyframeRequests, TestBroadcasterDropsStalledViewer, TestBroadcasterRefusesBadOffers,
+      TestBroadcasterLimitsViewers, TestBroadcasterDeliversAccessUnits
+    evidence:
+      path: net/webrtc/safety_test.go
+      locator: TestBroadcasterMergesKeyframeRequests
+      note: run 2026-10-16 with -race, loopback pion viewer
+    basis:
+    - path: net/webrtc/broadcaster.go
+      input_hash: b8cd22748c6f88dd11cda1999e712351dc9ff54c29178c11f690be6316655b16
+    - path: net/hls/playlist.go
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
+  image-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: TestDecodeRefusesOversizedFiles, TestIlocRejectsFreeExtents, TestIlocCapsTheExtentTotal, TestSeekableSourceReadsHeadersOnly,
+      heif.TestLimits, avif.TestLimits
+    evidence:
+      path: internal/imageitem/limits_test.go
+      locator: TestDecodeRefusesOversizedFiles
+      note: run 2026-10-16 on an Apple M3 with the VideoToolbox HEVC decoder
+    basis:
+    - path: internal/imageitem/decode.go
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
+    - path: image/heif/heif.go
+      input_hash: ffe04df8c4a6be24654d862fb46cd5a15aff83dbee401f50abc3036d166d938b
+    - path: image/avif/avif.go
+      input_hash: 78a4fce2526aec9642306fba75bfe32758b6b995c423bb2950ec5feb8cce828e
+  audio-queue-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: audiotoolbox.TestEncoderEncodesLongFrameInParts, webcodecs.TestAudioEncoderFeedsLongFrameInParts
+    evidence:
+      path: internal/audiotoolbox/longframe_test.go
+      locator: TestEncoderEncodesLongFrameInParts
+      note: run 2026-10-16 on macOS (AudioToolbox AAC) and in Chrome through scripts/browser_test.sh (Opus)
+    basis:
+    - path: internal/audiotoolbox/encoder.go
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
+    - path: internal/webcodecs/audioencoder.go
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
+    - path: internal/codec/audio.go
+      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
+  static-analysis:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: govulncheck ./... (per module), staticcheck ./..., gosec -exclude=G103,G115 ./...
+    evidence:
+      path: go.mod
+      locator: toolchain
+      note: govulncheck reported only Go standard library issues fixed in go1.27.2 (toolchain line added);
+        staticcheck's two bug reports were intentional code; gosec's path and command findings are in the
+        test-only browserexec server and the test helpers.
+    basis:
+    - path: go.mod
+      input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
+facts:
+  api:
+    webrtc: 'Broadcaster.MaxViewers (32), AcceptContext(ctx, offer), ErrTooManyViewers, ErrBadOffer'
+    heif-avif: 'MaxPixels, MaxTiles, MaxInputBytes, ErrTooLarge, Limits, DecodeWithLimits, DecodeBytesWithLimits'
+  compatibility:
+    webrtc: 'Beyond MaxViewers or after Close ServeHTTP answers 503, a bad offer 400; a viewer about a second
+      behind is dropped; keyframe requests reach the encoder at most every 500 ms.'
+    hls: 'Methods other than GET and HEAD get 405; segments carry max-age of the window length, not 3600.'
+    images: 'Files beyond MaxPixels, MaxTiles or MaxInputBytes fail with ErrTooLarge; a reader that cannot
+      seek is read up to MaxInputBytes only.'
+    mp4: 'Tracks beyond MaxSamples do not open; the Segmenter errors when keyframes stop for four segment
+      lengths or MaxSegmentBytes; Track.Info returns zero values out of range; passthrough edit lists change
+      to the correct durations.'
+    parsers: 'Values outside the H.264/HEVC specification ranges listed under constraints are syntax errors.'
+    backends: 'VPL and NVDEC decoders answer ErrAgain at 8 held frames; the Media Foundation encoder fails
+      after 5 s without an event.'
+    examples: 'hls and webrtc listen on 127.0.0.1:8080 by default.'
+    toolchain: 'go.mod and go.work name toolchain go1.27.2 for the net/http HTTP/2 fixes.'
+  measured:
+    mp4-access-unit: '2 allocations and 1,671 B per sample before, 1 and 809 B after'
+    mp4-index: '40 B per sample before, 24 B after (1,048,576 samples: 41.9 MB -> 25.1 MB)'
+    heif-iloc-flood: 'DecodeConfig of 20,000 items x 65,535 extents: 21.5 s before, 107 us after'
+    heif-grid: '255 x 256 grid in 131 KB (16 GiB canvas): refused in 8 ms'
+    hevc-entry-points: '13-byte slice header with 16.7M entry points: 64 MiB before, under 1 MiB after'
+    pixconv: 'NV12 to RGBA at 1080p 0.78 ms (8 bands), 3.52 ms on one core; left unchanged, already LUT-driven
+      and row-parallel'
+  result:
+    status: delivered 2026-10-16
+history:
+  delivered-2026-10-16:
+    summary: The author asked for a general performance and security pass once the feature set was complete.
+relations:
+- relation: implements_part_of
+  to: requirement:hwmediacodec

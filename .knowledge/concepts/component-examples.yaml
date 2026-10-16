@@ -336,9 +336,9 @@ verification:
     - path: examples/convert/main.go
       input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
     - path: mediacontainer/mp4/mux.go
-      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
     - path: mediacontainer/mp4/demux.go
-      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: examples/convert/main_test.go
       input_hash: 6dd544e6bcdb5674791eaa6bfb8693443ef7bf538d759aa57ed3a1ab9d5040c1
   exmp4-convert-1080p-run:
@@ -374,11 +374,11 @@ verification:
         vs ffmpeg's frames, -every 1.5s gives two files, -width 80 gives 80x60; run 2026-10-09
     basis:
     - path: examples/thumbnails/main.go
-      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+      input_hash: 640a3826e3a6bf78c2b1be97378dd4536bea65783868237eaeabe4e64ff9aff4
     - path: examples/thumbnails/resize.go
       input_hash: ead55d9ed6cf9854418f51b65176edff8fdc6b98a527aa81ae6b8adcfc794e72
     - path: mediacontainer/mp4/demux.go
-      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
     - path: examples/thumbnails/main_test.go
       input_hash: ffa5745e0b1cc9dd1ec343b4a4dd5c50440611f4f309549e8f5ac505feed3cf8
   exscreen-record-run:
@@ -500,9 +500,9 @@ verification:
         the pane itself rendered black and reported dropped frames because it was a hidden tab
     basis:
     - path: examples/webrtc/main.go
-      input_hash: 8e3a06c95bd7ef04cee4a328cea72cb8a0022c4c91f2618c6192b7f951f0582d
+      input_hash: 0efee88242a9e3eb9b70558d1054d96a19b8727971d6f9c81200c5e73c57daff
     - path: net/webrtc/broadcaster.go
-      input_hash: 6c397f65445d2472441d599d4c9f9adc0d6b470aaf434e1396d4a3d6647a4d0d
+      input_hash: b8cd22748c6f88dd11cda1999e712351dc9ff54c29178c11f690be6316655b16
   explayer-assets-container-test:
     state: passed
     method: unit
@@ -522,7 +522,7 @@ verification:
     - path: examples/assets/assets_test.go
       input_hash: 356b2138a5c1784d2f2efa9990e0959cb0e3040073f7603b7fafd046a3cbdf78
     - path: mediacontainer/mp4/demux.go
-      input_hash: b17fffd3ac81abee0a2e0768d0e091c49fc2f2b5e228e5ee84b3f76564076ae9
+      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
   explayer-player-test:
     state: passed
     method: integration
@@ -599,7 +599,7 @@ verification:
     - path: examples/imgconv/main_test.go
       input_hash: 78aa53f9771646d254035f6943b4e1a1b680aa94352993bd824170c8f0927956
     - path: internal/imageitem/decode.go
-      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
   imgconv-imgconv-run:
     state: passed
     method: manual

@@ -10,11 +10,14 @@
 package mp4
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -25,6 +28,17 @@ import (
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
+
+// MaxSamples bounds the number of samples NewDemuxer indexes per track.
+// The index costs 24 bytes per sample (plus the composition offsets and
+// the sync sample table the file carries), and the sample count is a
+// 32-bit field a hostile file fills freely: with a uniform sample size of
+// 1 the count may be the whole mdat length, so without a limit a 100 MB
+// file would cost 4 GB of memory. The default of 8 million samples is
+// about 37 hours of 60 fps video or 47 hours of AAC at 48 kHz. A track
+// with more samples fails NewDemuxer with an error naming this limit;
+// raise it before opening a longer file.
+var MaxSamples = 8_000_000
 
 // Sample is one sample of a track: a video access unit (already converted
 // to Annex-B for H.264 and HEVC, one temporal unit for AV1) or an untouched
@@ -37,13 +51,17 @@ type Sample struct {
 	Keyframe bool
 }
 
+// sampleInfo is the per-sample part of the index: 24 bytes. The duration
+// is the gap to the next sample's decode time (the last sample's is kept
+// on the Track) and the sync flag lives in the Track's sync sample index,
+// so that a long file costs as little as possible per sample.
 type sampleInfo struct {
+	// offset counts from the first byte of the file, like the chunk
+	// offsets in the file do; Demuxer.start maps it to the reader.
 	offset uint64
-	size   uint32
 	dts    int64
+	size   uint32
 	cto    int32
-	dur    uint32
-	sync   bool
 }
 
 // Track is a track of a demuxed file. Audio and other non-video tracks are
@@ -63,6 +81,19 @@ type Track struct {
 
 	d       *Demuxer
 	samples []sampleInfo
+	// lastDur is the duration of the last sample; every other sample's
+	// duration is the decode-time gap to its successor.
+	lastDur uint32
+	// syncs lists the sync samples (0-based, ascending) when the track has
+	// an stss box; allSync says that it has none, so every sample is one.
+	syncs   []uint32
+	allSync bool
+	// presEnd is the end of the last presented sample in media time, from
+	// which PresentationLength is answered without walking the samples.
+	presEnd int64
+	// movieTimeScale is the mvhd time scale of the source file (0 when
+	// unknown), the unit of the edit list's segment durations.
+	movieTimeScale uint32
 }
 
 // VideoTrack is the decodable video track of a file.
@@ -84,6 +115,10 @@ type Demuxer struct {
 	rs     io.ReadSeeker
 	closer io.Closer
 	file   *mp4ff.File
+	// start is where the file begins in rs. mp4ff numbers box positions
+	// from there and the chunk offsets in the file count from there too,
+	// so every offset this package keeps is added to start before a seek.
+	start  int64
 	video  *VideoTrack
 	audio  *AudioTrack
 	others []*Track
@@ -106,7 +141,8 @@ func Open(path string) (*Demuxer, error) {
 }
 
 // NewDemuxer parses the movie header of rs. Sample data is read on demand,
-// so rs must stay open while the Demuxer is used.
+// so rs must stay open while the Demuxer is used. The file is taken to
+// start at the current position of rs, which need not be 0.
 func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 	start, err := rs.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -119,6 +155,12 @@ func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 	if _, err := rs.Seek(start, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("mp4: restore reader position: %w", err)
 	}
+	if start < 0 || end < start {
+		return nil, errors.New("mp4: reader position lies beyond its end")
+	}
+	// Everything below is in the file's own frame, where the first byte
+	// of the file is 0; only the reader's end has to be moved into it.
+	fileSize := uint64(end - start)
 	file, err := mp4ff.DecodeFile(rs, mp4ff.WithDecodeMode(mp4ff.DecModeLazyMdat))
 	if err != nil {
 		return nil, fmt.Errorf("mp4: parse: %w", err)
@@ -134,10 +176,10 @@ func NewDemuxer(rs io.ReadSeeker) (*Demuxer, error) {
 	if !file.Mdat.IsLazy() {
 		mdatSize = file.Mdat.DataLength()
 	}
-	if end < 0 || mdatStart > uint64(end) || mdatSize > uint64(end)-mdatStart {
+	if mdatStart > fileSize || mdatSize > fileSize-mdatStart {
 		return nil, errors.New("mp4: mdat extends beyond the file")
 	}
-	d := &Demuxer{rs: rs, file: file}
+	d := &Demuxer{rs: rs, file: file, start: start}
 	for _, trak := range file.Moov.Traks {
 		t, err := d.newTrack(trak)
 		if err != nil {
@@ -185,6 +227,17 @@ func (d *Demuxer) Audio() *AudioTrack { return d.audio }
 // Others returns every track that is not the video track, in file order.
 func (d *Demuxer) Others() []*Track { return d.others }
 
+// MovieTimeScale is the time scale of the movie header: the unit of the
+// movie duration and of the edit lists' segment durations. ffmpeg writes
+// 1000, QuickTime and iPhone recordings 600. It is 0 when the file has no
+// movie header.
+func (d *Demuxer) MovieTimeScale() uint32 {
+	if d.file == nil || d.file.Moov == nil || d.file.Moov.Mvhd == nil {
+		return 0
+	}
+	return d.file.Moov.Mvhd.Timescale
+}
+
 // Duration is the movie duration from the movie header.
 func (d *Demuxer) Duration() time.Duration {
 	mvhd := d.file.Moov.Mvhd
@@ -199,16 +252,39 @@ func (d *Demuxer) Duration() time.Duration {
 	return time.Duration(min(ns, uint64(math.MaxInt64)))
 }
 
+// readAt fills buf with the sample data at off, an offset in the file's
+// own frame. The mdat is normally lazy (its bytes stay in the reader) and
+// is read through rs; the in-memory form is what a hand-built file and
+// the tests use.
+func (d *Demuxer) readAt(off uint64, buf []byte) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.file.Mdat.IsLazy() {
+		data, err := d.file.Mdat.ReadData(int64(off), int64(len(buf)), nil)
+		if err != nil {
+			return err
+		}
+		copy(buf, data)
+		return nil
+	}
+	if _, err := d.rs.Seek(d.start+int64(off), io.SeekStart); err != nil {
+		return err
+	}
+	_, err := io.ReadFull(d.rs, buf)
+	return err
+}
+
 func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 	if trak == nil || trak.Tkhd == nil || trak.Mdia == nil || trak.Mdia.Minf == nil || trak.Mdia.Minf.Stbl == nil || trak.Mdia.Mdhd == nil || trak.Mdia.Hdlr == nil {
 		return nil, errors.New("mp4: track is missing mandatory boxes")
 	}
 	t := &Track{
-		ID:        trak.Tkhd.TrackID,
-		Handler:   trak.Mdia.Hdlr.HandlerType,
-		TimeScale: trak.Mdia.Mdhd.Timescale,
-		Trak:      trak,
-		d:         d,
+		ID:             trak.Tkhd.TrackID,
+		Handler:        trak.Mdia.Hdlr.HandlerType,
+		TimeScale:      trak.Mdia.Mdhd.Timescale,
+		Trak:           trak,
+		d:              d,
+		movieTimeScale: d.MovieTimeScale(),
 	}
 	if t.TimeScale == 0 || t.TimeScale > math.MaxInt32 {
 		return nil, fmt.Errorf("mp4: track %d has an unsupported time scale %d", t.ID, t.TimeScale)
@@ -245,13 +321,14 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 		return nil, fmt.Errorf("mp4: track %d: time table covers %d of %d samples", t.ID, timedSamples, n)
 	}
 	// Even a uniform-size stsz stores n in four bytes. Verify that its
-	// samples fit in the actual media data before allocating an n-entry index.
+	// samples fit in the actual media data, and that the index they need
+	// is one this process is willing to hold, before allocating it.
 	mdatSize := d.file.Mdat.GetLazyDataSize()
 	if !d.file.Mdat.IsLazy() {
 		mdatSize = d.file.Mdat.DataLength()
 	}
-	if uint64(n) > uint64(int(^uint(0)>>1))/40 {
-		return nil, fmt.Errorf("mp4: track %d sample count exceeds the media data", t.ID)
+	if MaxSamples < 0 || uint64(n) > uint64(MaxSamples) {
+		return nil, fmt.Errorf("mp4: track %d has %d samples, more than MaxSamples (%d)", t.ID, n, MaxSamples)
 	}
 	if stbl.Stsz.SampleUniformSize == 0 && uint64(len(stbl.Stsz.SampleSize)) != uint64(n) {
 		return nil, fmt.Errorf("mp4: track %d has an invalid sample size table", t.ID)
@@ -264,15 +341,18 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 		t.samples[i].size = stbl.Stsz.GetSampleSize(int(i + 1))
 	}
 
-	// Decode times and durations from stts.
+	// Decode times from stts. Durations are the gaps between them; only
+	// the last one has to be remembered.
 	var dts int64
 	idx := 0
 	for i := range stbl.Stts.SampleCount {
 		for c := uint32(0); c < stbl.Stts.SampleCount[i] && idx < int(n); c++ {
 			t.samples[idx].dts = dts
-			t.samples[idx].dur = stbl.Stts.SampleTimeDelta[i]
 			dts += int64(stbl.Stts.SampleTimeDelta[i])
 			idx++
+		}
+		if stbl.Stts.SampleCount[i] > 0 {
+			t.lastDur = stbl.Stts.SampleTimeDelta[i]
 		}
 	}
 	if stbl.Ctts != nil {
@@ -284,17 +364,24 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 			t.samples[i].cto = ctos[i]
 		}
 	}
-	// Sync samples.
-	if stbl.Stss == nil {
-		for i := range t.samples {
-			t.samples[i].sync = true
+	for i := range t.samples {
+		if e := t.samples[i].dts + int64(t.samples[i].cto) + int64(t.dur(i)); e > t.presEnd {
+			t.presEnd = e
 		}
+	}
+	// Sync samples: an ascending index for binary search. The file's list
+	// should already be ascending, but a wrong one must not break seeking.
+	if stbl.Stss == nil {
+		t.allSync = true
 	} else {
+		t.syncs = make([]uint32, 0, len(stbl.Stss.SampleNumber))
 		for _, nr := range stbl.Stss.SampleNumber {
 			if nr >= 1 && nr <= n {
-				t.samples[nr-1].sync = true
+				t.syncs = append(t.syncs, nr-1)
 			}
 		}
+		slices.Sort(t.syncs)
+		t.syncs = slices.Compact(t.syncs)
 	}
 	// File offsets from stsc + stco/co64.
 	var chunkOffsets []uint64
@@ -313,6 +400,9 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 			return nil, fmt.Errorf("mp4: track %d has an invalid chunk table entry %d", t.ID, ei+1)
 		}
 	}
+	// The chunk offsets and mp4ff's mdat position both count from the
+	// first byte of the file, so they compare directly.
+	mdatStart := d.file.Mdat.PayloadAbsoluteOffset()
 	for ei, e := range entries {
 		last := uint32(len(chunkOffsets))
 		if ei+1 < len(entries) {
@@ -324,7 +414,6 @@ func (d *Demuxer) newTrack(trak *mp4ff.TrakBox) (*Track, error) {
 			}
 			off := chunkOffsets[chunk-1]
 			for s := uint32(0); s < e.SamplesPerChunk && sample < int(n); s++ {
-				mdatStart := d.file.Mdat.PayloadAbsoluteOffset()
 				if off < mdatStart || off-mdatStart > mdatSize || uint64(t.samples[sample].size) > mdatSize-(off-mdatStart) {
 					return nil, fmt.Errorf("mp4: track %d sample %d is outside the media data", t.ID, sample)
 				}
@@ -376,6 +465,41 @@ func (d *Demuxer) newVideoTrack(t *Track) (*VideoTrack, error) {
 	return v, nil
 }
 
+// dur is the duration of sample i: the decode-time gap to the next sample,
+// or the last stts delta for the last sample.
+func (t *Track) dur(i int) uint32 {
+	if i+1 < len(t.samples) {
+		return uint32(t.samples[i+1].dts - t.samples[i].dts)
+	}
+	return t.lastDur
+}
+
+// isSync reports whether sample i is a sync sample.
+func (t *Track) isSync(i int) bool {
+	if t.allSync {
+		return true
+	}
+	_, found := slices.BinarySearch(t.syncs, uint32(i))
+	return found
+}
+
+// syncCount is the number of sync samples and syncAt the index of the k-th
+// of them, both over the sync sample index or, without an stss box, over
+// every sample.
+func (t *Track) syncCount() int {
+	if t.allSync {
+		return len(t.samples)
+	}
+	return len(t.syncs)
+}
+
+func (t *Track) syncAt(k int) int {
+	if t.allSync {
+		return k
+	}
+	return int(t.syncs[k])
+}
+
 // SampleCount is the number of samples in the track.
 func (t *Track) SampleCount() int { return len(t.samples) }
 
@@ -384,20 +508,13 @@ func (t *Track) Duration() int64 {
 	if len(t.samples) == 0 {
 		return 0
 	}
-	last := t.samples[len(t.samples)-1]
-	return last.dts + int64(last.dur)
+	return t.samples[len(t.samples)-1].dts + int64(t.lastDur)
 }
 
 // PresentationLength is the length of the track as a player sees it: the
 // end of the last presented sample minus the edit-list offset.
 func (t *Track) PresentationLength() time.Duration {
-	var end int64
-	for _, s := range t.samples {
-		if e := s.dts + int64(s.cto) + int64(s.dur); e > end {
-			end = e
-		}
-	}
-	if d := t.PresentationTime(end); d > 0 {
+	if d := t.PresentationTime(t.presEnd); d > 0 {
 		return d
 	}
 	return 0
@@ -420,19 +537,24 @@ func (t *Track) Sample(i int) (Sample, error) {
 		return Sample{}, fmt.Errorf("mp4: sample %d out of range [0, %d)", i, len(t.samples))
 	}
 	s := t.samples[i]
-	t.d.mu.Lock()
-	defer t.d.mu.Unlock()
-	data, err := t.d.file.Mdat.ReadData(int64(s.offset), int64(s.size), t.d.rs)
-	if err != nil {
+	data := make([]byte, s.size)
+	if err := t.d.readAt(s.offset, data); err != nil {
 		return Sample{}, fmt.Errorf("mp4: read sample %d: %w", i, err)
 	}
-	return Sample{Data: data, DTS: s.dts, PTS: s.dts + int64(s.cto), Duration: s.dur, Keyframe: s.sync}, nil
+	return Sample{Data: data, DTS: s.dts, PTS: s.dts + int64(s.cto), Duration: t.dur(i), Keyframe: t.isSync(i)}, nil
 }
 
-// Info returns the timing of sample i without reading its data.
+// Info returns the timing of sample i without reading its data. An index
+// outside [0, SampleCount()) gives zero values, where Sample returns an
+// error: Info is the cheap call in the inner loop of a copy, and a wrong
+// index there is the caller's own bug, which the Sample call that follows
+// reports.
 func (t *Track) Info(i int) (dts, pts int64, keyframe bool) {
+	if i < 0 || i >= len(t.samples) {
+		return 0, 0, false
+	}
 	s := t.samples[i]
-	return s.dts, s.dts + int64(s.cto), s.sync
+	return s.dts, s.dts + int64(s.cto), t.isSync(i)
 }
 
 // FrameRate is the average frame rate of the track.
@@ -446,54 +568,99 @@ func (v *VideoTrack) FrameRate() float64 {
 
 // Keyframes lists the indexes of the sync samples.
 func (v *VideoTrack) Keyframes() []int {
-	var out []int
-	for i, s := range v.samples {
-		if s.sync {
-			out = append(out, i)
-		}
+	out := make([]int, v.syncCount())
+	for k := range out {
+		out[k] = v.syncAt(k)
 	}
 	return out
 }
 
 // KeyframeAtOrBefore returns the index of the last sync sample whose
 // presentation time is not after t, or the first sync sample when t lies
-// before it.
+// before it (-1 without any). Sync samples are presented in decode order,
+// so the search is a binary one over the sync sample index.
 func (v *VideoTrack) KeyframeAtOrBefore(t time.Duration) int {
-	best := -1
-	for i, s := range v.samples {
-		if !s.sync {
-			continue
-		}
-		if v.PresentationTime(s.dts+int64(s.cto)) > t && best >= 0 {
-			break
-		}
-		best = i
+	n := v.syncCount()
+	if n == 0 {
+		return -1
 	}
-	return best
+	k := sort.Search(n, func(k int) bool {
+		s := v.samples[v.syncAt(k)]
+		return v.PresentationTime(s.dts+int64(s.cto)) > t
+	})
+	return v.syncAt(max(k-1, 0))
 }
 
 // AccessUnit reads sample i and returns it in the form hwmediacodec expects:
 // an Annex-B access unit with the parameter sets in front of keyframes for
 // H.264 and HEVC, or the temporal unit as stored for AV1.
+//
+// The sample is read straight into the buffer that is returned and, with
+// the usual 4-byte NAL unit lengths, the length prefixes are overwritten
+// with start codes of the same size, so a call costs one allocation.
 func (v *VideoTrack) AccessUnit(i int) (Sample, error) {
-	s, err := v.Sample(i)
-	if err != nil {
-		return s, err
-	}
 	if v.Codec == hwmediacodec.AV1 {
-		return s, nil
+		return v.Sample(i)
 	}
-	out := make([]byte, 0, len(s.Data)+64)
-	if s.Keyframe {
+	if i < 0 || i >= len(v.samples) {
+		return Sample{}, fmt.Errorf("mp4: sample %d out of range [0, %d)", i, len(v.samples))
+	}
+	s := v.samples[i]
+	sync := v.isSync(i)
+	head := 0
+	if sync {
 		for _, ps := range v.paramSets {
-			out = annexb.AppendUnit(out, ps)
+			head += 4 + len(ps)
 		}
 	}
-	if out, err = annexb.FromLengthPrefixed(out, s.Data, v.nalLength); err != nil {
-		return Sample{}, fmt.Errorf("mp4: sample %d: %w", i, err)
+	buf := make([]byte, head+int(s.size))
+	if sync {
+		pos := 0
+		for _, ps := range v.paramSets {
+			pos += copy(buf[pos:], []byte{0, 0, 0, 1})
+			pos += copy(buf[pos:], ps)
+		}
 	}
-	s.Data = out
-	return s, nil
+	if err := v.d.readAt(s.offset, buf[head:]); err != nil {
+		return Sample{}, fmt.Errorf("mp4: read sample %d: %w", i, err)
+	}
+	out := buf
+	if v.nalLength == 4 {
+		n, err := startCodesInPlace(buf[head:])
+		if err != nil {
+			return Sample{}, fmt.Errorf("mp4: sample %d: %w", i, err)
+		}
+		out = buf[:head+n]
+	} else {
+		// Shorter length fields grow when they become start codes, so this
+		// (rare: hvcC with lengthSizeMinusOne below 3) form needs a second
+		// buffer. It must not share buf: AppendUnit would write over the
+		// sample bytes it is still reading.
+		var err error
+		if out, err = annexb.FromLengthPrefixed(slices.Clone(buf[:head]), buf[head:], v.nalLength); err != nil {
+			return Sample{}, fmt.Errorf("mp4: sample %d: %w", i, err)
+		}
+	}
+	return Sample{Data: out, DTS: s.dts, PTS: s.dts + int64(s.cto), Duration: v.dur(i), Keyframe: sync}, nil
+}
+
+// startCodesInPlace rewrites the 4-byte NAL unit length prefixes of an MP4
+// sample into Annex-B start codes and returns how many bytes of the sample
+// the NAL units cover (trailing bytes too short for a length field are
+// left out, as annexb.FromLengthPrefixed leaves them out). A length of 0
+// or one that runs past the sample is an error, so a corrupt sample
+// cannot make a decoder read start codes out of picture data.
+func startCodesInPlace(sample []byte) (int, error) {
+	pos := 0
+	for len(sample)-pos >= 4 {
+		n := uint64(binary.BigEndian.Uint32(sample[pos:]))
+		if n == 0 || n > uint64(len(sample)-pos-4) {
+			return 0, fmt.Errorf("NAL unit length %d out of range", n)
+		}
+		sample[pos], sample[pos+1], sample[pos+2], sample[pos+3] = 0, 0, 0, 1
+		pos += 4 + int(n)
+	}
+	return pos, nil
 }
 
 // Packet returns AccessUnit(i) as a decoder packet.

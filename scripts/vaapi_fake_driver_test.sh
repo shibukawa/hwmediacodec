@@ -59,7 +59,7 @@ for mode in $modes; do
       gcc -O1 -Wall -Wno-unused-parameter -shared -fPIC -o /tmp/drv/fake_drv_video.so /work/src/fake_drv_video.c &&
       gcc -O1 -Wall -shared -fPIC -o /tmp/drv/libfakedrm.so /work/src/fake_drm.c &&
       cd /tmp/run &&
-      LD_PRELOAD=/tmp/drv/libfakedrm.so /work/bin/hwmediacodec.test -test.count=1 -test.run FakeVAAPI '"${TESTFLAGS:-}"'
-    ' || status=1
+      LD_PRELOAD=/tmp/drv/libfakedrm.so /work/bin/hwmediacodec.test -test.count=1 -test.run FakeVAAPI $1
+    ' sh "${TESTFLAGS:-}" || status=1
 done
 exit $status

@@ -202,6 +202,9 @@ func ParseSliceHeader(nal []byte, ps *ParameterSets, prev *SliceHeader) (*SliceH
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if pps.TilesEnabled && !pps.UniformSpacing && (pps.TileColumnWidths(sps) == nil || pps.TileRowHeights(sps) == nil) {
+		return nil, nil, nil, syntaxErr("the tile columns or rows of PPS %d do not fit the picture of SPS %d", pps.ID, sps.ID)
+	}
 
 	dependent := false
 	address := uint32(0)
@@ -243,14 +246,22 @@ func ParseSliceHeader(nal []byte, ps *ParameterSets, prev *SliceHeader) (*SliceH
 
 	h.NumEntryPointOffsets, h.OffsetLenMinus1 = 0, 0
 	if pps.TilesEnabled || pps.EntropyCodingSyncEnabled {
-		h.NumEntryPointOffsets = r.ueMax("num_entry_point_offsets", uint32(sps.PicSizeInCtbs()))
+		// 7.4.7.1: one entry point per CTB row (wavefronts), per tile, or
+		// per CTB row of every tile column when both are in use.
+		limit := sps.PicHeightInCtbs()
+		switch {
+		case pps.TilesEnabled && pps.EntropyCodingSyncEnabled:
+			limit *= pps.NumTileColumns
+		case pps.TilesEnabled:
+			limit = pps.NumTileColumns * pps.NumTileRows
+		}
+		h.NumEntryPointOffsets = r.ueMax("num_entry_point_offsets", uint32(max(limit-1, 0)))
 		if h.NumEntryPointOffsets > 0 {
 			h.OffsetLenMinus1 = r.ueMax("offset_len_minus1", 31)
-			if r.err == nil {
-				h.EntryPointOffsetMinus1 = make([]uint32, h.NumEntryPointOffsets)
-				for i := range h.EntryPointOffsetMinus1 {
-					h.EntryPointOffsetMinus1[i] = r.u(int(h.OffsetLenMinus1) + 1)
-				}
+			// Read one at a time so that a truncated NAL unit stops the
+			// allocation where the data ends.
+			for i := uint32(0); i < h.NumEntryPointOffsets && r.err == nil; i++ {
+				h.EntryPointOffsetMinus1 = append(h.EntryPointOffsetMinus1, r.u(int(h.OffsetLenMinus1)+1))
 			}
 		}
 	}
@@ -472,7 +483,7 @@ func (r *reader) longTermRefs(h *SliceHeader, sps *SPS) {
 		}
 		lt.DeltaPOCMsbPresent = r.flag()
 		if lt.DeltaPOCMsbPresent {
-			lt.DeltaPOCMsbCycleLt = r.ue()
+			lt.DeltaPOCMsbCycleLt = r.ueMax("delta_poc_msb_cycle_lt", 1<<(32-sps.Log2MaxPOCLsb)-1)
 		}
 		lt.DeltaPOCMsbCycle = lt.DeltaPOCMsbCycleLt
 		if i != 0 && i != int(h.NumLongTermSPS) {
@@ -498,10 +509,11 @@ func (r *reader) predWeightTable(h *SliceHeader, sps *SPS, chroma bool) *PredWei
 	if r.err != nil {
 		return t
 	}
-	// wpOffsetHalfRangeC (7-55)
-	halfRange := int32(1) << 7
+	// wpOffsetHalfRangeC (7-55) and the luma offset range of 7.4.7.3.
+	halfRange, halfRangeY := int32(1)<<7, int32(1)<<7
 	if sps.Range.HighPrecisionOffsetsEnabled {
 		halfRange = int32(1) << (sps.BitDepthChroma - 1)
+		halfRangeY = int32(1) << (sps.BitDepthLuma - 1)
 	}
 	list := func(entries []PredWeight, n int) {
 		for i := 0; i < n; i++ {
@@ -516,12 +528,12 @@ func (r *reader) predWeightTable(h *SliceHeader, sps *SPS, chroma bool) *PredWei
 			e := &entries[i]
 			if e.LumaFlag {
 				e.DeltaLumaWeight = r.seRange("delta_luma_weight", -128, 127)
-				e.LumaOffset = r.se()
+				e.LumaOffset = r.seRange("luma_offset", -halfRangeY, halfRangeY-1)
 			}
 			if e.ChromaFlag {
 				for j := 0; j < 2; j++ {
 					e.DeltaChromaWeight[j] = r.seRange("delta_chroma_weight", -128, 127)
-					e.DeltaChromaOffset[j] = r.se()
+					e.DeltaChromaOffset[j] = r.seRange("delta_chroma_offset", -4*halfRange, 4*halfRange-1)
 					weight := (int32(1) << uint(chromaDenom)) + e.DeltaChromaWeight[j]
 					off := halfRange + e.DeltaChromaOffset[j] - ((halfRange * weight) >> uint(chromaDenom))
 					e.ChromaOffset[j] = min(max(off, -halfRange), halfRange-1)

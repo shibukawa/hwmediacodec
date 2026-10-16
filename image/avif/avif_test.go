@@ -198,3 +198,43 @@ func TestRejectsHEIC(t *testing.T) {
 }
 
 func second[T any](_ T, err error) error { return err }
+
+func third[T, U any](_ T, _ U, err error) error { return err }
+
+// TestLimits lowers MaxPixels under a 640x480 picture: decoding refuses
+// it with ErrTooLarge before any decoder is opened, so this holds without
+// an AV1 decoder, while DecodeInfo still reports the size and a per-call
+// Limits gets past the structure check to the decoder.
+func TestLimits(t *testing.T) {
+	path := ffmpegAVIF(t, t.TempDir(), testImage(640, 480))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(pixels int) { avif.MaxPixels = pixels }(avif.MaxPixels)
+	avif.MaxPixels = 100 * 100
+	for name, err := range map[string]error{
+		"DecodeBytes":  third(avif.DecodeBytes(data)),
+		"Decode":       second(avif.Decode(bytes.NewReader(data))),
+		"image.Decode": third(image.Decode(bytes.NewReader(data))),
+	} {
+		if !errors.Is(err, avif.ErrTooLarge) {
+			t.Errorf("%s: %v, want ErrTooLarge", name, err)
+		}
+	}
+	if info, err := avif.DecodeInfo(data); err != nil || info.Width != 640 || info.Height != 480 {
+		t.Errorf("DecodeInfo under the limit = %+v, %v; want the declared 640x480", info, err)
+	}
+	if cfg, err := avif.DecodeConfig(bytes.NewReader(data)); err != nil || cfg.Width != 640 {
+		t.Errorf("DecodeConfig under the limit = %+v, %v", cfg, err)
+	}
+	// Past the limit the decoder is reached: a picture on a machine with
+	// an AV1 decoder, ErrUnsupported on one without.
+	img, _, err := avif.DecodeBytesWithLimits(data, avif.Limits{MaxPixels: 640 * 480})
+	if err != nil && !errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Errorf("DecodeBytesWithLimits: %v", err)
+	}
+	if err == nil && img.Rect.Dx() != 640 {
+		t.Errorf("DecodeBytesWithLimits decoded %v", img.Rect)
+	}
+}

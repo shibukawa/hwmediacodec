@@ -161,7 +161,9 @@ func (p *Player) upload(f *hwmediacodec.Frame) {
 		p.width, p.height = w, h
 	}
 	pix := f.Planes[0]
-	if stride := f.Strides[0]; stride != w*4 {
+	if stride := f.Strides[0]; stride == w*4 {
+		pix = pix[:w*h*4] // a plane may carry padding rows
+	} else {
 		// WritePixels wants tightly packed rows.
 		if cap(p.scratch) < w*h*4 {
 			p.scratch = make([]byte, w*h*4)

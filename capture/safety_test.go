@@ -18,7 +18,8 @@ func (staticSource) ReadPixels(p []byte)     { clear(p) }
 // Exercises capture/close coordination without opening hardware.
 func TestRecorderConcurrentCloseAndCapture(t *testing.T) {
 	r := &Recorder{opts: Options{FPS: 60}, width: 1, height: 1, step: 1500,
-		free: make(chan []byte, 2), frames: make(chan frame, 1), done: make(chan struct{}), lastPTS: -1}
+		free: make(chan []byte, 2), frames: make(chan frame, 1), done: make(chan struct{})}
+	r.lastPTS.Store(-1)
 	r.free <- make([]byte, 4)
 	r.free <- make([]byte, 4)
 	go func() {

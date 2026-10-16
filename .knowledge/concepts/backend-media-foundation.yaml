@@ -389,7 +389,7 @@ verification:
     - path: internal/mediafoundation/sys/mftenumex_arm64.go
       input_hash: 17adee94e73aa9bfa32381632547621fcf4d87185ab988689589451d4654332e
     - path: internal/mediafoundation/encoder.go
-      input_hash: 94584d63f7f0b1ea292af050e907c3d8c41badad0289e2ed16c3180bbeed8a7e
+      input_hash: 7332d85e3a9f053e43c9ae1b137f6baf85898f723c98748e67a305e7ad0df4c3
     - path: internal/mediafoundation/sys/encode.go
       input_hash: 19d25f22ffa23369663a8e6adc38dfd22b169295c4e6f58bbf4917d9cb31c6db
   mf-layout-check-m3:

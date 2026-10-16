@@ -4,9 +4,11 @@ package mediafoundation
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
@@ -401,18 +403,35 @@ func (e *encoder) readSequenceHeader() {
 	}
 }
 
-// pump handles queued events. With block set it waits for one event and
-// returns after handling it; otherwise it drains the queue without waiting.
-func (e *encoder) pump(block bool) error {
-	flags := sys.MF_EVENT_FLAG_NO_WAIT
-	if block {
-		flags = 0
-	}
+// eventTimeout bounds the wait for the next event of an asynchronous MFT.
+// A working encoder answers within milliseconds; one that has stopped
+// (device removed, driver fault without an MEError) must not hang Send or
+// Flush for ever.
+const eventTimeout = 5 * time.Second
+
+// pump handles queued events. With block set it waits for one event, up
+// to eventTimeout or until ctx is cancelled, and returns after handling
+// it; otherwise it drains the queue without waiting.
+func (e *encoder) pump(ctx context.Context, block bool) error {
+	var deadline time.Time
 	for {
 		var ev *sys.IMFMediaEvent
-		hr := e.events.GetEvent(flags, &ev)
+		hr := e.events.GetEvent(sys.MF_EVENT_FLAG_NO_WAIT, &ev)
 		if hr == sys.MF_E_NO_EVENTS_AVAILABLE {
-			return nil
+			if !block {
+				return nil
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			now := time.Now()
+			if deadline.IsZero() {
+				deadline = now.Add(eventTimeout)
+			} else if now.After(deadline) {
+				return &codec.BackendError{Backend: Name, Op: "IMFMediaEventGenerator::GetEvent", Message: fmt.Sprintf("the encoder sent no event within %s", eventTimeout)}
+			}
+			time.Sleep(time.Millisecond)
+			continue
 		}
 		if hr.Failed() || ev == nil {
 			return backendErr("IMFMediaEventGenerator::GetEvent", hr)
@@ -477,7 +496,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 			if len(e.pending) >= maxPendingPackets {
 				return codec.ErrAgain
 			}
-			if err := e.pump(true); err != nil {
+			if err := e.pump(ctx, true); err != nil {
 				return err
 			}
 		}
@@ -571,7 +590,7 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 		return pkt, nil
 	}
 	if e.events != nil {
-		if err := e.pump(false); err != nil {
+		if err := e.pump(ctx, false); err != nil {
 			return codec.Packet{}, err
 		}
 		for e.haveOutput > 0 && len(e.pending) == 0 {
@@ -803,7 +822,7 @@ func (e *encoder) Flush(ctx context.Context) error {
 					}
 					continue
 				}
-				if err := e.pump(true); err != nil {
+				if err := e.pump(ctx, true); err != nil {
 					return err
 				}
 			}

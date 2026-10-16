@@ -2,6 +2,8 @@ module github.com/shibukawa/hwmediacodec/examples
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/gen2brain/avif v0.6.0
 	github.com/gen2brain/h265 v0.2.3

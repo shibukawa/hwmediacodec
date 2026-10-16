@@ -61,7 +61,7 @@ capabilities:
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   api/probe:
     state: implemented
     about: capability:hwmediacodec/probe
@@ -138,11 +138,11 @@ capabilities:
     - encode-reference-test
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   encode/hevc:
     state: partial
     about: capability:hwmediacodec/encode-hevc
@@ -153,11 +153,11 @@ capabilities:
     - encode-reference-test
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
@@ -468,7 +468,7 @@ verification:
         HEVC; every keyframe carries SPS/PPS (+VPS)
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
@@ -478,7 +478,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
@@ -499,7 +499,7 @@ verification:
       note: see milestone:m2-darwin-encode verification entries for the measured values
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
@@ -509,7 +509,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
@@ -529,7 +529,7 @@ verification:
       note: worst luma PSNR 52.8 dB after hardware encode + hardware decode
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: internal/videotoolbox/sys/sys_encode.go
       input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
     - path: internal/videotoolbox/sys/sys.go
@@ -539,7 +539,7 @@ verification:
     - path: hwmediacodec.go
       input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: internal/testutil/ffmpeg.go
@@ -559,7 +559,7 @@ verification:
       note: hardware-free; see milestone:display-order-rgba for the basis and details
     basis:
     - path: internal/reorder/tracker.go
-      input_hash: e543706b633a10cc574579287c3a43f607a9d1476ee00f45688925c93221143b
+      input_hash: 96505cdb897ca6b111d8e84cd123ccf7d7796d8c523166feb6a1e277fae095bd
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/reorder_test.go
@@ -595,7 +595,7 @@ verification:
       locator: TestEncodeRGBAInput
     basis:
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
   ebitenvideo-test:
@@ -612,7 +612,7 @@ verification:
       locator: TestPlayerPlaysAndLoops
     basis:
     - path: ebitenvideo/player.go
-      input_hash: 42098d34bd4e4f1dbf7226c3a88cc672c3e6f9beb3c056f3b0fd5e0e84b549e8
+      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
     - path: ebitenvideo/player_darwin_test.go
       input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
   av1lw-hardware-av1-decode:

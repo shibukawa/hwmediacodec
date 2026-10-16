@@ -156,15 +156,15 @@ verification:
       note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: 02bd3d5bc569d4c7f38bc2a9aeb3627a7750ca0517426592fa860627d440b480
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
     - path: internal/imageitem/decode.go
-      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: internal/imageitem/transform.go
       input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: internal/imageitem/box.go
       input_hash: ebcf8a122ff1aaff641257d71e3143e3a141e56e1ca067801d7519d942c6a35f
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
     - path: internal/mediatest/image.go
       input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
   exheif-heif-decode-test:
@@ -182,9 +182,9 @@ verification:
       note: run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
   exheif-avif-decode-test:
     state: passed
     method: integration
@@ -200,9 +200,9 @@ verification:
       note: ffmpeg 9.0.1 with libsvtav1 writes the AVIF; the M3 AV1 hardware decoder reads it; run 2026-10-09
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
   exheif-avif-encode-test:
     state: passed
     method: unit
@@ -218,9 +218,9 @@ verification:
       note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
     basis:
     - path: internal/imageitem/encode.go
-      input_hash: 02bd3d5bc569d4c7f38bc2a9aeb3627a7750ca0517426592fa860627d440b480
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
   heif-heif-test:
     state: passed
     method: integration
@@ -239,21 +239,21 @@ verification:
       note: Apple M3, macOS 27, sips and ffmpeg with libsvtav1; run 2026-10-10
     basis:
     - path: internal/imageitem/decode.go
-      input_hash: 07b39caff67d6a8a867cc3ef7acc1e4349dfc2eb831cc6edbc03ac2e96c7a8af
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
     - path: internal/imageitem/encode.go
-      input_hash: 02bd3d5bc569d4c7f38bc2a9aeb3627a7750ca0517426592fa860627d440b480
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
     - path: internal/imageitem/box.go
       input_hash: ebcf8a122ff1aaff641257d71e3143e3a141e56e1ca067801d7519d942c6a35f
     - path: internal/imageitem/transform.go
       input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
     - path: image/heif/heif_test.go
-      input_hash: 7a134ee85afbbcf38d725d2305f41479a39d0c78936fd3b0bc69091b4b0f5b9e
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
     - path: image/heif/heif.go
-      input_hash: ea9c34751fbb4c8c667e3f5277d8dbf725e0956d7c696cdab6daaa301e0b336a
+      input_hash: ffe04df8c4a6be24654d862fb46cd5a15aff83dbee401f50abc3036d166d938b
     - path: image/avif/avif.go
-      input_hash: c772dc06f4d7147bce4b3fd70e389d36bd470d2fb3ba4ec4327a592297b75945
+      input_hash: 78a4fce2526aec9642306fba75bfe32758b6b995c423bb2950ec5feb8cce828e
     - path: image/avif/avif_test.go
-      input_hash: b7c435346d40acfc9c05b4997e5b2bf815dcb901b16de23fa92e21507b169a2a
+      input_hash: d34550f7a29683f0e35ee6bfc03671fa590b780805764e2486f40d52a54ef2ff
     - path: internal/imageitem/colour_test.go
       input_hash: f220415be385d7b9c81dec51209fb6ca926316834b330cf1ee7292fdbc96eaa9
     - path: internal/mediatest/image.go

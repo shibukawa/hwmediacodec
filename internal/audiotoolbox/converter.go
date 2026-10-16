@@ -3,6 +3,7 @@
 package audiotoolbox
 
 import (
+	"runtime"
 	"sync"
 	"unsafe"
 
@@ -37,9 +38,29 @@ type input struct {
 	// eof makes an empty queue mean the end of the stream.
 	eof bool
 	// held is the chunk handed out last. AudioToolbox reads it until the
-	// callback is asked again, so it must stay reachable until then.
-	held []byte
-	desc sys.AudioStreamPacketDescription
+	// callback is asked again, so it must stay reachable and in place
+	// until then: its address lives in native memory, where the garbage
+	// collector cannot see it, so pinner keeps the array from moving.
+	held   []byte
+	pinner runtime.Pinner
+	desc   sys.AudioStreamPacketDescription
+}
+
+// hold hands chunk to AudioToolbox: it stays pinned until the next hold
+// or release.
+func (in *input) hold(chunk []byte) {
+	in.pinner.Unpin()
+	if len(chunk) > 0 {
+		in.pinner.Pin(unsafe.SliceData(chunk))
+	}
+	in.held = chunk
+}
+
+// release drops the queue and the chunk AudioToolbox was reading, once the
+// converter no longer runs.
+func (in *input) release() {
+	in.pinner.Unpin()
+	in.chunks, in.held = nil, nil
 }
 
 // Inputs are reached from the callback through a small integer handle,
@@ -111,7 +132,7 @@ func onInput(converter uintptr, ioPackets *uint32, ioData *sys.AudioBufferList, 
 			*outDesc = &in.desc
 		}
 	}
-	in.held = chunk
+	in.hold(chunk)
 	ioData.NumberBuffers = 1
 	ioData.Buffer.Data = unsafe.Pointer(unsafe.SliceData(chunk))
 	ioData.Buffer.DataByteSize = uint32(len(chunk))

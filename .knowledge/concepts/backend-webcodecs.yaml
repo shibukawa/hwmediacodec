@@ -430,7 +430,7 @@ verification:
     - path: internal/webcodecs/browser_js_test.go
       input_hash: 13a8e3ab43becc0dd97038669d12fedf55bb17eceeb63160c59938e35157e82c
     - path: internal/codec/codec.go
-      input_hash: f2acf88b6f695173a0f189c09a1a90760d7aeb1577aaa7ab673fd7b3885b8572
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: native_test.go
       input_hash: a4cd0b7206d94e0cd85670e7ebeee6fec40e04950848c743afa5a31b9ec78bf1
   other-browsers:
@@ -651,7 +651,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: audio_mp4_test.go
@@ -681,7 +681,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: internal/aac/esds.go
       input_hash: 35eb2633e6c75b94821cbebeb617ef6a77673956eb10efb03e245f297ebc687e
     - path: exact_js_test.go
@@ -704,7 +704,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
   audiowc-chrome-full-run:
@@ -743,9 +743,9 @@ verification:
     - path: scripts/crossbuild.sh
       input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
     - path: internal/audiotoolbox/decoder.go
-      input_hash: 0488fbc24dc021710f67dbe166372b70b19c71037171f21032c5dcadcbc20088
+      input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: e56136a952be1a8928c041cd712bfb5cbaea51d1d2487a60f5cc3159e7b82df8
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
   audiowc-chrome-elsewhere:
     state: not_run
     method: manual

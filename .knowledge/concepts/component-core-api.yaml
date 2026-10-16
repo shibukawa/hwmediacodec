@@ -147,9 +147,9 @@ verification:
     - path: examples/convert/main.go
       input_hash: 469cad54a148009e6025e514cdf6ac6a4f25bb2fa916d6a8f812065f3e79ea16
     - path: examples/thumbnails/main.go
-      input_hash: 5b62f425836101ad54baf4812efebeb4d7d4fce3cbad79267359d5b7e633373a
+      input_hash: 640a3826e3a6bf78c2b1be97378dd4536bea65783868237eaeabe4e64ff9aff4
     - path: capture/recorder.go
-      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
   pipe-cli-run:
     state: passed
     method: manual
@@ -167,7 +167,7 @@ verification:
         encode 45 H.264 frames
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: 7aaa00c097cf47870e27d84a91643132d702914c46317c507b4a51689a994b41
+      input_hash: df01221689b4aeb619c33b39a8e131b6a68b058c8a8f071bb79ad5bd28081eef
   layout-layout-test-run:
     state: passed
     method: integration

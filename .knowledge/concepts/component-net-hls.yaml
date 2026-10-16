@@ -74,11 +74,11 @@ verification:
         run 2026-10-09
     basis:
     - path: net/hls/playlist.go
-      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
   exscreen-hls-live-run:
     state: passed
     method: manual
@@ -97,9 +97,9 @@ verification:
         player, advanced to the live edge; autoplay needed an explicit play() in that pane
     basis:
     - path: examples/hls/main.go
-      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+      input_hash: a79eb3f418a3e60364f809c2327fbae60dba60e69b8da23e82ec337b6db6a9d1
     - path: net/hls/playlist.go
-      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
   hls-playlist-test:
     state: passed
     method: integration
@@ -113,11 +113,11 @@ verification:
       note: no hardware - packets come from demuxing an ffmpeg-made file; run 2026-10-10
     basis:
     - path: net/hls/playlist.go
-      input_hash: 9694c05ac117751a6bea472514c0ba4e9305fd52c02b03a40826cb46fc82f12a
+      input_hash: 9f3bf17b72f62027a1efd730226dd585a072b60ebdfc6f1df741e28f8ac7345f
     - path: net/hls/playlist_test.go
       input_hash: 488517494859d7d59c48aed5eaa801000c9991e4864ea7a6f9391c9f236fd42f
     - path: mediacontainer/mp4/segmenter.go
-      input_hash: c6dbff90313341b85865ed155c53b28c76dd716b3de845ef786e47a4c34f2fc7
+      input_hash: 62814194e3d22e9ebf0771a97e1a458f66cbc5b8c7286a42639aeeef9495be6a
   hls-page-test:
     state: passed
     method: unit
@@ -150,7 +150,7 @@ verification:
         served as text/html and ffprobe read h264 1280x720 from index.m3u8; no browser playback this time
     basis:
     - path: examples/hls/main.go
-      input_hash: ebebd39e5a79568bdf9e28111eb8c2b79a85f9bb6e674f9efb5371f690c86dd2
+      input_hash: a79eb3f418a3e60364f809c2327fbae60dba60e69b8da23e82ec337b6db6a9d1
 facts:
   api:
     hls: Playlist{SetInit, Add, End, M3U8, ServeHTTP} serving /, /index.m3u8, /init.mp4, /seg_N.m4s; flags

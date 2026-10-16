@@ -212,15 +212,19 @@ type AudioEncoder interface {
 	// the first frame after a Flush) places it in time and the PTS of the
 	// later ones is not looked at. The data is copied before Send returns.
 	// Send returns ErrAgain when too many packets are waiting to be
-	// received.
+	// received. A frame that codes to more packets than the queue holds
+	// is encoded in parts: Send encodes until the queue is full and
+	// Receive encodes the rest as it hands packets out, so the queue
+	// stays bounded whatever the frame's length.
 	Send(ctx context.Context, f *AudioFrame) error
 	// Receive returns the next packet. It returns ErrAgain when no packet
 	// is ready and more input is needed, and io.EOF after Flush once every
 	// packet has been returned.
 	Receive(ctx context.Context) (Packet, error)
 	// Flush makes the encoder emit the samples it is holding, padding the
-	// last packet with silence. After Flush the encoder can be reused for a
-	// new signal.
+	// last packet with silence; what Send left unencoded is encoded at
+	// once, so the queue may then exceed its bound by what one frame codes
+	// to. After Flush the encoder can be reused for a new signal.
 	Flush(ctx context.Context) error
 	// Close releases backend resources. Packets already returned stay valid.
 	Close() error

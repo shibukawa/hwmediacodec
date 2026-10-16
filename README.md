@@ -858,7 +858,11 @@ m.Close()
   An encoder counts PTS and `Packet.Duration` in samples (the time scale
   defaults to the sample rate; `WithTimeScale` changes it), takes the PTS
   of the first frame as the start and treats everything sent after it as
-  one continuous signal, in frames of any length.
+  one continuous signal, in frames of any length. A frame longer than the
+  encoder's output queue (a minute of PCM in one `Send`) is encoded in
+  parts: `Send` stops once the queue is full and `Receive` encodes the
+  rest as it hands packets out, so the queue stays bounded while the
+  caller holds the frame; `Flush` encodes whatever is left at once.
 - **Delay.** Encoders start early: the first packets of a stream code
   samples that are not part of the recording (2112 for AudioToolbox's AAC,
   312 for its Opus; `AudioFormat.Delay`), and the last packet is padded to
@@ -965,7 +969,9 @@ What the package takes care of:
   when one starts later than the other (sound that begins half a second
   into the picture), it gets an empty edit of that length in front.
   Tracks copied with `AddPassthroughTrack` keep the edit list of their
-  source.
+  source, rescaled to the output's movie time scale (QuickTime files
+  count theirs in 600ths of a second, ffmpeg's in the audio sample rate;
+  `Demuxer.MovieTimeScale` reports the source's).
 - Progressive output only (`ftyp`, `mdat`, `moov` at the end), `stco` or
   `co64` as the size requires, one chunk per run of samples of the same
   track. Fragmented input is rejected.
@@ -977,7 +983,15 @@ What the package takes care of:
   `hwmediacodec.PacketWriteCloser`), and `Segmenter` cuts encoder packets into CMAF/fMP4
   segments for live HLS: an init segment, then one `moof`+`mdat` per
   segment, each starting at a keyframe. It needs PTS == DTS, so encode
-  without B-frames.
+  without B-frames. A stream whose keyframes stop coming is an error
+  (after four segment lengths, or `MaxSegmentBytes` of held samples)
+  rather than unbounded memory.
+- Files are untrusted input. The sample tables are checked against the
+  file and a track with more than `MaxSamples` (8 million, about 37 hours
+  at 60 fps) is refused, because the index costs 24 bytes per sample
+  whatever the file's size; lower it for a program that opens files from
+  anywhere. The reader may start at any offset (an MP4 embedded in another
+  file); offsets are taken from there.
 
 ## Live HLS
 
@@ -998,9 +1012,16 @@ playlist.End()                                             // EXT-X-ENDLIST
 
 - Set the encoder's keyframe interval to the segment length (segments are
   cut at keyframes) and encode without B-frames (`WithLowLatency`).
-- The handler answers by the last path element (`index.m3u8`, `init.mp4`,
-  `seg_N.m4s`), so it can be mounted under any prefix; it answers 503 until
-  the first segment exists and sends `Access-Control-Allow-Origin: *`.
+- The handler answers GET and HEAD by the last path element (`index.m3u8`,
+  `init.mp4`, `seg_N.m4s`), so it can be mounted under any prefix; it
+  answers 503 until the first segment exists and sends
+  `Access-Control-Allow-Origin: *`. Segments are cacheable only for as
+  long as the window lists them, so a restarted stream (whose sequence
+  numbers start over) is not served stale segments from a browser cache.
+- The stream is unauthenticated: anyone who can reach the handler can
+  watch. Serve it on a loopback or trusted interface (the samples listen on
+  `127.0.0.1` unless told otherwise) or behind the application's own
+  authentication.
 - Safari plays the stream natively; other browsers need hls.js or another
   MSE player (`examples/hls` has such a page). HEVC plays in Safari only.
   Latency is a few seconds, which is what plain HLS gives;
@@ -1029,8 +1050,19 @@ http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
   answer is returned once ICE gathering is done, so no trickle ICE and no
   WebSocket. `Accept` does the same for programs with their own signalling.
 - A viewer joining or reporting a picture loss calls the keyframe callback,
-  and a viewer only starts receiving at a keyframe. Encode with
-  `WithLowLatency`, Baseline profile and no B-frames.
+  and a viewer only starts receiving at a keyframe. Requests closer
+  together than half a second are merged, so a viewer flooding the stream
+  with picture loss indications cannot turn it into keyframes only. Encode
+  with `WithLowLatency`, Baseline profile and no B-frames.
+- Each viewer is served by a goroutine of its own from a bounded queue, so
+  a slow network stalls neither the encoder nor the other viewers; a viewer
+  that falls about a second behind is dropped. `MaxViewers` (32 by
+  default) caps the connections, counting those still being set up;
+  `ServeHTTP` answers 503 beyond it or after `Close`, 400 for an offer it
+  cannot answer, and drops a connection whose request is cancelled during
+  ICE gathering (`AcceptContext`). The endpoint itself is unauthenticated,
+  like `net/hls`: serve it on a trusted interface or behind the
+  application's authentication.
 - `examples/webrtc` has a player page; measured there in a Chromium browser
   on the same machine at 1280x720, the jitter buffer delay was about 8 ms.
 
@@ -1106,6 +1138,10 @@ err = heif.Encode(w, img, &heif.Options{Quality: 0.8, TileSize: 512, Rotation: 9
 
 rgba, info, err := heif.DecodeBytes(data, hwmediacodec.WithSoftwareFallback())
 info, err = heif.DecodeInfo(data)              // size, tiles, rotation; no decoder needed
+
+heif.MaxPixels = 4096 * 4096                   // bounds for every decode, as http.DefaultMaxHeaderBytes
+rgba, info, err = heif.DecodeBytesWithLimits(data, heif.Limits{MaxPixels: 8192 * 8192})
+rgba, info, err = heif.DecodeWithLimits(file, heif.Limits{MaxTiles: 64}, hwmediacodec.WithSoftwareFallback())
 ```
 
 - Each package reads only its own codec and says so when handed the
@@ -1118,7 +1154,19 @@ info, err = heif.DecodeInfo(data)              // size, tiles, rotation; no deco
   there). The packages have no software codec of their own;
   `examples/imgconv` shows how to fall back to cgo-free ones.
   `DecodeConfig` and `DecodeInfo` read only the file structure and work
-  everywhere.
+  everywhere. `Decode` and `DecodeConfig` given a reader that can seek
+  (an `*os.File`) read the headers and then only the items they need; any
+  other reader is read into memory up to `MaxInputBytes`.
+- Limits: a HEIF file declares its picture and grid sizes itself, and its
+  item table may point every grid cell at one coded tile, so a few hundred
+  bytes can describe a 16 GiB canvas stitched from 65,000 decodes.
+  Decoding refuses a file beyond `MaxPixels` (16384 x 16384), `MaxTiles`
+  (4096) or `MaxInputBytes` (256 MiB) with an error wrapping `ErrTooLarge`
+  before allocating the canvas or opening a decoder; the defaults are
+  libavif's and libheif's. They are package variables because the decoders
+  `image.Decode` calls take no options; `DecodeWithLimits` and
+  `DecodeBytesWithLimits` take a `Limits` for one call. `DecodeConfig` and
+  `DecodeInfo` still report the declared size, as `image/png` does.
 - The result is opaque RGBA: alpha planes are neither read nor written,
   and only 8-bit 4:2:0 pictures are handled (iPhone HDR photos are 10-bit
   and out of scope).
@@ -1183,8 +1231,8 @@ cd examples
 go run ./convert -codec hevc -bitrate 6M input.mp4 output.mp4
 go run ./thumbnails -every 10s -width 320 -o thumbs input.mp4
 go run ./record -o capture.mp4 -seconds 10
-go run ./hls -addr :8080      # then open http://localhost:8080/
-go run ./webrtc -addr :8080   # same, about 100 ms of latency
+go run ./hls                  # then open http://127.0.0.1:8080/ (-addr :8080 for the whole network)
+go run ./webrtc               # same, about 100 ms of latency
 go run ./player               # the bundled clip; space pause, arrows seek
 go run ./texture              # 1 flat, 2 box, 3 shader
 go run ./imgconv photo.heic photo.png

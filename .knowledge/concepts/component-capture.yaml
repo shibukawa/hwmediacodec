@@ -126,7 +126,7 @@ verification:
         to the core module (milestone:capture-package)
     basis:
     - path: capture/recorder.go
-      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
     - path: packetio.go
       input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
     - path: capture/recorder_test.go
@@ -136,7 +136,7 @@ verification:
     - path: mediacontainer/mp4/videofile_test.go
       input_hash: 4672c0960136d0beb5c7869693eb0aedf1948d5cdea675effaf9ff35ab16afba
     - path: mediacontainer/mp4/mux.go
-      input_hash: 01d99a448a75a904da196cb3cfec3041c6435df8980a09de661737c749fea3ae
+      input_hash: 2eae78e644840a1975ce066a51861a1643bd6d985aac80626153b2b75130cc44
   exwebrtc-recorder-keyframe-test:
     state: passed
     method: integration
@@ -152,7 +152,7 @@ verification:
       note: Apple M3; run 2026-10-09
     basis:
     - path: capture/recorder.go
-      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
     - path: capture/recorder_test.go
       input_hash: 06d68707ed9d14805a7fbc92755794db99ad5b8eca29e142a4238261e99da54c
   capture-recorder-core-test:
@@ -170,7 +170,7 @@ verification:
       note: Apple M3, macOS 27, ffmpeg; run 2026-10-09 (go test ./... of the core module passes)
     basis:
     - path: capture/recorder.go
-      input_hash: b178ee2bde07eead8d90e6ccde4ff2e562f2f081f7629292dde3e7398cb82cc0
+      input_hash: 9ea4412e002c32d958fb8ede16acda86b6ca56c316a9040672b20d66a2668589
     - path: packetio.go
       input_hash: 2462de8f9f95372e69490ec28509ce4d158b2736c5a851f560471f1ee610087a
     - path: capture/recorder_test.go
@@ -192,7 +192,7 @@ verification:
         which capture does not import)
     basis:
     - path: go.mod
-      input_hash: 6a046608871e332e72b9360933efdec846a40655054330828bdef28c8b993936
+      input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
   capture-videofile-test:
     state: passed
     method: integration

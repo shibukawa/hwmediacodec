@@ -77,7 +77,7 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: e543706b633a10cc574579287c3a43f607a9d1476ee00f45688925c93221143b
+      input_hash: 96505cdb897ca6b111d8e84cd123ccf7d7796d8c523166feb6a1e277fae095bd
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go
@@ -111,7 +111,7 @@ verification:
     - path: internal/reorder/buffer.go
       input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
     - path: internal/reorder/tracker.go
-      input_hash: e543706b633a10cc574579287c3a43f607a9d1476ee00f45688925c93221143b
+      input_hash: 96505cdb897ca6b111d8e84cd123ccf7d7796d8c523166feb6a1e277fae095bd
     - path: internal/h264/poc.go
       input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
     - path: internal/hevc/hevc.go

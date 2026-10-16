@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // Codec identifies a coding format: the video formats H264, HEVC and AV1,
@@ -295,20 +296,23 @@ type Frame struct {
 	// an input to Encoder.Send only; decoders leave it false.
 	ForceKeyframe bool
 
-	release func()
-	native  any
-	order   Order
+	release  func()
+	released uint32 // set once by the Release that runs release
+	native   any
+	order    Order
 }
 
 // Release returns the frame memory to the decoder. The frame must not be
-// used afterwards. Release is idempotent and a no-op for caller-owned frames.
+// used afterwards. Release is idempotent, also when called from several
+// goroutines at once, and a no-op for caller-owned frames.
 func (f *Frame) Release() {
 	if f == nil || f.release == nil {
 		return
 	}
-	r := f.release
-	f.release = nil
-	r()
+	if !atomic.CompareAndSwapUint32(&f.released, 0, 1) {
+		return
+	}
+	f.release()
 	f.Planes = nil
 	f.Strides = nil
 	f.native = nil

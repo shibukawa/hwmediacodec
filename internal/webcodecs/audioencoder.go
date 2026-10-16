@@ -369,11 +369,22 @@ type audioEncoder struct {
 	samplesSent int64
 	packetsOut  int64
 
+	// input holds the samples Send accepted but has not handed to the
+	// browser yet: a frame is fed in pieces, as far as the packets it
+	// will produce fit maxAudioPending, and the rest goes as Receive
+	// makes room (at most one frame waits, since Send refuses more while
+	// the queue is full).
+	input []byte
+
 	pending []codec.Packet
 	failure error
 	flushed bool
 	closed  bool
 }
+
+// feedPackets is the number of packets' worth of samples handed to the
+// browser in one AudioData while a frame is fed in pieces.
+const feedPackets = 16
 
 func newAudioEncoder(cfg codec.AudioEncoderConfig, cls js.Value, config map[string]any, traits audioTraits) *audioEncoder {
 	e := &audioEncoder{
@@ -444,7 +455,7 @@ func (e *audioEncoder) abandon() {
 			}
 		})
 	}
-	e.enc, e.opened, e.started = js.Undefined(), false, false
+	e.enc, e.opened, e.started, e.input = js.Undefined(), false, false, nil
 }
 
 // takeFailure returns the pending error once and drops the encoder.
@@ -479,7 +490,7 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	if err := e.takeFailure(); err != nil {
 		return err
 	}
-	if len(e.pending) >= maxAudioPending {
+	if e.queued() >= maxAudioPending {
 		return codec.ErrAgain
 	}
 	if err := e.open(); err != nil {
@@ -498,10 +509,36 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 		return nil
 	}
 	e.samplesIn += int64(len(f.Data) / e.unit)
-	if err := e.encode(f.Data); err != nil {
+	e.input = append(e.input, f.Data...)
+	if err := e.feed(); err != nil {
 		return err
 	}
 	return e.waitQueue(ctx)
+}
+
+// queued is the number of packets held for Receive plus those the browser
+// still owes for the samples it was handed.
+func (e *audioEncoder) queued() int {
+	frame := int64(e.format.FrameSamples)
+	owed := (e.samplesSent+frame-1)/frame - e.packetsOut
+	return len(e.pending) + int(max(owed, 0))
+}
+
+// feed hands the browser as much of input as keeps queued within
+// maxAudioPending, feedPackets packets at a time.
+func (e *audioEncoder) feed() error {
+	piece := e.format.FrameSamples * feedPackets * e.unit
+	for len(e.input) > 0 && e.queued() < maxAudioPending {
+		n := min(len(e.input), piece)
+		if err := e.encode(e.input[:n]); err != nil {
+			return err
+		}
+		e.input = e.input[n:]
+	}
+	if len(e.input) == 0 {
+		e.input = nil
+	}
+	return nil
 }
 
 // encode hands interleaved samples in the encoder's format to the
@@ -589,6 +626,12 @@ func (e *audioEncoder) Receive(ctx context.Context) (codec.Packet, error) {
 	if err := ctx.Err(); err != nil {
 		return codec.Packet{}, err
 	}
+	if len(e.input) > 0 && e.failure == nil {
+		// Room for the samples Send left with us.
+		if err := e.feed(); err != nil {
+			return codec.Packet{}, err
+		}
+	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
 		e.pending[0] = codec.Packet{}
@@ -604,10 +647,12 @@ func (e *audioEncoder) Receive(ctx context.Context) (codec.Packet, error) {
 	return codec.Packet{}, codec.ErrAgain
 }
 
-// Flush implements codec.AudioEncoder. Whether a browser's encoder gives
-// back the samples it is still holding when it is flushed is not
-// specified, so it is sent enough silence to push them out first; the
-// packets that code nothing but that silence are dropped as they arrive.
+// Flush implements codec.AudioEncoder. The samples Send left unencoded go
+// to the browser first, so pending may exceed maxAudioPending afterwards
+// by what one frame codes to. Whether a browser's encoder gives back the
+// samples it is still holding when it is flushed is not specified, so it
+// is sent enough silence to push them out; the packets that code nothing
+// but that silence are dropped as they arrive.
 func (e *audioEncoder) Flush(ctx context.Context) error {
 	if e.closed {
 		return codec.ErrClosed
@@ -619,6 +664,14 @@ func (e *audioEncoder) Flush(ctx context.Context) error {
 		return err
 	}
 	if e.opened && e.started {
+		if len(e.input) > 0 {
+			rest := e.input
+			e.input = nil
+			if err := e.encode(rest); err != nil {
+				e.abandon()
+				return err
+			}
+		}
 		silence := make([]byte, (e.format.Delay+2*e.format.FrameSamples)*e.unit)
 		if err := e.encode(silence); err != nil {
 			e.abandon()
@@ -654,6 +707,7 @@ func (e *audioEncoder) Close() error {
 	e.abandon()
 	e.failure = nil
 	e.pending = nil
+	e.input = nil
 	e.onOutput.Release()
 	e.onError.Release()
 	e.onDequeue.Release()

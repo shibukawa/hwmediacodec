@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"math/bits"
 	"os"
 
 	mp4ff "github.com/Eyevinn/mp4ff/mp4"
@@ -47,6 +48,9 @@ type trackWriter struct {
 	chunkN    []uint32
 	build     func(stbl *mp4ff.StblBox) (*mp4ff.TrakBox, error)
 	edts      *mp4ff.EdtsBox // copied from a source track
+	// srcMovieTimeScale is the movie time scale of the file edts came from
+	// (0 when unknown): the unit of its segment durations.
+	srcMovieTimeScale uint32
 	// skip is the media time after the first presented sample at which
 	// the presentation really starts: the delay of an audio encoder.
 	skip int64
@@ -116,11 +120,15 @@ type TrackWriter struct {
 }
 
 // AddPassthroughTrack adds a track with the same sample description, time
-// scale, handler and edit list as src; feed it with WriteSample.
+// scale, handler and edit list as src; feed it with WriteSample. The edit
+// list's segment durations are in the movie time scale, which this writer
+// sets to 1000 while QuickTime and iPhone recordings use 600, so they are
+// rescaled on the way.
 func (m *Muxer) AddPassthroughTrack(src *Track) *TrackWriter {
 	t := &TrackWriter{src: src}
 	t.trackWriter = m.addTrack(src.TimeScale, t.buildTrak)
 	t.trackWriter.edts = src.Trak.Edts
+	t.trackWriter.srcMovieTimeScale = src.movieTimeScale
 	return t
 }
 
@@ -298,7 +306,12 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 	}
 	stbl = mp4ff.NewStblBox()
 	stts := &mp4ff.SttsBox{}
-	var ctts *mp4ff.CttsBox
+	// Composition offsets as runs, like stts: a GOP pattern repeats a few
+	// values, so the table stays small however long the recording is. The
+	// runs are only started once a non-zero offset appears; a track without
+	// B-frames gets no ctts box at all.
+	var ctoCounts []uint32
+	var ctoOffsets []int32
 	stss := &mp4ff.StssBox{}
 	stsz := &mp4ff.StszBox{}
 	allSync := true
@@ -319,14 +332,17 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 		if cto > math.MaxInt32 {
 			return nil, 0, 0, 0, 0, fmt.Errorf("mp4: track %d: sample %d composition offset exceeds the 32-bit field", t.id, i)
 		}
-		if ctts == nil && cto != 0 {
-			ctts = &mp4ff.CttsBox{}
-			for range i {
-				ctts.SampleOffset = append(ctts.SampleOffset, 0)
-			}
+		if ctoCounts == nil && cto != 0 && i > 0 {
+			ctoCounts = append(ctoCounts, uint32(i))
+			ctoOffsets = append(ctoOffsets, 0)
 		}
-		if ctts != nil {
-			ctts.SampleOffset = append(ctts.SampleOffset, int32(cto))
+		if ctoCounts != nil || cto != 0 {
+			if k := len(ctoCounts); k > 0 && ctoOffsets[k-1] == int32(cto) {
+				ctoCounts[k-1]++
+			} else {
+				ctoCounts = append(ctoCounts, 1)
+				ctoOffsets = append(ctoOffsets, int32(cto))
+			}
 		}
 		if s.sync {
 			stss.SampleNumber = append(stss.SampleNumber, uint32(i+1))
@@ -344,14 +360,9 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 	}
 	stsz.SampleNumber = uint32(n)
 	stbl.AddChild(stts)
-	if ctts != nil {
-		counts := make([]uint32, len(ctts.SampleOffset))
-		for i := range counts {
-			counts[i] = 1
-		}
-		offsets := ctts.SampleOffset
-		ctts = &mp4ff.CttsBox{}
-		if err := ctts.AddSampleCountsAndOffset(counts, offsets); err != nil {
+	if ctoCounts != nil {
+		ctts := &mp4ff.CttsBox{}
+		if err := ctts.AddSampleCountsAndOffset(ctoCounts, ctoOffsets); err != nil {
 			return nil, 0, 0, 0, 0, err
 		}
 		stbl.AddChild(ctts)
@@ -380,6 +391,59 @@ func (t *trackWriter) sampleTable() (stbl *mp4ff.StblBox, mediaDuration uint64, 
 		stbl.AddChild(&mp4ff.Co64Box{ChunkOffset: t.chunkOff})
 	}
 	return stbl, mediaDuration, presStart, presEnd, base, nil
+}
+
+// rescaleEdits copies an edit list taken from a file whose movie time
+// scale is src into the movie time scale of this writer and returns the
+// copy with the sum of its segment durations, which is the track duration
+// in the track header. Segment durations are rounded up like presDur in
+// writeMoov: a player must not cut the last samples. The source box is
+// left untouched because it still belongs to the demuxer. An unknown
+// source time scale (0) is taken to be ours.
+func rescaleEdits(src *mp4ff.EdtsBox, srcTimeScale uint32) (*mp4ff.EdtsBox, uint64) {
+	out := &mp4ff.EdtsBox{}
+	var total uint64
+	// Children is what mp4ff encodes (AddChild fills only it; the decoder
+	// fills Elst as well), so the walk is over Children and the copy keeps
+	// both in step.
+	for _, child := range src.Children {
+		elst, ok := child.(*mp4ff.ElstBox)
+		if !ok {
+			out.AddChild(child)
+			continue
+		}
+		c := &mp4ff.ElstBox{Version: elst.Version, Flags: elst.Flags, Entries: make([]mp4ff.ElstEntry, len(elst.Entries))}
+		for i, e := range elst.Entries {
+			e.SegmentDuration = rescaleCeil(e.SegmentDuration, srcTimeScale, movieTimeScale)
+			// A version 0 box holds 32-bit fields; rescaling can push a
+			// duration past them.
+			if e.SegmentDuration > math.MaxUint32 {
+				c.Version = 1
+			}
+			c.Entries[i] = e
+			total += e.SegmentDuration
+		}
+		out.Elst = append(out.Elst, c)
+		out.AddChild(c)
+	}
+	return out, total
+}
+
+// rescaleCeil converts v from units of 1/from second to units of 1/to
+// second, rounded up. The product is formed in 128 bits so that a hostile
+// duration cannot wrap; a result beyond uint64 saturates.
+func rescaleCeil(v uint64, from, to uint32) uint64 {
+	if from == 0 || from == to {
+		return v
+	}
+	hi, lo := bits.Mul64(v, uint64(to))
+	lo, carry := bits.Add64(lo, uint64(from)-1, 0)
+	hi += carry
+	if hi >= uint64(from) {
+		return math.MaxUint64
+	}
+	q, _ := bits.Div64(hi, lo, uint64(from))
+	return q
 }
 
 // timeBetween returns the time from the moment a (in units of 1/as second)
@@ -493,10 +557,9 @@ func (m *Muxer) writeMoov() error {
 		}
 		switch {
 		case t.edts != nil:
-			trak.AddChild(t.edts)
-			if len(t.edts.Elst) > 0 && len(t.edts.Elst[0].Entries) > 0 {
-				trak.Tkhd.Duration = t.edts.Elst[0].Entries[0].SegmentDuration
-			}
+			edts, dur := rescaleEdits(t.edts, t.srcMovieTimeScale)
+			trak.AddChild(edts)
+			trak.Tkhd.Duration = dur
 		case f.presStart > 0 || wait > 0:
 			// Hide what lies before the presentation: the decoder delay of
 			// a B-frame stream (it starts at the first PTS, not at decode

@@ -194,7 +194,9 @@ func TestBroadcasterDeliversAccessUnits(t *testing.T) {
 	}
 
 	// A picture loss indication from the viewer asks the encoder for a
-	// keyframe.
+	// keyframe. Requests within half a second of the one the join made
+	// are merged into it, so the indication goes out after that.
+	time.Sleep(600 * time.Millisecond)
 	before := keyRequests.Load()
 	if err := v.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: v.ssrc.Load()}}); err != nil {
 		t.Fatal(err)

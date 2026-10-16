@@ -50,7 +50,7 @@ func (t *Tracker) tentative(nals [][]byte) Tracker {
 			next.hevcSPS = maps.Clone(t.hevcSPS)
 			next.hevcPPS = maps.Clone(t.hevcPPS)
 		}
-		break
+		return next // one copy covers every parameter set of the access unit
 	}
 	return next
 }

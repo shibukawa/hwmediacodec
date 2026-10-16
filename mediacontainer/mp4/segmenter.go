@@ -13,6 +13,15 @@ import (
 	"github.com/shibukawa/hwmediacodec/internal/codec"
 )
 
+// MaxSegmentBytes bounds the sample data a Segmenter holds back for the
+// segment it is building. A segment closes at a keyframe, so a stream
+// without keyframes would otherwise grow in memory without end; the time
+// bound in WritePacket (four times the target) catches that when the
+// timestamps advance, and this catches it when they barely do. The
+// default of 256 MiB is far above any real segment (a 50 Mbit/s stream
+// fills it in 40 s).
+var MaxSegmentBytes = 256 << 20
+
 // Segment is one fragmented-MP4 media segment (styp + moof + mdat) that
 // starts with a keyframe.
 type Segment struct {
@@ -40,8 +49,11 @@ type Segmenter struct {
 	seq      int
 	base     int64 // DTS of the first sample, so decode times start at 0
 	pending  []pendingSample
-	lastDur  int64
-	closed   bool
+	// pendingBytes is the sample data in pending, checked against
+	// MaxSegmentBytes.
+	pendingBytes int
+	lastDur      int64
+	closed       bool
 }
 
 type pendingSample struct {
@@ -54,6 +66,13 @@ type pendingSample struct {
 // NewSegmenter creates a segmenter for H.264 or HEVC packets whose PTS
 // and DTS are in timeScale units. onInit receives the init segment once,
 // onSegment every media segment in order.
+//
+// Segments close only at keyframes, so the encoder's keyframe interval
+// must not exceed target by much: when the samples held back span more
+// than four times target without a keyframe arriving, or more than
+// MaxSegmentBytes, WritePacket returns an error instead of holding on to
+// the whole stream (an encoder with its keyframe interval set to 0, or a
+// stream that lost its IDR pictures, would otherwise exhaust memory).
 func NewSegmenter(c hwmediacodec.Codec, timeScale uint32, target time.Duration, onInit func([]byte) error, onSegment func(Segment) error) (*Segmenter, error) {
 	if c != hwmediacodec.H264 && c != hwmediacodec.HEVC {
 		return nil, fmt.Errorf("mp4: cannot segment %s", c)
@@ -99,7 +118,22 @@ func (s *Segmenter) WritePacket(p hwmediacodec.Packet) error {
 	if len(s.pending) > 0 && p.DTS <= s.pending[len(s.pending)-1].dts {
 		return fmt.Errorf("mp4: decode time %d does not increase", p.DTS)
 	}
+	// A segment that cannot close is a stream without keyframes: report it
+	// instead of buffering until memory runs out (see NewSegmenter).
+	if len(s.pending) > 0 {
+		limit := time.Duration(math.MaxInt64)
+		if s.target <= limit/4 {
+			limit = 4 * s.target
+		}
+		if held := s.toDuration(p.PTS - s.pending[0].pts); held > limit {
+			return fmt.Errorf("mp4: segmenter: no keyframe for %v, more than four times the %v target; the encoder must emit keyframes at least that often", held, s.target)
+		}
+		if len(data) > MaxSegmentBytes-s.pendingBytes {
+			return fmt.Errorf("mp4: segmenter: %d bytes without a keyframe exceed MaxSegmentBytes (%d)", s.pendingBytes+len(data), MaxSegmentBytes)
+		}
+	}
 	s.pending = append(s.pending, pendingSample{data: data, dts: p.DTS, pts: p.PTS, sync: sync})
+	s.pendingBytes += len(data)
 	return nil
 }
 
@@ -177,6 +211,7 @@ func (s *Segmenter) emit(nextDTS int64) error {
 	// encoded packets so a short later segment does not retain old frames.
 	clear(s.pending)
 	s.pending = s.pending[:0]
+	s.pendingBytes = 0
 	if s.onSegment != nil {
 		return s.onSegment(out)
 	}

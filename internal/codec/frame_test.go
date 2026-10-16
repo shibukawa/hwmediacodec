@@ -3,6 +3,8 @@ package codec
 import (
 	"errors"
 	"math"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -54,5 +56,25 @@ func TestFrameSizeOverflow(t *testing.T) {
 	}
 	if RGBAFrame(nil, 0) != nil {
 		t.Error("RGBAFrame(nil) must return nil")
+	}
+}
+
+// Release runs the backend's callback once, however many goroutines call
+// it: a double return of a pooled buffer would alias two later frames.
+func TestFrameReleaseOnce(t *testing.T) {
+	var n atomic.Int32
+	f := &Frame{Planes: [][]byte{make([]byte, 16)}}
+	SetRelease(f, func() { n.Add(1) })
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(f.Release)
+	}
+	wg.Wait()
+	if n.Load() != 1 {
+		t.Fatalf("release ran %d times, want 1", n.Load())
+	}
+	f.Release()
+	if n.Load() != 1 || f.Planes != nil {
+		t.Fatal("a released frame was not cleared or released again")
 	}
 }

@@ -302,7 +302,7 @@ verification:
     - path: internal/pixconv/pixconv.go
       input_hash: f35a9175f3aa0504f1becaeedb8819638c4f09a1a11169282b2a92c7c0e796f3
     - path: internal/videotoolbox/encoder.go
-      input_hash: 5e9d2421691c104c5197097031d11dd7b276a33379acd6bd1614590de06eb8e0
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
   encrgb-vaapi-fake-driver-test:
     state: passed
     method: integration
@@ -320,7 +320,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: internal/vaapi/encoder.go
-      input_hash: c53237595d3e729069818e267a857caa5e4cb612b0ffc17041a7a04ea800a67d
+      input_hash: a93f8bb8db6c8f7370f33ac74fb0f6453faec5b13f437079655c60e7d4c4db43
     - path: internal/vaapi/hevcenc.go
       input_hash: a6e83b2e24bc16ca53edef8ac97b6051cd4d91407fb421010df8a840c214625c
   encrgb-windows-hardware-run:
@@ -338,7 +338,7 @@ verification:
         the webrtc sample asks.'
     basis:
     - path: internal/mediafoundation/encoder.go
-      input_hash: 94584d63f7f0b1ea292af050e907c3d8c41badad0289e2ed16c3180bbeed8a7e
+      input_hash: 7332d85e3a9f053e43c9ae1b137f6baf85898f723c98748e67a305e7ad0df4c3
     - path: internal/vpl/encparam.go
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/vpl_test.go

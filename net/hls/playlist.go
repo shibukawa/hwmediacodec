@@ -113,8 +113,16 @@ func (p *Playlist) M3U8() string {
 // be mounted under any prefix; the URIs inside the playlist are relative.
 // The playlist answers 503 until the first segment exists. Responses
 // carry Access-Control-Allow-Origin: * so that a player page on another
-// origin can fetch them.
+// origin can fetch them. Only GET and HEAD are served. Segments are
+// cacheable for as long as the window lists them, so that a cached
+// segment cannot outlive a restart of the stream, whose sequence numbers
+// start over.
 func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "GET or HEAD a playlist or segment", http.StatusMethodNotAllowed)
+		return
+	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	name := path.Base(r.URL.Path)
 	switch {
@@ -147,10 +155,11 @@ func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		p.mu.RLock()
 		var data []byte
+		var listed time.Duration
 		for _, s := range p.segs {
+			listed += s.Duration
 			if s.Seq == n {
 				data = s.Data
-				break
 			}
 		}
 		p.mu.RUnlock()
@@ -159,7 +168,7 @@ func (p *Playlist) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "video/iso.segment")
-		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", max(int(listed.Seconds()), 1)))
 		w.Write(data)
 	default:
 		http.NotFound(w, r)

@@ -116,7 +116,7 @@ type Recorder struct {
 	done   chan struct{}
 
 	start    time.Time
-	lastPTS  int64
+	lastPTS  atomic.Int64 // of the last captured frame, -1 before the first
 	wantKey  atomic.Bool
 	captured atomic.Int64
 	dropped  atomic.Int64
@@ -154,17 +154,17 @@ func New(width, height int, sink hwmediacodec.PacketWriteCloser, opts Options) (
 		return nil, err
 	}
 	r := &Recorder{
-		opts:    opts,
-		sink:    sink,
-		width:   width,
-		height:  height,
-		step:    int64(float64(TimeScale)/opts.FPS + 0.5),
-		enc:     enc,
-		free:    make(chan []byte, opts.Queue+1),
-		frames:  make(chan frame, opts.Queue),
-		done:    make(chan struct{}),
-		lastPTS: -1,
+		opts:   opts,
+		sink:   sink,
+		width:  width,
+		height: height,
+		step:   int64(float64(TimeScale)/opts.FPS + 0.5),
+		enc:    enc,
+		free:   make(chan []byte, opts.Queue+1),
+		frames: make(chan frame, opts.Queue),
+		done:   make(chan struct{}),
 	}
+	r.lastPTS.Store(-1)
 	for range opts.Queue + 1 {
 		r.free <- make([]byte, frameBytes)
 	}
@@ -198,7 +198,7 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 	}
 	slot := int64(now.Sub(r.start).Seconds()*r.opts.FPS + 0.5)
 	pts := slot * r.step
-	if pts <= r.lastPTS {
+	if pts <= r.lastPTS.Load() {
 		return
 	}
 	var pix []byte
@@ -209,7 +209,7 @@ func (r *Recorder) CaptureAt(src Source, now time.Time) {
 		return
 	}
 	src.ReadPixels(pix)
-	r.lastPTS = pts
+	r.lastPTS.Store(pts)
 	key := r.wantKey.Swap(false)
 	select {
 	case r.frames <- frame{pix: pix, pts: pts, key: key}:
@@ -290,12 +290,11 @@ func (r *Recorder) Encoded() int64 { return r.encoded.Load() }
 
 // Duration is the recording time covered so far.
 func (r *Recorder) Duration() time.Duration {
-	r.captureMu.Lock()
-	defer r.captureMu.Unlock()
-	if r.lastPTS < 0 {
+	last := r.lastPTS.Load()
+	if last < 0 {
 		return 0
 	}
-	return time.Duration(codec.RescaleTrunc(r.lastPTS+r.step, TimeScale, int64(time.Second)))
+	return time.Duration(codec.RescaleTrunc(last+r.step, TimeScale, int64(time.Second)))
 }
 
 // Close stops capturing, flushes the encoder, closes the sink and returns
