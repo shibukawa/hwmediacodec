@@ -167,7 +167,7 @@ verification:
         encode 45 H.264 frames
     basis:
     - path: cmd/hwmediacodec/main.go
-      input_hash: df01221689b4aeb619c33b39a8e131b6a68b058c8a8f071bb79ad5bd28081eef
+      input_hash: 0bdbdfdba8e20ff2cf2d49d1461c479845a4957b981741bbfbc8d19a869cfa3f
   layout-layout-test-run:
     state: passed
     method: integration

@@ -5,8 +5,9 @@ summary: playback.Player decodes on a background goroutine a few frames ahead, i
   RGBA by default, and Advance(dt) returns the frame that is due; a PacketSeeker gives Seek, Length and
   looping, raw Annex-B streams are timed by output order and scanned once for keyframes. ebitenvideo (a
   separate module) drives a playback.Player from the game loop and uploads the frames into an *ebiten.Image.
-  Consolidated on 2026-10-16 from milestone:playback, milestone:ebitenvideo-seek and the player parts
-  of milestone:display-order-rgba.
+  WithAudio decodes the audio track into an AudioStream laid out on the pictures' time line, and an attached
+  AudioDevice (Ebitengine's audio player in ebitenvideo) is the clock; keys sound-. Consolidated on 2026-10-16 from milestone:playback, milestone:ebitenvideo-seek and the player parts
+  of milestone:display-order-rgba, and from milestone:playback-sound.
 lifecycle: active
 authority: authored
 aliases:
@@ -52,6 +53,50 @@ constraints:
 - PacketSource.Length is the presentation length (max PTS+duration minus the edit-list offset), not the
   decode-time duration, which is one B-frame delay shorter.
 - NewPlayer still handles H.264/HEVC Annex-B only; AV1 plays through a Source (MP4 demuxer).
+- 'AudioStream is strict about time: byte offset n is the sample of time n / BytesPerSecond on the time
+  line of the pictures, whatever was read before. Decoded frames are placed by their PTS (track time
+  scale, edit list applied), cut before 0 (encoder delay), at the audio track''s own length (padding)
+  and at the length of a pass; where nothing is decoded in time the stream is silence. So the position
+  a device reports (bytes read less bytes buffered) is a time on the time line with no bookkeeping, and
+  sound and picture agree by construction.'
+- 'Read never returns io.EOF (a device that sees the end stops, and with it the clock) and never blocks
+  for long: with nothing buffered it waits up to 30 ms for the decoder, then hands out 10 ms of silence;
+  otherwise it returns what is decoded, short reads included. A signal left in the ready channel by samples
+  that a Seek has since thrown away is drained before waiting (found by the tests: without that a jump
+  cost the first 10 ms).'
+- 'Seek(offset) is how a device flushes and jumps: the decoding goroutine restarts at the sample of the
+  offset (SeekKeyframe of the audio source, which backs up by the decoder''s run-in; decoder Flush).
+  Only SeekStart and SeekCurrent exist. Ebitengine''s resampler seeks its source to 4096-sample block
+  boundaries after a jump and otherwise reads sequentially, which this serves.'
+- 'One pass through the presentation is as long as the longer track (Player.Length returns it); with
+  WithLoop the audio stream carries pass after pass on a time line that runs on, and the video source''s
+  loop length is set to the same value, so both restart together. The clock of the timeline is (pass,
+  position); timeline.sync sets it from outside, timeline.advance still moves it by dt.'
+- 'With an AudioDevice attached, Player.Advance takes the device''s Position as the clock while Ready
+  reports true, clamped so that it never steps back (Ebitengine''s estimate did, by up to 2.7 ms). A
+  device that has just come up, and one after Seek, is paused, placed with SetPosition at the clock
+  and started when the timeline has a frame of the new position (or after 500 ms): sound and picture
+  start together. While the device is not ready the player holds the first picture for 500 ms once
+  and then runs on dt. Play, Pause, Seek, the end of the stream and Close pause or place the device.'
+- 'A film goes on without its sound: when NewAudioDecoder fails Player.Audio is nil and AudioErr holds
+  the error; when the decoder fails later the stream is silent from then on.'
+- 'WithAudioChannels mixes to mono or stereo in the stream (centre and surrounds at -3 dB into both sides,
+  LFE dropped, scaled by 1/(1+sqrt 2) so that it cannot clip); the stream decodes in F32 and hands out
+  F32 (default) or S16. No resampling in playback.'
+- 'ebitenvideo: audio.CurrentContext or a new context at the track''s rate (Ebitengine allows one per
+  process); another rate goes through audio.ResampleReaderF32; NewPlayerF32 on the stream; the device
+  wraps Player.Position, SetPosition, Play, Pause and Context.IsReady. Ebitengine''s Position is bytes
+  read less bytes buffered, interpolated with a stopwatch between buffer updates, updated once per tick.
+  It leaves out the output latency of the operating system. Close calls PauseAndStopReading before the
+  stream is closed.'
+- 'mediacontainer/mp4: an empty edit in front of a track is taken off Track.MediaTimeOffset (converted
+  from the movie time scale), so packet times of all tracks count from the start of the presentation;
+  AudioFormat.Delay keeps using the media time of the first real edit. Demuxer sample reads are serialised
+  by a mutex (video and audio packet sources read the same io.ReadSeeker from two goroutines; the device
+  test found NAL lengths of garbage without it).'
+- 'examples/go.sum carried hashes for ebitenvideo v0.1.0 that differ from the public checksum database
+  (the tag was moved after the proxy had fetched it). With a fresh module cache every build in the workspace
+  failed with a checksum mismatch on 2026-10-14; the two lines were set to the database''s values.'
 acceptance:
   dor-ebitenvideo-player:
     text: The player shows frame k at k/fps on the game clock, starts its clock at the first decoded frame,
@@ -152,6 +197,105 @@ acceptance:
       gpu: apple-silicon
     verified_by:
     - seek-annexb-offset-test
+  sound-stream-time-line:
+    text: Reading an AudioStream of an ffmpeg-made AAC track gives the encoded signal in place from offset
+      0 (shift 0, 15 dB or more as for every lossy round trip), exact silence behind the end of the track,
+      the signal of the target after jumps to five positions, pass after pass with silence between the
+      end of the track and the end of the pass when looping, and the right pass after a jump into the
+      sixth; a mono track comes out on both sides of a stereo stream; the mix weights are as documented.
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    verified_by:
+    - sound-playback-stream-tests
+    - sound-playback-stream-browser
+  sound-pictures-follow-device:
+    text: With a device the test drives at 60 ticks a second, every picture returned is the one for the
+      device's position (never ahead, at most two frames and a tick behind); the device is placed at
+      0 and started when it comes up, paused by Pause, placed at the target of Seek and started with
+      the first picture of the target, and paused at the end; the samples the device read are the signal
+      of its positions, from the start and after the jump.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-playback-device-tests
+  sound-late-device:
+    text: A device that is not ready holds the first picture for half a second, then the film runs on
+      the clock of Advance; when the device comes up it is placed where the pictures are (within two
+      ticks) and the samples it then reads are the signal of that position.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-playback-device-tests
+  sound-loop-with-sound:
+    text: With WithLoop the pictures of every pass are shown at the device's position within the pass
+      for three passes and the sound of the second pass starts where the pass does.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-playback-device-tests
+  sound-ebitenvideo-sound:
+    text: An ebitenvideo player with WithAudio reports HasAudio and its volume, plays to the end and through
+      a seek without a running audio device, and its stream read through Ebitengine's resampler (48 to
+      44.1 kHz) is the signal at the new rate in place, from the start and after a seek.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-ebitenvideo-tests
+  sound-real-device-run-macos:
+    text: The bundled clip with sound in a real Ebitengine game loop on macOS (CoreAudio) follows the
+      audio player's position through a start, a seek and a loop, without an audio error and with at
+      most a frame or two skipped.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-live-run-macos
+  sound-real-device-run-browser:
+    text: The same in headless Chrome (WebCodecs for both tracks, WebAudio for the output), with the
+      film on the tick clock until the page's first input event and on the audio's from then on.
+    scope:
+      milestone: playback-sound
+      platform: js
+    verified_by:
+    - sound-live-run-chrome
+  sound-track-offsets-read-back:
+    text: Files written with a later start for one track read back with that offset between the first
+      presented picture and the first presented sample (within 2 ms), one of them at 0.
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    verified_by:
+    - sound-mp4-offset-tests
+  sound-listening:
+    text: A person hears the sound of the player sample in step with the picture on a Mac, an iPhone and
+      in a browser.
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    verified_by:
+    - sound-listening-run
+  sound-existing-suites:
+    text: go test in all four modules, scripts/crossbuild.sh, scripts/mobilebuild.sh and scripts/browser_test.sh
+      . ./internal/webcodecs ./playback pass after the change.
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    verified_by:
+    - sound-existing-suites
 verification:
   dor-timeline-unit-test:
     state: passed
@@ -168,7 +312,7 @@ verification:
       locator: TestTimelineShowsFramesAtTheirTime
     basis:
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/timeline_test.go
       input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
   dor-player-hardware-test:
@@ -187,13 +331,13 @@ verification:
         a 12-frame 160x120 stream ends after the expected ticks with 0 skipped, loops 5 times
     basis:
     - path: ebitenvideo/player.go
-      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
     - path: playback/source.go
-      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+      input_hash: 136d62719405e7beee38bd6e86ca3e1906bed87ab19e074bc50168487245dac7
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
   dor-module-build-check:
     state: passed
     method: static
@@ -209,7 +353,7 @@ verification:
       note: ebiten v2.10.4; the core go.mod still requires only purego
     basis:
     - path: ebitenvideo/go.mod
-      input_hash: a95956c6450866d7ac12e02ed7f57a22f9ded4d32eaeca9c8b1523e2391d315c
+      input_hash: 0702042ff5815edf660a38786ec6b940c7906da2b704b6a5ba97cdd33c0c4bfe
     - path: go.mod
       input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
   browser-player-in-game-loop:
@@ -229,7 +373,7 @@ verification:
     - path: ebitenvideo/player_js_test.go
       input_hash: 06153e70d72190bebc66926a567595a83af68db4bb71ae3310966b173ab45b97
     - path: ebitenvideo/player.go
-      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
   playback-playback-test:
     state: passed
     method: integration
@@ -246,11 +390,11 @@ verification:
       note: Apple M3, macOS 27; run 2026-10-10 - ended after 33 ticks with 12 shown and 0 skipped
     basis:
     - path: playback/player.go
-      input_hash: 4506afbf0454e9a45287a1a9bd13edaa9b03b8af805e7633bedfdab51eddc520
+      input_hash: effae16c5fd57c05a96b57a40efe25e02945df87471b8900ee21d1044e97697c
     - path: playback/source.go
-      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+      input_hash: 136d62719405e7beee38bd6e86ca3e1906bed87ab19e074bc50168487245dac7
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/source_darwin_test.go
       input_hash: a5c4ff454cb8b0ff7efc604ca30333ea932ae4059bafa5d9807ae2141398d547
     - path: playback/seek_darwin_test.go
@@ -270,9 +414,9 @@ verification:
       note: run 2026-10-10, three times in a row
     basis:
     - path: ebitenvideo/player.go
-      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
   playback-texture-run:
     state: passed
     method: manual
@@ -305,11 +449,11 @@ verification:
       note: Apple M3, ffmpeg 9.0.1 (libx264 bf=2, g=25); run 2026-10-09
     basis:
     - path: playback/source.go
-      input_hash: e80a170de6534b7a855302c904ce494036aa2553b87a0006888aa8d74677b18d
+      input_hash: 136d62719405e7beee38bd6e86ca3e1906bed87ab19e074bc50168487245dac7
     - path: playback/seek_darwin_test.go
       input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
     - path: encoding/annexb/annexb.go
       input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
   seek-player-seek-test:
@@ -327,9 +471,9 @@ verification:
       note: run 2026-10-09
     basis:
     - path: ebitenvideo/player.go
-      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/seek_darwin_test.go
       input_hash: ec63797a5fe6e22a51d4dbf67bfab4ecc0e7b95f4307f17f0fb2bbd6391de280
   seek-timeline-unit-test:
@@ -346,7 +490,7 @@ verification:
       locator: TestTimelineSeekResetsClock
     basis:
     - path: playback/timeline.go
-      input_hash: 7cd908370ed05918e05767756b2465daa6f6c7a0a68f11af82c7f59496cf3056
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
     - path: playback/timeline_test.go
       input_hash: 602960a09edda8dbd9cd8bb654327a1a07da6318e920ded13190110048a87744
   seek-packet-source-test:
@@ -366,7 +510,7 @@ verification:
     - path: mediacontainer/mp4/packetsource.go
       input_hash: 64a0784aede49a067477d2c6e1dcdcd6e1d5c782cd1239ca12a32605d3af242f
     - path: mediacontainer/mp4/demux.go
-      input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
     - path: mediacontainer/mp4/packetsource_test.go
       input_hash: b2ab0e7e4b79301a46a879a20d4f9da0709daa39a0bd2bd8a31420393efcde13
   seek-annexb-offset-test:
@@ -386,6 +530,185 @@ verification:
       input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - path: encoding/annexb/annexb_test.go
       input_hash: 5b5d474b15cb3d4dd902716e5853a662b0f8713d2bde18c9c2b588a808052373
+  sound-playback-stream-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    test: go test ./playback/ -run 'TestAudioStream'
+    evidence:
+      path: playback/audio_test.go
+      note: 2026-10-14 on an Apple M3, macOS 27 (AudioToolbox decoder, ffmpeg's AAC encoder)
+    basis:
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: playback/audio_test.go
+      input_hash: abe4d1a10c796b92565c1c13987c7ee72526d157e6532def6bb9d4c692d36fd0
+  sound-playback-stream-browser:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: js
+    test: scripts/browser_test.sh -run 'TestAudioStream' ./playback
+    evidence:
+      path: playback/audio_test.go
+      note: 2026-10-14, Chrome 153 headless on an Apple M3 (WebCodecs AudioDecoder)
+    basis:
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
+  sound-playback-device-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: go test ./playback/ -run 'TestPlayerFollowsAudioDevice|TestPlayerWithoutReadyDevice|TestPlayerLoopsWithSound'
+    evidence:
+      path: playback/audio_darwin_test.go
+      note: 2026-10-14 on an Apple M3 (VideoToolbox H.264 decoder, 160x120 at 30 fps with B-frames; the
+        fake device consumes 799 samples per 1/60 s tick in real time)
+    basis:
+    - path: playback/audio_darwin_test.go
+      input_hash: 7754a7ecc88271d252fea52819b19516fd60b9eb85b6934b1b7eef302a660b06
+    - path: playback/player.go
+      input_hash: effae16c5fd57c05a96b57a40efe25e02945df87471b8900ee21d1044e97697c
+    - path: playback/timeline.go
+      input_hash: f88d2b2065e6e331033904eeeddd422494a8f9db88b44f2ae8bf502a740ba282
+    - path: playback/source.go
+      input_hash: 136d62719405e7beee38bd6e86ca3e1906bed87ab19e074bc50168487245dac7
+    - path: playback/audio.go
+      input_hash: 50658c4ab9df5ac409fa647523c7770f42704fca7d14920691d701ad5b56802a
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
+  sound-ebitenvideo-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: cd ebitenvideo && go test . -run 'TestPlayerWithSound|TestSoundThroughResampler'
+    evidence:
+      path: ebitenvideo/player_darwin_test.go
+      note: 2026-10-14 on an Apple M3, Ebitengine v2.10.4; no game loop in the test, so the audio context
+        never becomes ready and the player runs on the tick clock after its wait
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
+    - path: ebitenvideo/player_darwin_test.go
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
+    - path: ebitenvideo/go.mod
+      input_hash: 0702042ff5815edf660a38786ec6b940c7906da2b704b6a5ba97cdd33c0c4bfe
+  sound-live-run-macos:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: A throwaway program (not in the repository) that opens the bundled clip with bundled.OpenWithSound
+      and WithLoop at volume 0, runs ebiten.RunGame for nine seconds with a Seek to 8.5 s after four,
+      and logs Player.Position against the wall clock every 30 ticks
+    evidence:
+      path: examples/internal/bundled/bundled.go
+      note: '2026-10-14 on an Apple M3, built-in output: audio context ready within the first half second,
+        then position = wall time - 0.50 s to within 10 ms at every sample point, seek lands at 8.5 s and
+        the loop wraps at 9.88 s; clock steps per tick 16.2 ms on average, never backwards after the clamp
+        (4 steps back of up to 2.7 ms before it), largest 33 ms; 0 to 1 skipped frames; no audio error'
+    basis:
+    - path: ebitenvideo/player.go
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
+    - path: examples/internal/bundled/bundled.go
+      input_hash: 7c496af2857489002c987f6a9f893b456007a7cd996bc57ff142df8c5a006de5
+    - path: playback/player.go
+      input_hash: effae16c5fd57c05a96b57a40efe25e02945df87471b8900ee21d1044e97697c
+  sound-live-run-chrome:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: js
+    test: The same program built for GOOS=js GOARCH=wasm and run with "go run" through internal/browserexec
+      in headless Chrome with --autoplay-policy=no-user-gesture-required, dispatching mouseup, keyup
+      and touchend events on the document after 90 ticks
+    evidence:
+      path: internal/browserexec/main.go
+      note: '2026-10-14, Chrome 153 on an Apple M3: audio context not ready until the events, the film
+        on the tick clock meanwhile (0.5 s of position per 0.5 s); ready on the next sample point with
+        the position running on (0.983 s, then 1.464 s half a second later), then following the audio
+        through the seek to 8.5 s and the loop; 1 skipped frame; no audio error. Without the events the
+        whole run stays on the tick clock.'
+    basis:
+    - path: playback/player.go
+      input_hash: effae16c5fd57c05a96b57a40efe25e02945df87471b8900ee21d1044e97697c
+    - path: internal/webcodecs/audiodecoder.go
+      input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
+  sound-mp4-offset-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform: darwin
+    test: go test ./mediacontainer/mp4/ -run 'TestMuxAudioWithVideo'
+    evidence:
+      path: mediacontainer/mp4/audio_test.go
+      note: 2026-10-14 on an Apple M3; offsets 0, +500 ms, -250 ms and +500 ms at wall-clock timestamps
+    basis:
+    - path: mediacontainer/mp4/demux.go
+      input_hash: 48d51f998a467ddbdc0a1ebc8331a239c83386ee68525e8fc030eec02f128e14
+    - path: mediacontainer/mp4/audio.go
+      input_hash: 7b3cffc1564fa912b60859ee143efdf199626b0fdb6f5f954d36cbae4e294f70
+    - path: mediacontainer/mp4/audio_test.go
+      input_hash: d113a2b9aea5d5ca49df9f732f7abe5e51d20a03af54bbf3d98e96bea834bd96
+  sound-listening-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    test: cd examples && go run ./player (and the same through wasmserve in a browser, and examples/mobile
+      on the iPhone once it opens the clip with sound)
+    evidence:
+      path: examples/player/main.go
+      note: the development session cannot hear; the runs above were muted and measured the clock only
+  sound-existing-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: playback-sound
+      platform:
+      - darwin
+      - ios
+      - js
+    test: go test ./... in the core module, ebitenvideo, examples and net/webrtc; scripts/crossbuild.sh;
+      scripts/mobilebuild.sh; scripts/browser_test.sh . ./internal/webcodecs ./playback
+    evidence:
+      path: scripts/browser_test.sh
+      note: 2026-10-14 on an Apple M3, macOS 27, go1.27.0, Chrome 153
+    basis:
+    - path: examples/go.sum
+      input_hash: f50d0dd80b22b1f990343b6d5a0c76fb1287ea035ce5651baaa85def4ff9e477
+    - path: examples/player/main.go
+      input_hash: 1a1bb985534e710e4e65c2f48b872d0a101b1983df79d9e2a2acf436398d4c82
+    - path: playback/player.go
+      input_hash: effae16c5fd57c05a96b57a40efe25e02945df87471b8900ee21d1044e97697c
 facts:
   api:
     ebitenvideo: NewPlayer(r io.Reader, codec, fps, WithLoop|WithSoftwareFallback|WithPrefetch) -> Player{Play,
@@ -464,7 +787,19 @@ relations:
   to: component:display-order
 - relation: depends_on
   to: component:mediacontainer
+- relation: supersedes
+  to: milestone:playback-sound
 history:
+  sound-restored-2026-10-16:
+    summary: The content of milestone:playback-sound (delivered 2026-10-14 but merged into a stacked branch instead
+      of main) was re-applied onto main on 2026-10-16 and folded into this concept, keys prefixed sound-;
+      the milestone file remains as a superseded stub with its timeline.
+    supersedes:
+    - milestone:playback-sound
+  sound-implemented-2026-10-14:
+    summary: Audio stream, device clock and Ebitengine output written and measured in a day; the device
+      tests found the demuxer's unsynchronised reads and the stale ready signal, the fresh module cache
+      of that morning found the go.sum mismatch.
   playback-delivered-2026-10-10:
     summary: Third and last of the reusability points the author asked for, after the interfaces and the
       loops (milestone:packet-pipeline).

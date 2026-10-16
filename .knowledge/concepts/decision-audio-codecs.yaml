@@ -26,15 +26,21 @@ open_questions:
   linux-aac-library:
     text: Which library does the Linux AAC backend open (libavcodec with its changing ABI, libfdk-aac
       where installed, or both), and is it opt-in?
-    state: deferred
-    resolution: Deferred until the Linux audio slice starts.
+    state: answered
+    resolution: 'Answered 2026-10-14 in milestone:audio-linux by the implementer (reported to the author
+      as a choice that can be changed): both. libavcodec decodes (58 to 62, through the stable part of
+      its ABI only), libfdk-aac encodes and decodes where libavcodec is missing. Neither is opt-in: a
+      library that is installed is used, as on the other platforms the system codec is; HWMEDIACODEC_AUDIO_BACKENDS
+      restricts the choice.'
   demux-empty-edit:
     text: The MP4 demuxer ignores an empty edit at the start of a track, so a track that starts later
       than the other reads as starting at 0. Where is the offset applied (Track.MediaTimeOffset or a new
       field)?
-    state: deferred
-    resolution: Deferred to the playback milestone, which lines audio and video up; the muxer already
-      writes such edits.
+    state: answered
+    resolution: Answered 2026-10-14 in milestone:playback-sound - the wait of the empty edits is taken
+      off Track.MediaTimeOffset (which may now be negative), so "PTS minus MediaTimeOffset" stays the
+      presentation time everywhere; the raw media time of the first edit is kept privately for the
+      audio delay.
 facts:
   licensing:
     position: What decides whether an AAC patent licence is needed is who ships the codec implementation,
@@ -82,9 +88,11 @@ facts:
     - Ebitengine's audio context has one sample rate per process, so other rates are resampled in ebitenvideo.
   platform_plan:
     darwin_ios: AudioToolbox AudioConverter (delivered, milestone:audio-audiotoolbox)
-    android: NDK AMediaCodec, reusing internal/mediacodec (audio/mp4a-latm, audio/opus)
-    windows: Media Foundation MFTs (AAC decode and LC encode, Opus decode expected only)
-    linux: dlopen libopus for Opus; AAC only through an installed libavcodec or libfdk-aac
+    android: NDK AMediaCodec, reusing internal/mediacodec (delivered, backend:mediacodec keys audiomc-)
+    windows: Media Foundation MFTs - AAC decode and LC encode, Opus decode where a decoder is installed
+      (written, not run on Windows; backend:media-foundation keys audiomf-)
+    linux: libopus for Opus, libavcodec for AAC decode, libfdk-aac for AAC encode, each opened when installed
+      (delivered, component:audio keys audiolx-)
     browser: WebCodecs AudioDecoder and AudioEncoder (delivered, milestone:audio-webcodecs)
 relations:
 - relation: constrains
@@ -92,6 +100,20 @@ relations:
 - relation: extends
   to: decision:ffi-strategy
 history:
+  restored-2026-10-16:
+    summary: The playback and platform slices of 2026-10-14 had been merged into stacked branches instead
+      of main (found when the player was silent on Windows); they were re-applied onto main on 2026-10-16
+      and their milestone concepts folded into component:playback (sound-), component:audio (audiolx-),
+      backend:mediacodec (audiomc-) and backend:media-foundation (audiomf-).
+  platforms-2026-10-14:
+    summary: 'After trying the player with sound ("左右とか戻る所は問題なかったです。ミュートやボリュームもOKです") the
+      author asked for the remaining platforms ("つぎはWindows/Linux/Android対応をお願いします"): delivered as
+      milestone:audio-mediacodec (emulator-verified), milestone:audio-linux (container-verified) and
+      milestone:audio-media-foundation (cross-compiled only).'
+  playback-2026-10-14:
+    summary: 'The playback slice was delivered as milestone:playback-sound ("同期再生と発音の実装をお願いします"),
+      as laid out under facts.layering and facts.sync; the clock follows the device''s reported position
+      directly (Ebitengine already interpolates it per tick), so no smoothing of its own was needed.'
   browser-2026-10-13:
     summary: After the browser video backend was merged the author asked for audio in the browser too
       ("音声側もブラウザ対応をお願いします"); delivered as milestone:audio-webcodecs on the same day.

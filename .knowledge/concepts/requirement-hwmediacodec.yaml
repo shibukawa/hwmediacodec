@@ -59,7 +59,7 @@ capabilities:
       note: Decoder and Encoder with Send/Receive/Flush/Close; options as interfaces shared by both constructors
     basis:
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   api/probe:
@@ -140,7 +140,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   encode/hevc:
@@ -155,7 +155,7 @@ capabilities:
     - path: internal/videotoolbox/encoder.go
       input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
   encode/av1:
@@ -354,7 +354,7 @@ verification:
     - path: encode_test.go
       input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
     - path: internal/videotoolbox/backend.go
@@ -380,11 +380,11 @@ verification:
     - path: encoding/annexb/annexb.go
       input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: decode_test.go
       input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   unsupported-test:
@@ -401,9 +401,9 @@ verification:
         direction and reason
     basis:
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
   cross-build-check:
     state: passed
     method: static
@@ -445,11 +445,11 @@ verification:
     - path: encoding/annexb/annexb.go
       input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: decode_test.go
       input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: probe_test.go
-      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+      input_hash: e8a4ee6a869e29eb4afc2b0f7d6544dcc0c6f684c31d144353bfa5d109592176
     - path: internal/testutil/ffmpeg.go
       input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
   encode-reference-test:
@@ -476,7 +476,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
@@ -507,7 +507,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
@@ -537,7 +537,7 @@ verification:
     - path: internal/videotoolbox/backend.go
       input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: internal/codec/codec.go
       input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
     - path: encode_test.go
@@ -612,9 +612,9 @@ verification:
       locator: TestPlayerPlaysAndLoops
     basis:
     - path: ebitenvideo/player.go
-      input_hash: d10192ba2b34fe6c8047817ea4690c9af59b7d422beef2eaa8bdbeda79959fd4
+      input_hash: 9c0ba6b4bd63ad9aa41fdadacadeac0e1f936b3691fa85c182df2921a6ac67dd
     - path: ebitenvideo/player_darwin_test.go
-      input_hash: 80e5c8f0748083588673cc2552e7803e789690937d803d4b4a0e667410fef6af
+      input_hash: 8e5e59b02f81a2cb42c2c35c35755bae06b6470af685a28185c7509d960daba9
   av1lw-hardware-av1-decode:
     state: not_run
     method: integration

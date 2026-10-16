@@ -1,12 +1,12 @@
 id: milestone:audio-media-foundation
 type: milestone
 title: Audio codecs on Windows through Media Foundation (AAC decode and encode, Opus decode)
-summary: 'Requested on 2026-10-14 ("つぎはWindows/Linux/Android対応をお願いします"). internal/mediafoundation gained
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in backend:media-foundation (keys prefixed audiomf-). Original summary: Requested on 2026-10-14 ("つぎはWindows/Linux/Android対応をお願いします"). internal/mediafoundation gained
   an audio half that drives the system''s synchronous software transforms: the AAC decoder, the AAC encoder
   and, where one is registered, an Opus decoder (Media Foundation has no Opus encoder). Registered by
   backends_windows.go. Written on a Mac against the documentation and cross-compiled for windows/amd64
   and windows/arm64; it has not been run on Windows.'
-lifecycle: active
+lifecycle: superseded
 authority: authored
 aliases:
 - Windows audio
@@ -17,79 +17,10 @@ aliases:
 scope:
   platform: windows
   milestone: audio-media-foundation
-constraints:
-- 'Transforms are found with MFTEnumEx in MFT_CATEGORY_AUDIO_DECODER / MFT_CATEGORY_AUDIO_ENCODER for
-  MFAudioFormat_AAC and MFAudioFormat_Opus (synchronous, local; a second try with MFT_ENUM_FLAG_UNTRUSTED_STOREMFT
-  for codecs from the Store). No Direct3D device is involved. The audio GUIDs were checked against mfapi.h
-  (Wine''s copy) on 2026-10-14.'
-- 'AAC decoder input type: MFAudioFormat_AAC, rate and channels of the output, 16 bits, MF_MT_AAC_PAYLOAD_TYPE
-  0 (raw access units), profile and level 0xFE, MF_MT_USER_DATA = the twelve bytes of HEAACWAVEINFO behind
-  its WAVEFORMATEX followed by the AudioSpecificConfig. Opus decoder input type: MFAudioFormat_Opus at
-  48 kHz with an OpusHead without pre-skip as user data (a guess: the transform is not documented).'
-- 'Output type: of the types the decoder lists, 16-bit PCM before 32-bit float, the channel count of
-  the stream before a downmix; chosen again on MF_E_TRANSFORM_STREAM_CHANGE. Frames are matched to packets
-  by order through audioutil.Frames. Flush drains and then sends MFT_MESSAGE_COMMAND_FLUSH.'
-- 'AAC encoder: 44100 or 48000 Hz, mono or stereo, 96, 128, 160 or 192 kbit/s (what the documentation
-  of the system''s encoder lists; default 96 for mono and 128 for stereo), anything else is ErrUnsupported;
-  one rate control for VBR and CBR. Output type set before the input type, the other order tried on failure.
-  Input goes in one packet''s worth (1024 samples) at a time. The AudioSpecificConfig is read from the
-  user data of the output type. The delay is measured with audioutil.MeasureDelay (assumed 1024 when
-  that fails); a new transform per signal.'
 non_goals:
 - Opus encoding on Windows (no system encoder exists).
 - HE-AAC encoding, 5.1 encoding, ADTS input to the decoder.
 - Third-party audio transforms and DirectShow or ACM codecs.
-acceptance:
-  builds:
-    text: The module and its tests compile for windows/amd64 and windows/arm64 with CGO_ENABLED=0 and
-      go vet is clean.
-    scope:
-      milestone: audio-media-foundation
-    verified_by:
-    - cross-build
-  windows-audio:
-    text: go test -run 'Audio|TestProbe' . on a Windows machine with ffmpeg passes - AAC decoding against
-      ffmpeg in place, AAC encoding decoded by ffmpeg to the input in place, round trips, flush, errors.
-    scope:
-      milestone: audio-media-foundation
-    verified_by:
-    - windows-run
-verification:
-  cross-build:
-    state: passed
-    method: static
-    authority: observed
-    scope:
-      milestone: audio-media-foundation
-    test: scripts/crossbuild.sh; GOOS=windows GOARCH=amd64 go vet . ./internal/mediafoundation/... (and
-      arm64)
-    evidence:
-      path: internal/mediafoundation/audio.go
-      note: 2026-10-14 on macOS; both architectures build and vet clean
-    basis:
-    - path: internal/mediafoundation/audio.go
-      input_hash: a34b8006e372d0fc4247c987be18ace301b42eb8be7b7015d0efd4e74d5b17f4
-    - path: internal/mediafoundation/audiodecoder.go
-      input_hash: 125743e0c6980b00af63ea213ace4e6e6d9bf590c76962d144e3a11678ba605c
-    - path: internal/mediafoundation/audioencoder.go
-      input_hash: 9907ee80ec0e9cdf23aebb232dce67c94ace415e01442956cc2f207d81961c6e
-    - path: internal/mediafoundation/sys/audio.go
-      input_hash: 038db1a3951851faf5c71ce9ebc9b2ecf65edbcb4d993f9ddfaf63555186e0aa
-    - path: backends_windows.go
-      input_hash: 95d5afa01916a2486f2a7d5c64759d2861ed93fc78d19f0070258822a9e6262e
-  windows-run:
-    state: not_run
-    method: manual
-    authority: authored
-    scope:
-      milestone: audio-media-foundation
-    test: go test -count=1 -run 'Audio|TestProbe' -v . on Windows with ffmpeg and ffprobe on the PATH
-    evidence:
-      path: internal/mediafoundation/audiodecoder.go
-      note: 'no Windows machine was available. Open points a run has to settle: whether the AAC decoder
-        returns the samples of every packet from the first one on (the frame queue assumes it), the encoder''s
-        delay, whether HE-AAC comes out 962 samples late as with FFmpeg, the order of SetOutputType and
-        SetInputType on the encoder, and whether the Opus decoder takes the type at all'
 relations:
 - relation: implements
   to: requirement:hwmediacodec
@@ -97,3 +28,9 @@ relations:
   to: decision:audio-codecs
 - relation: extends
   to: milestone:windows-media-foundation
+- relation: superseded_by
+  to: backend:media-foundation
+history:
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into backend:media-foundation on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

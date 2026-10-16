@@ -1,14 +1,14 @@
 id: milestone:audio-mediacodec
 type: milestone
 title: Audio codecs (AAC, Opus) on Android through MediaCodec
-summary: 'Requested on 2026-10-14 together with Windows and Linux ("つぎはWindows/Linux/Android対応をお願いします"):
+summary: 'Superseded on 2026-10-16: its constraints, acceptance and verification now live in backend:mediacodec (keys prefixed audiomc-). Original summary: Requested on 2026-10-14 together with Windows and Linux ("つぎはWindows/Linux/Android対応をお願いします"):
   internal/mediacodec gained the audio half of the backend on the NDK AMediaCodec API (the framework''s
   software AAC and Opus decoders and encoders), registered by backends_android.go. Same public API and
   timestamp rules as the other audio backends. What the audio backends share moved into internal/audioutil
   (delay trial, frame queue, packet timestamps, sample conversion), and the hwmediacodec CLI gained
   decode-audio and encode-audio, which scripts/android_device_check.sh uses to compare the device with
   ffmpeg.'
-lifecycle: active
+lifecycle: superseded
 authority: authored
 aliases:
 - Android audio
@@ -20,80 +20,10 @@ aliases:
 scope:
   platform: android
   milestone: audio-mediacodec
-constraints:
-- 'Decoder: audio/mp4a-latm with csd-0 = AudioSpecificConfig; audio/opus with csd-0 = an OpusHead whose
-  pre-skip is 0 and csd-1 and csd-2 (codec delay and seek pre-roll, in ns) = 8 zero bytes each, so that
-  the decoder discards nothing and every packet yields all its samples. Output is PCM 16, converted to
-  float in Go when asked for. Frames are matched to packets by order through audioutil.Frames.'
-- 'Encoder: MediaCodec does not report the delay, so the first encoder for (codec, rate, channels) runs
-  audioutil.MeasureDelay with an encoder and a decoder of its own; measured 2048 for AAC and 312 for Opus
-  on the Android 14 emulator, which are also the assumed values when the trial fails. Default bitrates
-  64 kbit/s per channel for AAC and 48 for Opus. AAC rates outside the table of the standard are refused
-  (MediaCodec configures for them and codes something else).'
-- 'Flush sends Delay + 2 frames of silence and the end-of-stream flag, drops the packets that start at
-  or behind the last real sample (audioutil.PacketTimes) and releases the codec; the next signal gets
-  a new one, so that it starts like the first.'
-- 'internal/audioutil: TrialSignal, SignalDelay, LostLead, MeasureDelay (moved from the browser backend),
-  Frames (Expect, Append, Skip, Pad, Scale, End, Reset), PacketTimes (packet k has PTS base + k*frame
-  - delay, duration cut at the last sample), S16/F32 conversion.'
-- 'cmd/hwmediacodec decode-audio writes every sample of an .aac file or an MP4 audio track as raw PCM;
-  encode-audio turns raw PCM into .aac or MP4. internal/audiocmp makes the test signal on the host and
-  compares PCM files (alignment and signal-to-noise ratio).'
 non_goals:
 - A run on a physical Android device (the author's tablet), as for video.
 - HE-AAC encoding, more than two channels on the encoder.
 - Sound output on Android in examples/mobile.
-acceptance:
-  emulator-audio:
-    text: 'scripts/android_device_check.sh on the Android 14 emulator: AAC from MP4 and ADTS and Opus from
-      MP4 decode to ffmpeg''s samples in place; AAC and Opus encoded on the device decode with ffmpeg to
-      the input in place; the tests that need no ffmpeg pass on the device.'
-    scope:
-      milestone: audio-mediacodec
-    verified_by:
-    - emulator-audio-run
-  device-audio:
-    text: The same script passes on a physical Android device.
-    scope:
-      milestone: audio-mediacodec
-    verified_by:
-    - device-audio-run
-verification:
-  emulator-audio-run:
-    state: passed
-    method: integration
-    authority: observed
-    scope:
-      milestone: audio-mediacodec
-    test: SOFTWARE=1 scripts/android_device_check.sh
-    evidence:
-      path: scripts/android_device_check.sh
-      note: '2026-10-14, Android 14 (API 34, arm64) emulator on an Apple M3: AAC decode 63.4 dB and Opus
-        decode 69.9 dB against ffmpeg at shift 0; AAC encoded on the device with a measured delay of 2048
-        and Opus with 312, ffmpeg decoding both to the input at shift 0'
-    basis:
-    - path: internal/mediacodec/audio.go
-      input_hash: fdb158da8a2b4626d5572fa9ed60c1a4cfc1d4f40a6d2bfaa30cbe4e067111ba
-    - path: internal/mediacodec/audioenc.go
-      input_hash: 77d834bc1bc40e6cbfbc5f807e48f0d3fd5f0f700929ccdcafc6178539ff3e78
-    - path: internal/audioutil/trial.go
-      input_hash: 4170b8a7eacac3ad1f75298f830f3fc0624ae1b3c5ecd23af7f8373bede4d25f
-    - path: cmd/hwmediacodec/audio.go
-      input_hash: 36bfd49ed6bfa49093acabc152599b6cf7cd94e2e95df5d6c784d4319d3cdd7a
-    - path: internal/audiocmp/main.go
-      input_hash: 6a0fecb727d28b42aae08dc49bbd5012efba2896b55c3a3399de4e470418523a
-    - path: scripts/android_device_check.sh
-      input_hash: 251107a808e867e7734974447ae1cbfd46d9cf87954e2b5a4dfbdc0620ed7954
-  device-audio-run:
-    state: not_run
-    method: manual
-    authority: authored
-    scope:
-      milestone: audio-mediacodec
-    test: ARCH=arm64 scripts/android_device_check.sh with a device attached over adb
-    evidence:
-      path: scripts/android_device_check.sh
-      note: only the emulator was available; a device has the same framework codecs
 relations:
 - relation: implements
   to: requirement:hwmediacodec
@@ -101,3 +31,9 @@ relations:
   to: decision:audio-codecs
 - relation: extends
   to: milestone:android-mediacodec
+- relation: superseded_by
+  to: backend:mediacodec
+history:
+  superseded-2026-10-16:
+    summary: Re-applied onto main and folded into backend:mediacodec on 2026-10-16 so that the current state
+      is read from one concept; this file keeps the slice's definition and timeline.

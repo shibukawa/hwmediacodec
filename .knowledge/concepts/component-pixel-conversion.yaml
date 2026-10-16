@@ -180,7 +180,7 @@ verification:
       note: fake backends; run 2026-10-10
     basis:
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: convert_test.go
       input_hash: 1cbdacb5dce4728d89c164033f37ae13b131e7efdbcfb5d1c5240d12a59ac19b
   decrgb-videotoolbox-comparison-test:
@@ -226,7 +226,7 @@ verification:
     - path: fakevaapi_linux_test.go
       input_hash: 139a331ad708290399b189f608e9d9ab1a998371657672c25fae93f550eae680
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
   decrgb-hardware-run:
     state: not_run
     method: manual
@@ -274,7 +274,7 @@ verification:
       note: fake backends; run 2026-10-09
     basis:
     - path: hwmediacodec.go
-      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+      input_hash: caf9a656ec615acdd0f367f7f6753f9e741af29e6f47b697070aceb99f7b0cc4
     - path: convert_test.go
       input_hash: 1cbdacb5dce4728d89c164033f37ae13b131e7efdbcfb5d1c5240d12a59ac19b
   encrgb-videotoolbox-roundtrip-test:

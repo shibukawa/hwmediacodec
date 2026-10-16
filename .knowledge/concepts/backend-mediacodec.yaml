@@ -3,7 +3,8 @@ type: backend
 title: Android MediaCodec (NDK libmediandk.so)
 summary: Android's one codec API. AMediaCodec is a full decoder/encoder (display-order output with the
   input timestamps attached, parameter sets in a codec-config buffer) behind which the vendor's hardware
-  codecs sit; the NDK C API is driven synchronously through purego in internal/mediacodec.
+  codecs sit; the NDK C API is driven synchronously through purego in internal/mediacodec. The same bindings
+  decode and encode AAC and Opus (keys audiomc-).
 lifecycle: active
 authority: inferred
 aliases:
@@ -32,6 +33,24 @@ constraints:
 - H.264 and HEVC frames go through the Go reorder layer (OutputsDisplayOrder false; MediaCodec orders
   output by input timestamps), AV1 is passed through; RGBA/BGRA go through pixconv as on the other NV12-only
   backends.
+- 'Decoder: audio/mp4a-latm with csd-0 = AudioSpecificConfig; audio/opus with csd-0 = an OpusHead whose
+  pre-skip is 0 and csd-1 and csd-2 (codec delay and seek pre-roll, in ns) = 8 zero bytes each, so that
+  the decoder discards nothing and every packet yields all its samples. Output is PCM 16, converted to
+  float in Go when asked for. Frames are matched to packets by order through audioutil.Frames.'
+- 'Encoder: MediaCodec does not report the delay, so the first encoder for (codec, rate, channels) runs
+  audioutil.MeasureDelay with an encoder and a decoder of its own; measured 2048 for AAC and 312 for Opus
+  on the Android 14 emulator, which are also the assumed values when the trial fails. Default bitrates
+  64 kbit/s per channel for AAC and 48 for Opus. AAC rates outside the table of the standard are refused
+  (MediaCodec configures for them and codes something else).'
+- 'Flush sends Delay + 2 frames of silence and the end-of-stream flag, drops the packets that start at
+  or behind the last real sample (audioutil.PacketTimes) and releases the codec; the next signal gets
+  a new one, so that it starts like the first.'
+- 'internal/audioutil: TrialSignal, SignalDelay, LostLead, MeasureDelay (moved from the browser backend),
+  Frames (Expect, Append, Skip, Pad, Scale, End, Reset), PacketTimes (packet k has PTS base + k*frame
+  - delay, duration cut at the last sample), S16/F32 conversion.'
+- 'cmd/hwmediacodec decode-audio writes every sample of an .aac file or an MP4 audio track as raw PCM;
+  encode-audio turns raw PCM into .aac or MP4. internal/audiocmp makes the test signal on the host and
+  compares PCM files (alignment and signal-to-noise ratio).'
 capabilities:
   decode/h264:
     state: implemented
@@ -161,6 +180,22 @@ acceptance:
       platform: android
     verified_by:
     - android-existing-suites
+  audiomc-emulator-audio:
+    text: 'scripts/android_device_check.sh on the Android 14 emulator: AAC from MP4 and ADTS and Opus from
+      MP4 decode to ffmpeg''s samples in place; AAC and Opus encoded on the device decode with ffmpeg to
+      the input in place; the tests that need no ffmpeg pass on the device.'
+    scope:
+      milestone: audio-mediacodec
+      platform: android
+    verified_by:
+    - audiomc-emulator-audio-run
+  audiomc-device-audio:
+    text: The same script passes on a physical Android device.
+    scope:
+      milestone: audio-mediacodec
+      platform: android
+    verified_by:
+    - audiomc-device-audio-run
 verification:
   typecheck:
     state: passed
@@ -274,7 +309,7 @@ verification:
     - path: internal/mediacodec/sys/sys.go
       input_hash: b8fe1267da557caeaacf13a1b8e1c60734d04db5222777b466170288f2dc53ac
     - path: backends_android.go
-      input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
+      input_hash: b1b4f051aab84e06030da9e56e930cc9ac0e21389bacbfffb70bae537737838b
   android-unit-tests:
     state: passed
     method: unit
@@ -300,7 +335,7 @@ verification:
     - path: internal/mediacodec/paramsets.go
       input_hash: 5d45e8ee7ffbbd1e61d993846bbb506c70ba514329e54483052c770931efd549
     - path: internal/mediacodec/sys/types.go
-      input_hash: ab15f68f50626a6c7b3fff980c4d2ee35bcec3ffca748cb851e3a8990c6852e8
+      input_hash: ae6a67214c33ef586fb688d309343eddf8e1b67262fad2e4b2ad2ac581841a58
     - path: internal/mediacodec/sys/types_test.go
       input_hash: 942713c5613a551bfac3dae2557a555012b1246163d397106b41f1fcbbf6909f
   android-android-deps:
@@ -315,7 +350,7 @@ verification:
       path: backends_android.go
     basis:
     - path: backends_android.go
-      input_hash: b8c2ea48b801e7fe0da6d31e02edf574781ef3b05bf75490682b79f5325b474c
+      input_hash: b1b4f051aab84e06030da9e56e930cc9ac0e21389bacbfffb70bae537737838b
     - path: backends_other.go
       input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
   android-aar-build:
@@ -355,7 +390,7 @@ verification:
         header key, reorder-layer flush drain)
     basis:
     - path: scripts/android_device_check.sh
-      input_hash: 3a00ec3ff56e62b6ef84ffea24fd9072c0863ecc7dd2c0908f768d93a0e03fe4
+      input_hash: 251107a808e867e7734974447ae1cbfd46d9cf87954e2b5a4dfbdc0620ed7954
     - path: internal/mediacodec/decoder.go
       input_hash: 400df009104253567f69ee570a1fc079481fbb85de06a808850c7d291cbd4f32
     - path: internal/mediacodec/encoder.go
@@ -413,6 +448,43 @@ verification:
       input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
     - path: scripts/crossbuild.sh
       input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+  audiomc-emulator-audio-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: audio-mediacodec
+      platform: android
+    test: SOFTWARE=1 scripts/android_device_check.sh
+    evidence:
+      path: scripts/android_device_check.sh
+      note: '2026-10-14, Android 14 (API 34, arm64) emulator on an Apple M3: AAC decode 63.4 dB and Opus
+        decode 69.9 dB against ffmpeg at shift 0; AAC encoded on the device with a measured delay of 2048
+        and Opus with 312, ffmpeg decoding both to the input at shift 0'
+    basis:
+    - path: internal/mediacodec/audio.go
+      input_hash: fdb158da8a2b4626d5572fa9ed60c1a4cfc1d4f40a6d2bfaa30cbe4e067111ba
+    - path: internal/mediacodec/audioenc.go
+      input_hash: 77d834bc1bc40e6cbfbc5f807e48f0d3fd5f0f700929ccdcafc6178539ff3e78
+    - path: internal/audioutil/trial.go
+      input_hash: 4170b8a7eacac3ad1f75298f830f3fc0624ae1b3c5ecd23af7f8373bede4d25f
+    - path: cmd/hwmediacodec/audio.go
+      input_hash: 36bfd49ed6bfa49093acabc152599b6cf7cd94e2e95df5d6c784d4319d3cdd7a
+    - path: internal/audiocmp/main.go
+      input_hash: 6a0fecb727d28b42aae08dc49bbd5012efba2896b55c3a3399de4e470418523a
+    - path: scripts/android_device_check.sh
+      input_hash: 251107a808e867e7734974447ae1cbfd46d9cf87954e2b5a4dfbdc0620ed7954
+  audiomc-device-audio-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: audio-mediacodec
+      platform: android
+    test: ARCH=arm64 scripts/android_device_check.sh with a device attached over adb
+    evidence:
+      path: scripts/android_device_check.sh
+      note: only the emulator was available; a device has the same framework codecs
 facts:
   library: libmediandk.so (dlopen; part of every Android system image, public NDK API)
   api_model: full decoder/encoder; synchronous dequeue/queue with timeouts, no AMediaCodec_setAsyncNotifyCallback
@@ -480,7 +552,15 @@ relations:
   to: policy:support-tiers
 - relation: supersedes
   to: milestone:android-mediacodec
+- relation: supersedes
+  to: milestone:audio-mediacodec
 history:
+  audiomc-restored-2026-10-16:
+    summary: The content of milestone:audio-mediacodec (delivered 2026-10-14 but merged into a stacked branch instead
+      of main) was re-applied onto main on 2026-10-16 and folded into this concept, keys prefixed audiomc-;
+      the milestone file remains as a superseded stub with its timeline.
+    supersedes:
+    - milestone:audio-mediacodec
   implemented-2026-10-12:
     summary: Backend written as the Android half of the mobile request (milestone:android-mediacodec);
       type-checked and layout-tested on macOS, never run on Android.
