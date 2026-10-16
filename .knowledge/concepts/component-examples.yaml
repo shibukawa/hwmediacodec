@@ -17,6 +17,21 @@ aliases:
 - imgconv
 - waterfall clip
 constraints:
+- 'examples/check (2026-10-16, asked for by the author so that other people can report results): one command
+  runs automatic checks once per Probe backend (HWMEDIACODEC_BACKENDS / HWMEDIACODEC_AUDIO_BACKENDS set
+  per backend; the root package reads them at every NewDecoder, so the playback stage only starts after
+  the automatic stage), then playback of the clip per decodable codec with Y/N questions, then WebRTC of
+  the fireworks scene in H.264 and HEVC to a browser page that posts getStats results and Yes/No answers
+  to /result; the Markdown report goes to stdout and hwmediacodec-report.md, the issue link carries only
+  the title (platform, backends, counts). The author chose window + browser, Markdown + issue link,
+  a bundled AV1 clip and audio checks.'
+- 'check encode round trip: 60 pictures of the clip, luma box-averaged 2x down and cropped to 352x640, at
+  4 Mbit/s; pass at average >= 25 dB and lowest >= 20 dB luma PSNR and average at least 1 dB above the
+  PSNR against the next source picture (order check). Point-sampled 2 Mbit/s input gave only 28 dB on
+  VideoToolbox (aliasing of the waterfall); with the box filter at 4 Mbit/s VideoToolbox gives 35.3 dB
+  H.264 and 36.7 dB HEVC (next picture about 31 dB) on the M3.'
+- 'assets.AV1() is the waterfall in AV1 (libsvtav1 preset 4, 900 kbit/s, Main 8-bit, same AAC track, 1.2
+  MB), not in assets.Clips() so the players keep trying HEVC then H.264.'
 - The public API, the ebitenvideo and playback packages and the examples are unchanged in behaviour; the
   Ebitengine mobile sample exports only a Dummy function because gobind cannot bind ebiten.Game method
   signatures.
@@ -692,6 +707,11 @@ relations:
 - relation: depends_on
   to: component:image
 history:
+  excheck-delivered-2026-10-16:
+    summary: examples/check added after the author asked for one command others can run to report results.
+      On the M3 the automatic stage passes (AV1 encode unsupported) and the WebRTC stage passed in the browser
+      pane for H.264 and HEVC; the playback stage's Y/N questions could not be driven from the session (no
+      keystroke permission) and await a run by the author.
   exmp4-accepted-2026-10-09:
     summary: Author asked for usage samples (file converter, keyframe thumbnails, HEIC/HEIF and AVIF conversion,
       Ebitengine playback, playback as a texture, screen recording with HLS/WebRTC viewing) and agreed

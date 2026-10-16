@@ -1,5 +1,6 @@
 // Package webrtc sends encoder output to browsers over WebRTC with pion.
-// A Broadcaster fans one H.264 stream out to every connected viewer; it is
+// A Broadcaster fans one H.264 (or HEVC) stream out to every connected
+// viewer; it is
 // the sink for the packets (a hwmediacodec.PacketWriteCloser, which is
 // what capture.Recorder writes into) and an http.Handler for the
 // signalling:
@@ -50,6 +51,14 @@ var h264Codec = pion.RTPCodecCapability{
 	SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
 }
 
+// hevcCodec is what an HEVC track offers (RFC 7798). Browsers decode it
+// only where their platform has an HEVC decoder: Safari, and Chrome and
+// Edge with hardware decoding; an offer without it is refused.
+var hevcCodec = pion.RTPCodecCapability{
+	MimeType:  pion.MimeTypeH265,
+	ClockRate: 90000,
+}
+
 // DefaultMaxViewers is the number of viewers a Broadcaster accepts unless
 // MaxViewers says otherwise.
 const DefaultMaxViewers = 32
@@ -95,12 +104,13 @@ type queued struct {
 	keyframe bool
 }
 
-// Broadcaster fans one encoded H.264 stream out to every connected
+// Broadcaster fans one encoded H.264 or HEVC stream out to every connected
 // browser. It is a hwmediacodec.PacketWriteCloser for the packets and an
 // http.Handler for
 // the signalling (a POST with the browser's SDP offer as JSON, answered
 // with ours). It is safe for concurrent use.
 type Broadcaster struct {
+	codec           pion.RTPCodecCapability
 	fps             float64
 	iceServers      []string
 	requestKeyframe func()
@@ -127,6 +137,23 @@ type Broadcaster struct {
 // second are merged into one. iceServers lists STUN/TURN URLs, empty for
 // LAN use. Invalid or unrepresentable frame rates use 60 fps.
 func NewBroadcaster(fps float64, iceServers []string, requestKeyframe func()) *Broadcaster {
+	return newBroadcaster(h264Codec, fps, iceServers, requestKeyframe)
+}
+
+// NewCodecBroadcaster is NewBroadcaster for a stream in codec c, H.264 or
+// HEVC; other codecs are ErrUnsupported. A viewer whose offer has no
+// matching codec is refused with ErrBadOffer.
+func NewCodecBroadcaster(c hwmediacodec.Codec, fps float64, iceServers []string, requestKeyframe func()) (*Broadcaster, error) {
+	switch c {
+	case hwmediacodec.H264:
+		return newBroadcaster(h264Codec, fps, iceServers, requestKeyframe), nil
+	case hwmediacodec.HEVC:
+		return newBroadcaster(hevcCodec, fps, iceServers, requestKeyframe), nil
+	}
+	return nil, fmt.Errorf("webrtc: %s streams are not supported: %w", c, hwmediacodec.ErrUnsupported)
+}
+
+func newBroadcaster(rtpCodec pion.RTPCodecCapability, fps float64, iceServers []string, requestKeyframe func()) *Broadcaster {
 	period := float64(time.Second) / fps
 	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) || period < 1 || period >= float64(math.MaxInt64) {
 		fps = 60
@@ -135,6 +162,7 @@ func NewBroadcaster(fps float64, iceServers []string, requestKeyframe func()) *B
 		requestKeyframe = func() {}
 	}
 	return &Broadcaster{
+		codec:           rtpCodec,
 		fps:             fps,
 		iceServers:      append([]string(nil), iceServers...),
 		requestKeyframe: requestKeyframe,
@@ -223,7 +251,7 @@ func (b *Broadcaster) AcceptContext(ctx context.Context, offer pion.SessionDescr
 	if err != nil {
 		return nil, err
 	}
-	track, err := pion.NewTrackLocalStaticSample(h264Codec, "video", "hwmediacodec")
+	track, err := pion.NewTrackLocalStaticSample(b.codec, "video", "hwmediacodec")
 	if err != nil {
 		pc.Close()
 		return nil, err
@@ -270,6 +298,10 @@ func (b *Broadcaster) AcceptContext(ctx context.Context, offer pion.SessionDescr
 	gathered := pion.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		pc.Close()
+		if errors.Is(err, pion.ErrUnsupportedCodec) {
+			// The offer has no codec in common with the track.
+			return nil, fmt.Errorf("%w: the viewer cannot receive %s", ErrBadOffer, b.codec.MimeType)
+		}
 		return nil, err
 	}
 	timeout := time.NewTimer(gatherTimeout)
@@ -349,8 +381,9 @@ func (b *Broadcaster) remove(p *peer) {
 }
 
 // WritePacket implements hwmediacodec.PacketWriter: one Annex-B access unit goes to
-// every viewer. pion's H.264 payloader splits the NAL units into RTP
-// packets (STAP-A for the parameter sets, FU-A for large slices). Packet
+// every viewer. pion's payloader splits the NAL units into RTP packets
+// (for H.264 STAP-A for the parameter sets and FU-A for large slices, the
+// aggregation and fragmentation units of RFC 7798 for HEVC). Packet
 // times are in 90 kHz units (capture.TimeScale). The data is copied
 // before WritePacket returns and sent by one goroutine per viewer; a
 // viewer whose track fails, or that falls about a second behind, is

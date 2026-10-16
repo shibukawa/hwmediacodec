@@ -1,6 +1,6 @@
 id: component:net-webrtc
 type: component
-title: 'net/webrtc: one H.264 stream broadcast to browsers over WebRTC (pion), a module of its own'
+title: 'net/webrtc: one H.264 or HEVC stream broadcast to browsers over WebRTC (pion), a module of its own'
 summary: webrtc.Broadcaster is a hwmediacodec.PacketWriteCloser that hands every H.264 access unit to
   a pion track per viewer, signals with one HTTP POST of the SDP offer, starts each viewer at a keyframe
   and turns joins and RTCP PLI/FIR into keyframe requests. It is a separate Go module so that pion stays
@@ -13,6 +13,11 @@ aliases:
 - WebRTC 配信パッケージ
 - pion
 constraints:
+- 'HEVC (added 2026-10-16 for examples/check): NewCodecBroadcaster(codec, fps, ice, requestKeyframe) offers
+  video/H265 at 90 kHz without fmtp and uses pion''s H265Payloader (RFC 7798 AP/FU) on the same Annex-B
+  access units; AV1 and anything else is ErrUnsupported. pion reports an offer without a common codec as
+  ErrUnsupportedCodec from SetLocalDescription, which AcceptContext maps to ErrBadOffer (400 from ServeHTTP).
+  Chromium 152 in the app''s browser pane on the M3 received both H.264 and HEVC streams from VideoToolbox.'
 - 'pion''s H.264 payloader takes Annex-B access units as they come from hwmediacodec: it splits on start
   codes, packs SPS/PPS into STAP-A, fragments large NAL units into FU-A and drops AUD and filler NAL units.'
 - The track is offered as H.264 Constrained Baseline, packetization-mode 1 (profile-level-id 42e01f);
@@ -153,7 +158,8 @@ facts:
       Accept(offer) (*SessionDescription, error), WritePacket, Close, Viewers}; flags -addr -bitrate -fps
       -size -stun
     webrtc_webrtc: import github.com/shibukawa/hwmediacodec/net/webrtc; NewBroadcaster(fps, iceServers,
-      requestKeyframe) -> Broadcaster{WritePacket, Close, ServeHTTP (POST offer), Accept(offer), Viewers}
+      requestKeyframe) -> Broadcaster{WritePacket, Close, ServeHTTP (POST offer), Accept(offer), Viewers};
+      NewCodecBroadcaster(codec, fps, iceServers, requestKeyframe) (*Broadcaster, error) for H.264 or HEVC
   delivery_results:
     milestone:net-webrtc:
       result:
@@ -168,6 +174,9 @@ relations:
 - relation: depends_on
   to: component:core-api
 history:
+  webrtc-hevc-2026-10-16:
+    summary: HEVC streams through NewCodecBroadcaster, for the examples/check sample the author asked for;
+      a pion viewer test receives H265 RTP, an H.264-only offer is refused with ErrBadOffer.
   webrtc-delivered-2026-10-10:
     summary: The author asked for net/hls and net/webrtc and chose a separate module for the pion dependency.
   consolidated-2026-10-16:

@@ -73,6 +73,25 @@ func TestBundledClips(t *testing.T) {
 	}
 }
 
+// TestAV1Clip checks that the AV1 encoding is the same clip as the others.
+func TestAV1Clip(t *testing.T) {
+	v := video(t, assets.AV1())
+	if v.Codec != hwmediacodec.AV1 || v.Width != 720 || v.Height != 1280 || v.SampleCount() != 293 {
+		t.Fatalf("track %s %dx%d %d samples", v.Codec, v.Width, v.Height, v.SampleCount())
+	}
+	if fps := v.FrameRate(); fps < 29.6 || fps > 29.7 {
+		t.Errorf("frame rate %.3f", fps)
+	}
+	if kf := v.Keyframes(); len(kf) < 2 || kf[0] != 0 {
+		t.Errorf("keyframes %v", kf)
+	}
+	for i := range v.SampleCount() {
+		if au, err := v.AccessUnit(i); err != nil || len(au.Data) == 0 {
+			t.Fatalf("sample %d: %v", i, err)
+		}
+	}
+}
+
 // TestBundledClipsDecode decodes the first second of every encoding with
 // the hardware decoder, to RGBA as the players do, and skips the ones the
 // machine has no decoder for. It runs natively and, through

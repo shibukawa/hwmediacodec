@@ -17,6 +17,7 @@ Each program runs straight from its module path, with nothing to clone or
 install (Go 1.27 or later is needed):
 
 ```sh
+go run github.com/shibukawa/hwmediacodec/examples/check@latest                                                  # try everything on this machine, write a report
 go run github.com/shibukawa/hwmediacodec/examples/convert@latest -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
 go run github.com/shibukawa/hwmediacodec/examples/thumbnails@latest -every 10s -o thumbs movie.mp4              # keyframe thumbnails
 go run github.com/shibukawa/hwmediacodec/examples/record@latest -o capture.mp4 -seconds 10                      # fireworks show to MP4
@@ -47,7 +48,8 @@ have no program of their own.
 
 | Directory | What it shows |
 | --- | --- |
-| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 with AAC), embedded so the players run from anywhere: as HEVC (1.4 MB) and, for decoders without HEVC, as H.264 (2.5 MB); `assets.Clips()` lists them in the order to try |
+| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 with AAC), embedded so the players run from anywhere: as HEVC (1.4 MB) and, for decoders without HEVC, as H.264 (2.5 MB); `assets.Clips()` lists them in the order to try. `assets.AV1()` is the same clip in AV1 (1.2 MB) for the check |
+| [`check/`](check/) | Tries every codec of the machine (automatic decode and encode round trips per backend, playback with sound, WebRTC to the browser) and writes a Markdown report for a GitHub issue |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
@@ -58,6 +60,49 @@ have no program of their own.
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
 | [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec); see its README |
+
+## check
+
+```sh
+go run github.com/shibukawa/hwmediacodec/examples/check@latest
+cd examples
+go run ./check                      # the whole run in a window
+go run ./check -auto                # the automatic checks only, no window (servers, CI)
+go run ./check -playback=false      # leave a stage out; -webrtc=false likewise
+```
+
+One command for people who want to report how the library does on their
+machine. It runs three stages in one window and ends with a report:
+
+1. **Automatic**: `Probe`, then every check once per backend that reports
+   the codec (with `HWMEDIACODEC_BACKENDS` / `HWMEDIACODEC_AUDIO_BACKENDS`
+   set to it, so a Windows machine with an NVIDIA card checks NVDEC/NVENC
+   and Media Foundation separately). Decode: the bundled clip in H.264,
+   HEVC and AV1, all 293 frames, which must come out in display order, at
+   the track's size and not flat. Encode: 60 pictures of the clip (halved
+   to 352x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
+   compared by luma PSNR with the source (a working encoder reaches
+   30 dB and more on this hard-to-code footage; the check also compares
+   each picture with the next one, which a stream in the wrong order
+   would match as well). Audio: the clip's AAC track, and two seconds of
+   a soft chord through the AAC and Opus encoders and back.
+2. **Playback**: the clip plays with sound in every codec the machine
+   decodes, and the window asks whether picture and sound were right
+   (Y or N, S skips).
+3. **WebRTC**: the fireworks show is encoded in H.264 and HEVC
+   (`webrtc.NewCodecBroadcaster`) and streamed to a page that opens in the
+   default browser. The page reports the frames it decoded (from
+   `getStats`) and asks whether the picture is right; a browser that
+   cannot receive HEVC over WebRTC gets a refusal, recorded as such.
+
+The report is printed, saved as `hwmediacodec-report.md` and comes with a
+link to a new GitHub issue whose title (platform, backends, counts) is
+filled in; the body is pasted by hand, so nothing leaves the machine
+without being seen. The report holds the library and Go versions, the
+platform, the `Probe` table, every result and the browser's user agent;
+the GPU model is left for the reporter to fill in. The exit status is 1
+when a check failed. On an Apple M3 every check passes (AV1 encode is
+reported as unsupported: Apple Silicon has no AV1 encoder).
 
 ## convert
 

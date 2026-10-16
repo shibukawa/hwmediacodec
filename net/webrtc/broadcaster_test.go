@@ -3,11 +3,13 @@ package webrtc_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -250,5 +252,132 @@ func TestBroadcasterStartsViewersAtKeyframes(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("nothing received")
+	}
+}
+
+// hevcAccessUnit is a made-up keyframe access unit: VPS, SPS, PPS and an
+// IDR slice header with filler. The payloader looks at the NAL unit
+// headers only.
+func hevcAccessUnit(size int) []byte {
+	var au []byte
+	for _, typ := range []byte{32, 33, 34} {
+		au = append(au, 0, 0, 0, 1, typ<<1, 1, 0xAA, 0xBB)
+	}
+	au = append(au, 0, 0, 0, 1, 19<<1, 1)
+	for i := range size {
+		au = append(au, byte(i%200)+1)
+	}
+	return au
+}
+
+func TestCodecBroadcasterHEVC(t *testing.T) {
+	if _, err := webrtc.NewCodecBroadcaster(hwmediacodec.AV1, 30, nil, nil); !errors.Is(err, hwmediacodec.ErrUnsupported) {
+		t.Fatalf("AV1: %v", err)
+	}
+	bc, err := webrtc.NewCodecBroadcaster(hwmediacodec.HEVC, 30, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bc.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { bc.ServeHTTP(w, r) }))
+	defer srv.Close()
+
+	pc, err := pion.NewPeerConnection(pion.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	if _, err := pc.AddTransceiverFromKind(pion.RTPCodecTypeVideo, pion.RTPTransceiverInit{Direction: pion.RTPTransceiverDirectionRecvonly}); err != nil {
+		t.Fatal(err)
+	}
+	mime := make(chan string, 1)
+	packets := make(chan int, 1024)
+	pc.OnTrack(func(track *pion.TrackRemote, _ *pion.RTPReceiver) {
+		mime <- track.Codec().MimeType
+		for {
+			pkt, _, err := track.ReadRTP()
+			if err != nil {
+				return
+			}
+			packets <- len(pkt.Payload)
+		}
+	})
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gathered := pion.GatheringCompletePromise(pc)
+	if err := pc.SetLocalDescription(offer); err != nil {
+		t.Fatal(err)
+	}
+	<-gathered
+	body, _ := json.Marshal(pc.LocalDescription())
+	resp, err := http.Post(srv.URL+"/offer", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var answer pion.SessionDescription
+	err = json.NewDecoder(resp.Body).Decode(&answer)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer.SDP, "H265/90000") {
+		t.Fatalf("answer offers no H265:\n%s", answer.SDP)
+	}
+	if err := pc.SetRemoteDescription(answer); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(10 * time.Second)
+	for pts := int64(0); ; pts += 3000 {
+		if err := bc.WritePacket(hwmediacodec.Packet{Data: hevcAccessUnit(3000), PTS: pts, Keyframe: true}); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case m := <-mime:
+			if !strings.EqualFold(m, pion.MimeTypeH265) {
+				t.Fatalf("track codec %s", m)
+			}
+			select {
+			case <-packets:
+				return
+			case <-deadline:
+				t.Fatal("no RTP packet arrived")
+			}
+		case <-deadline:
+			t.Fatal("no track arrived")
+		case <-time.After(30 * time.Millisecond):
+		}
+	}
+}
+
+func TestCodecBroadcasterRefusesOfferWithoutCodec(t *testing.T) {
+	bc, err := webrtc.NewCodecBroadcaster(hwmediacodec.HEVC, 30, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bc.Close()
+	m := &pion.MediaEngine{}
+	if err := m.RegisterCodec(pion.RTPCodecParameters{RTPCodecCapability: pion.RTPCodecCapability{MimeType: pion.MimeTypeH264, ClockRate: 90000, SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f"}, PayloadType: 102}, pion.RTPCodecTypeVideo); err != nil {
+		t.Fatal(err)
+	}
+	pc, err := pion.NewAPI(pion.WithMediaEngine(m)).NewPeerConnection(pion.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	if _, err := pc.AddTransceiverFromKind(pion.RTPCodecTypeVideo, pion.RTPTransceiverInit{Direction: pion.RTPTransceiverDirectionRecvonly}); err != nil {
+		t.Fatal(err)
+	}
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gathered := pion.GatheringCompletePromise(pc)
+	pc.SetLocalDescription(offer)
+	<-gathered
+	answer, err := bc.Accept(*pc.LocalDescription())
+	if !errors.Is(err, webrtc.ErrBadOffer) {
+		t.Fatalf("an H.264-only offer got %v, answer:\n%v", err, answer)
 	}
 }

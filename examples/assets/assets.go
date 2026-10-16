@@ -39,6 +39,23 @@ var WaterfallH264MP4 []byte
 // WaterfallH264Name is the H.264 clip's file name, for messages.
 const WaterfallH264Name = "waterfall-720p-h264.mp4"
 
+// WaterfallAV1MP4 is the same clip in AV1 (Main profile, 8-bit 4:2:0,
+// about 0.9 Mbit/s) with the same audio track, for checking AV1 decoders;
+// it is not one of Clips because few machines decode AV1 in hardware yet.
+// It was made from the HEVC clip with
+//
+//	ffmpeg -i waterfall-720p-hevc.mp4 -map 0:v:0 -map 0:a:0 \
+//	  -c:v libsvtav1 -preset 4 -b:v 900k -svtav1-params tune=0 \
+//	  -pix_fmt yuv420p -g 150 -fps_mode passthrough \
+//	  -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
+//	  -c:a copy -map_metadata -1 -movflags +faststart waterfall-720p-av1.mp4
+//
+//go:embed waterfall-720p-av1.mp4
+var WaterfallAV1MP4 []byte
+
+// WaterfallAV1Name is the AV1 clip's file name, for messages.
+const WaterfallAV1Name = "waterfall-720p-av1.mp4"
+
 // Clip is one encoding of the bundled sample video.
 type Clip struct {
 	// Name is the file name, for messages.
@@ -60,3 +77,6 @@ func Clips() []Clip {
 		{Name: WaterfallH264Name, data: WaterfallH264MP4},
 	}
 }
+
+// AV1 returns the AV1 encoding of the clip (WaterfallAV1MP4).
+func AV1() Clip { return Clip{Name: WaterfallAV1Name, data: WaterfallAV1MP4} }

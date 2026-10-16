@@ -32,9 +32,9 @@ web) the engine is the WebCodecs API, reached through `syscall/js`; see
 | `.../net/hls` | Live HLS playlist and HTTP handler over the fMP4 segments |
 | `.../playback` | Plays a stream against a clock: background decoding, pacing, seeking, looping; frames to show |
 | `.../capture` | Records what a renderer draws (an Ebitengine screen, for example) through the encoder into a sink |
-| `.../net/webrtc` | Separate module: one H.264 stream broadcast to browsers over WebRTC (pion) |
+| `.../net/webrtc` | Separate module: one H.264 or HEVC stream broadcast to browsers over WebRTC (pion) |
 | `.../ebitenvideo` | Separate module: `playback` with the frames in an `*ebiten.Image` |
-| `.../examples` | Separate module: complete programs (converter, thumbnails, recorder, HLS and WebRTC servers, player) |
+| `.../examples` | Separate module: complete programs (machine check, converter, thumbnails, recorder, HLS and WebRTC servers, player) |
 
 The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
 image packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
@@ -42,6 +42,17 @@ Ebitengine and pion are only pulled in by the separate modules
 (`ebitenvideo`, `net/webrtc`, `examples`).
 
 ## Status
+
+Run the check on your machine, and please report the result: it decodes the
+bundled clip in H.264, HEVC and AV1, encodes and decodes back in every codec
+the machine has, plays the clip with sound, streams H.264 and HEVC to the
+browser over WebRTC, and prints a Markdown report to paste into a
+[new issue](https://github.com/shibukawa/hwmediacodec/issues/new). Rows below
+that say "not yet verified" are waiting for exactly that.
+
+```sh
+go run github.com/shibukawa/hwmediacodec/examples/check@latest
+```
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
@@ -1114,7 +1125,8 @@ playlist.End()                                             // EXT-X-ENDLIST
 
 `github.com/shibukawa/hwmediacodec/net/webrtc` is the low-latency
 counterpart of `net/hls`: a `Broadcaster` hands every access unit of an
-H.264 stream to a [pion](https://github.com/pion/webrtc) track per viewer.
+H.264 stream (or, with `NewCodecBroadcaster`, an HEVC one) to a
+[pion](https://github.com/pion/webrtc) track per viewer.
 It is a module of its own, so that the WebRTC stack stays out of the core
 module's dependencies (`go get github.com/shibukawa/hwmediacodec/net/webrtc`).
 
@@ -1127,8 +1139,14 @@ http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
 ```
 
 - `Broadcaster` is a `hwmediacodec.PacketWriteCloser`; packet times
-  are in 90 kHz units. pion's H.264 payloader splits the Annex-B NAL units
-  into RTP (STAP-A for the parameter sets, FU-A for large slices).
+  are in 90 kHz units. pion's payloader splits the Annex-B NAL units
+  into RTP (STAP-A for the parameter sets, FU-A for large slices; the
+  RFC 7798 aggregation and fragmentation units for HEVC).
+- `NewCodecBroadcaster(hwmediacodec.HEVC, ...)` streams HEVC. Browsers
+  receive it where their platform decodes HEVC (Safari, and Chrome and
+  Edge with a hardware decoder; Chromium 152 on an Apple M3 does); an offer
+  without H.265 is refused with `ErrBadOffer`, which `ServeHTTP` answers
+  with 400.
 - Signalling is a single HTTP POST of the browser's SDP offer as JSON; the
   answer is returned once ICE gathering is done, so no trickle ICE and no
   WebSocket. `Accept` does the same for programs with their own signalling.
