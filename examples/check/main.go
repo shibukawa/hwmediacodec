@@ -1,5 +1,5 @@
 // Command check tries everything hwmediacodec does on this machine and
-// writes a report to paste into a GitHub issue:
+// writes a report for a GitHub issue:
 //
 //	go run github.com/shibukawa/hwmediacodec/examples/check@latest
 //	go run ./check -auto        # the automatic checks only, no window
@@ -18,7 +18,8 @@
 //     received and asks whether the picture is right.
 //
 // At the end the report is printed, saved as hwmediacodec-report.md and a
-// link to a new GitHub issue is shown; the issue body is pasted by hand.
+// link opens a new GitHub issue with the report filled in; nothing is sent
+// until it is submitted there.
 // S skips the current clip or stage, Esc ends the run and saves what was
 // checked; -playback=false and -webrtc=false leave a stage out.
 package main
@@ -85,8 +86,13 @@ func finish(r *report, path string) int {
 	} else if abs, err := filepath.Abs(path); err == nil {
 		fmt.Println("Report saved to", abs)
 	}
-	fmt.Println("Please open an issue with it (paste the report as the body):")
-	fmt.Println(r.issueURL())
+	link, full := r.issueURL()
+	if full {
+		fmt.Println("Please open an issue with it; this link fills the report in:")
+	} else {
+		fmt.Println("Please open an issue with it (paste the report from the file as the body):")
+	}
+	fmt.Println(link)
 	if _, fail := r.counts(); fail > 0 {
 		return 1
 	}

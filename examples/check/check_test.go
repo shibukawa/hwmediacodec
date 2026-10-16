@@ -33,12 +33,30 @@ func TestReportMarkdown(t *testing.T) {
 	if strings.Index(md, "### Decode") > strings.Index(md, "### Encode") {
 		t.Error("sections out of order")
 	}
-	u, err := url.Parse(r.issueURL())
+	link, full := r.issueURL()
+	if !full {
+		t.Fatal("a short report does not fit the link")
+	}
+	u, err := url.Parse(link)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q := u.Query(); len(q) != 1 || !strings.HasPrefix(q.Get("title"), "Check report: ") {
-		t.Errorf("issue URL %s carries more than the title", u)
+	if q := u.Query(); len(q) != 2 || !strings.HasPrefix(q.Get("title"), "Check report: ") || q.Get("body") != md {
+		t.Errorf("issue URL %s does not carry the title and the report", u)
+	}
+	for range 200 {
+		r.set(r.add("Decode", "a long check name for a long report"), passed, "%s", strings.Repeat("detail ", 10))
+	}
+	if link, full := r.issueURL(); full || len(link) > maxIssueURL || !strings.Contains(link, "too+long") {
+		t.Errorf("a long report gives a %d-byte link (full %v)", len(link), full)
+	}
+}
+
+func TestWrap(t *testing.T) {
+	got := wrap("Report saved to ./hwmediacodec-report.md (also printed)", 20)
+	want := []string{"Report saved to", "./hwmediacodec-repor", "t.md (also printed)"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("wrap: %q", got)
 	}
 }
 

@@ -154,10 +154,20 @@ func (r *report) title() string {
 	return fmt.Sprintf("Check report: %s/%s (%s), %d passed, %d failed", runtime.GOOS, runtime.GOARCH, b, pass, fail)
 }
 
-// issueURL opens a new issue with the title filled in; the body is pasted
-// by hand so that the user sees what is sent.
-func (r *report) issueURL() string {
-	return "https://github.com/shibukawa/hwmediacodec/issues/new?title=" + url.QueryEscape(r.title())
+// maxIssueURL keeps the new-issue link below the length GitHub accepts
+// (it answers 414 somewhere above 8 KB).
+const maxIssueURL = 8000
+
+// issueURL opens a new issue with the title and the report filled in;
+// nothing is sent until the user submits the form. A report too long for
+// a link is left out and has to be pasted from the file. full reports
+// whether the body is in the link.
+func (r *report) issueURL() (link string, full bool) {
+	base := "https://github.com/shibukawa/hwmediacodec/issues/new?title=" + url.QueryEscape(r.title())
+	if link := base + "&body=" + url.QueryEscape(r.markdown()); len(link) <= maxIssueURL {
+		return link, true
+	}
+	return base + "&body=" + url.QueryEscape("_The report was too long for the link: please paste hwmediacodec-report.md here._"), false
 }
 
 // markdown renders the report for a GitHub issue.

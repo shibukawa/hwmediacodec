@@ -96,9 +96,10 @@ machine. It runs three stages in one window and ends with a report:
    cannot receive HEVC over WebRTC gets a refusal, recorded as such.
 
 The report is printed, saved as `hwmediacodec-report.md` and comes with a
-link to a new GitHub issue whose title (platform, backends, counts) is
-filled in; the body is pasted by hand, so nothing leaves the machine
-without being seen. The report holds the library and Go versions, the
+link (`O` in the window) that opens a new GitHub issue with the title
+(platform, backends, counts) and the report filled in; nothing is sent
+until it is submitted there. A report longer than a link can carry (about
+8 KB) is left out of it and pasted from the file. The report holds the library and Go versions, the
 platform, the `Probe` table, every result and the browser's user agent;
 the GPU model is left for the reporter to fill in. The exit status is 1
 when a check failed. On an Apple M3 every check passes (AV1 encode is

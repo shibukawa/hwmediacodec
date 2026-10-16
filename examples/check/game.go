@@ -107,7 +107,8 @@ func (g *game) Update() error {
 		}
 	case stDone:
 		if inpututil.IsKeyJustPressed(ebiten.KeyO) {
-			if err := browser.OpenURL(g.r.issueURL()); err != nil {
+			link, _ := g.r.issueURL()
+			if err := browser.OpenURL(link); err != nil {
 				g.message = "could not open the browser: " + err.Error()
 			}
 		}
@@ -293,12 +294,32 @@ func (g *game) finish() {
 	}
 	g.saved = true
 	finish(g.r, g.out)
-	if abs, err := filepath.Abs(g.out); err == nil {
-		g.savedAt = abs
+	if _, err := os.Stat(g.out); err == nil {
+		g.savedAt = displayPath(g.out)
 	}
-	if _, err := os.Stat(g.out); err != nil {
-		g.savedAt = ""
+}
+
+// displayPath shows a relative path as ./name, which is short enough for
+// the window; the terminal has the absolute one.
+func displayPath(p string) string {
+	if filepath.IsAbs(p) {
+		return p
 	}
+	return "." + string(filepath.Separator) + filepath.Clean(p)
+}
+
+// wrap breaks s into lines of at most n characters at spaces.
+func wrap(s string, n int) []string {
+	var out []string
+	for len(s) > n {
+		cut := strings.LastIndexByte(s[:n], ' ')
+		if cut <= 0 {
+			cut = n
+		}
+		out = append(out, s[:cut])
+		s = strings.TrimLeft(s[cut:], " ")
+	}
+	return append(out, s)
 }
 
 func (g *game) close() {
@@ -370,8 +391,6 @@ func (g *game) drawPanel(screen *ebiten.Image) {
 		line(fmt.Sprintf(" [%s] %s  %s", res.Status.mark(), res.Name, detail))
 	}
 
-	y = winH - 5*lineH
-	g.rect(screen, 0, float64(y-8), panelW, float64(winH-y+8), color.RGBA{30, 33, 40, 255})
 	var prompt []string
 	switch g.stage {
 	case stAuto:
@@ -395,15 +414,25 @@ func (g *game) drawPanel(screen *ebiten.Image) {
 		if g.savedAt != "" {
 			where = "Report saved to " + g.savedAt
 		}
-		prompt = []string{fmt.Sprintf("Finished: %d passed, %d failed. %s", pass, fail, where),
-			"It is also printed in the terminal. Please paste it into a new issue.",
-			"[O] open the GitHub issue page  [Esc] quit"}
+		_, full := g.r.issueURL()
+		issue := "[O] opens a new GitHub issue with the report filled in; please submit it there."
+		if !full {
+			issue = "[O] opens a new GitHub issue; please paste the report from the file into it."
+		}
+		prompt = []string{fmt.Sprintf("Finished: %d passed, %d failed.", pass, fail), where + " (also printed in the terminal).",
+			issue, "[Esc] quit"}
 	}
 	if g.message != "" {
 		prompt = append(prompt, g.message)
 	}
+	var lines []string
 	for _, p := range prompt {
-		line(strings.TrimSpace(p))
+		lines = append(lines, wrap(strings.TrimSpace(p), (panelW-24)/charW)...)
+	}
+	y = winH - (len(lines)+1)*lineH
+	g.rect(screen, 0, float64(y-8), panelW, float64(winH-y+8), color.RGBA{30, 33, 40, 255})
+	for _, l := range lines {
+		line(l)
 	}
 }
 
