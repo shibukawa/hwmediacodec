@@ -58,7 +58,7 @@ go run github.com/shibukawa/hwmediacodec/examples/check@latest
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
 | macOS, Apple Silicon | VideoToolbox | H.264, HEVC; display order; NV12, RGBA or BGRA in CPU memory. AV1 on M3 and newer: Main profile 8-bit and 10-bit 4:2:0 in (IVF / ISOBMFF temporal units), 8-bit out | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out (no AV1 encoder exists on Apple Silicon) |
-| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on the Android 14 emulator (its decoders), a device run is pending** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Android 14 emulator (software encoders), a device run is pending** |
+| Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on a Redmi Pad SE (Snapdragon 680, Android 15; H.264 and HEVC bit-exact with ffmpeg, no AV1 decoder on that SoC) and on the Android 14 emulator** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Redmi Pad SE (Qualcomm hardware encoders, about 47 dB PSNR) and on the Android 14 emulator (software encoders)** |
 | Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only and Safari's NV12 is not bit-exact (see the notes); other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox and H.264 / HEVC in Safari on macOS with the limits in the notes; other operating systems not run yet** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified on an iPhone SE (3rd generation, A15, iOS 26.6) with the check of `examples/mobile`** ([#31](https://github.com/shibukawa/hwmediacodec/issues/31)) and in the iOS Simulator (software decoder) | H.264, HEVC as on macOS; **verified on the iPhone SE (decoded back at 35.5 dB H.264, 36.6 dB HEVC) and in the iOS Simulator** |
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
@@ -80,7 +80,7 @@ false):
 | --- | --- | --- | --- |
 | macOS, iOS | AudioToolbox (`AudioConverter`) | AAC-LC from mono to 5.1, HE-AAC and HE-AAC v2 (with the band replication and parametric stereo, at the full sample rate); Opus mono and stereo, any packet length; 16-bit or float samples | AAC-LC and Opus (48 kHz), mono and stereo; bitrate with VBR or CBR; **compared with ffmpeg on macOS, round trips verified on an iPhone SE (3rd generation) and in the iOS Simulator** |
 | Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
-| Android | MediaCodec (the framework's software codecs, through the NDK) | AAC-LC to 5.1, HE-AAC as the device has it; Opus mono and stereo; **compared with ffmpeg on the Android 14 emulator** | AAC-LC (the rates of the AAC table) and Opus (48 kHz), mono and stereo; the encoder's delay is measured on the device; **ffmpeg decodes the streams to the input on the emulator** |
+| Android | MediaCodec (the framework's software codecs, through the NDK) | AAC-LC to 5.1, HE-AAC as the device has it; Opus mono and stereo; **compared with ffmpeg on a Redmi Pad SE (Android 15) and the Android 14 emulator** | AAC-LC (the rates of the AAC table) and Opus (48 kHz), mono and stereo; the encoder's delay is measured on the device; **ffmpeg decodes the streams to the input on the Redmi Pad SE and the emulator** |
 | Linux | the distribution's libraries, loaded when present: `libopus`, `libavcodec` (FFmpeg 4 to 8), `libfdk-aac` | Opus mono and stereo (`libopus`); AAC-LC to 5.1, HE-AAC and HE-AAC v2 (`libavcodec`, or `libfdk-aac` without it); **the tests of macOS pass in containers of Debian 12 and 13, Ubuntu 22.04 and 24.04 and Fedora, on arm64 and amd64** | Opus (48 kHz, `libopus`); AAC-LC (`libfdk-aac`), mono and stereo; **same** |
 | Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **AAC verified on Windows with the player sample** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **verified on Windows with the `examples/check` round trip (2.01 s back at the input level)** |
 
@@ -354,9 +354,19 @@ MediaTek, Tensor) sit behind it.
   on the host and go by a hardware name) and refuses the software codecs
   without `-software`; H.264, HEVC and AV1 streams decode to ffmpeg's
   frames in display order, and the framework's software encoders produce
-  streams ffmpeg decodes. The same script runs against a device
-  (`ARCH=arm64`, without `SOFTWARE=1`), which is the step still open;
-  `examples/mobile/android` is the app to run on one.
+  streams ffmpeg decodes. On a device the same script runs with
+  `ARCH=arm64` and without `SOFTWARE=1`; on a Redmi Pad SE (Snapdragon
+  680 / SM6225, Android 15, 2026-10-16) `Probe` lists hardware H.264 and
+  HEVC decode and encode, both B-frame streams decode bit-exact with
+  ffmpeg in display order (also to RGBA), the hardware encoders give
+  streams ffmpeg decodes at about 47 dB PSNR, H.264 to HEVC transcoding
+  works, and the audio part passes as on the emulator. AV1 is unsupported
+  there: the SoC has no AV1 engine and the only `video/av01` decoder is
+  the software `c2.android.av1-dav1d.decoder`. The `examples/mobile` app
+  plays the HEVC clip through the hardware decoder at 60 fps without
+  skipped frames, and its check passed for H.264, HEVC, AAC and Opus.
+  Xiaomi devices need **Install via USB** turned on in the developer
+  options before `adb install` is allowed.
 - **Audio.** AAC and Opus go through the same MediaCodec bindings (see
   [Audio](#audio)). On the emulator the script's audio part passes: AAC
   from an MP4 file and from ADTS and Opus from an MP4 file decode to

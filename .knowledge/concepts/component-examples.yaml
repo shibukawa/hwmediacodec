@@ -328,7 +328,8 @@ verification:
         tablet, scale 2): H.264 / HEVC decode OK on the goldfish decoders, encoders unsupported, the chooser
         showed the report text, Open issue opened the GitHub login page, Back reopened the player. Same
         day on the author''s iPhone SE (3rd generation, iPhone14,6, iOS 26.6.2): 10 passed, 0 failed,
-        filed as issue #31 through Open issue.'
+        filed as issue #31 through Open issue. Redmi Pad SE (Snapdragon 680, Android 15): HEVC clip at
+        60 fps through the hardware decoder; the author reported H.264, HEVC, AAC and Opus OK, AV1 absent.'
     basis:
     - path: examples/mobile/check.go
       input_hash: f6c2f191fbc56891b2a2918f3c198a0e7fb8f0753b6fbea0579490f6167c809e

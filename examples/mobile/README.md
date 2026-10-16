@@ -98,8 +98,9 @@ On the Android emulator the goldfish H.264 and HEVC decoders pass and
 the encoders, software only, are `unsupported`. Both were run that way
 (iPhone 17 Pro Simulator with iOS 26, Android 14 arm64 emulator as a
 tablet). On an iPhone SE (3rd generation, iOS 26.6.2) every check passed
-([#31](https://github.com/shibukawa/hwmediacodec/issues/31)); an Android
-device run is still pending.
+([#31](https://github.com/shibukawa/hwmediacodec/issues/31)), and on a
+Redmi Pad SE (Snapdragon 680, Android 15) H.264, HEVC, AAC and Opus
+passed (AV1 unsupported: that SoC has no AV1 decoder or encoder).
 
 ## Build and run on an Android device
 
@@ -166,5 +167,7 @@ What to expect on a device:
 about a minute) and `build-apk.sh` turns it into an APK that runs on the
 Android 14 emulator (that is how the app was verified; the Gradle project
 itself was not built here, there being no Gradle or Android Studio on the
-development machine). The Go backend has not run on a real device. See the
+development machine). The same APK runs on a Redmi Pad SE (Android 15);
+on Xiaomi devices turn on **Install via USB** in the developer options
+first, or `adb install` fails with `INSTALL_FAILED_USER_RESTRICTED`. See the
 Android notes in the repository README.

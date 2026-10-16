@@ -283,15 +283,20 @@ verification:
     - path: internal/reorder/decoder.go
       input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
   device-run:
-    state: not_run
+    state: passed
     method: manual
-    authority: authored
+    authority: observed
     test: scripts/android_device_check.sh (ARCH=arm64, no SOFTWARE) and examples/mobile/android on the
       author's Android tablet
     evidence:
       path: examples/mobile/README.md
-      note: no device attached to the development Mac; the user will run the device tests together with
-        the iPhone ones
+      note: '2026-10-16, Redmi Pad SE (23073RPBFG, Snapdragon 680 / SM6225, Android 15, API 35): Probe lists
+        hardware h264/hevc decode and encode, software aac/opus; H.264 and HEVC B-frame decode identical
+        to ffmpeg (30 frames each, display order), RGBA decode, H.264 / HEVC encode 47.7 / 47.5 dB luma
+        PSNR, H.264 to HEVC transcode, AAC (MP4, ADTS) and Opus decode 63.4 / 71.5 dB against ffmpeg,
+        AAC / Opus encode round trips 39.8 / 36.4 dB. AV1 decode unsupported (only c2.android.av1-dav1d.decoder).
+        examples/mobile app played the HEVC clip at 60 fps, skipped 0; the author reported its check OK
+        for H.264, HEVC, AAC and Opus, AV1 decode and encode absent.'
   android-typecheck:
     state: passed
     method: static
@@ -425,9 +430,9 @@ verification:
     - path: examples/mobile/mobile.go
       input_hash: b25996e323bc6cfe7e55b935853dce285d66440ff810bab2696b8669d862a607
   android-device-run:
-    state: not_run
+    state: passed
     method: manual
-    authority: authored
+    authority: observed
     scope:
       milestone: android-mediacodec
       platform: android
@@ -435,7 +440,13 @@ verification:
       or Android Studio) on the author's tablet
     evidence:
       path: examples/mobile/README.md
-      note: no device attached to the development Mac; the author will test with the iPhone run
+      note: '2026-10-16, Redmi Pad SE (23073RPBFG, Snapdragon 680 / SM6225, Android 15, API 35): Probe lists
+        hardware h264/hevc decode and encode, software aac/opus; H.264 and HEVC B-frame decode identical
+        to ffmpeg (30 frames each, display order), RGBA decode, H.264 / HEVC encode 47.7 / 47.5 dB luma
+        PSNR, H.264 to HEVC transcode, AAC (MP4, ADTS) and Opus decode 63.4 / 71.5 dB against ffmpeg,
+        AAC / Opus encode round trips 39.8 / 36.4 dB. AV1 decode unsupported (only c2.android.av1-dav1d.decoder).
+        examples/mobile app played the HEVC clip at 60 fps, skipped 0; the author reported its check OK
+        for H.264, HEVC, AAC and Opus, AV1 decode and encode absent.'
   android-existing-suites:
     state: passed
     method: integration
@@ -559,6 +570,8 @@ facts:
   - c2.goldfish.h264.decoder / c2.goldfish.hevc.decoder (host-side decoding) are classified as hardware
     by name and decode bit-exactly against ffmpeg; the software AV1 decoder and the software encoders
     are refused without WithSoftwareFallback, as designed.
+  device_result: the four risks below did not show on the Redmi Pad SE (Qualcomm c2.qti codecs), the
+    first vendor device; other vendors (Exynos, MediaTek, Tensor) are unverified.
   risks_until_a_device_run:
   - Vendor codecs whose MediaImage2 or crop semantics differ from the emulator's (buffers larger than
     the picture, BufferInfo.offset other than 0).
