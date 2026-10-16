@@ -1587,18 +1587,22 @@ verification:
     - path: examples/mobile/ios/HWMediaCodecPlayer.xcodeproj/project.pbxproj
       input_hash: 7109f4a6de1e4c398946128e43bdf86677f05e9496bb6466096e2b93cb8bb413
   ios-iphone-run:
-    state: not_run
+    state: passed
     method: manual
-    authority: authored
+    authority: observed
     scope:
       milestone: ios-videotoolbox
       platform: ios
       gpu: apple-silicon
-    test: Build examples/mobile/ios in Xcode with a signing team and run on the author's iPhone; check
-      the top line, playback, and background/foreground
+    test: Build examples/mobile/ios in Xcode with a signing team (free Personal Team) and run on the author's
+      iPhone; Run check covers probe, decode, encode round trips, audio and playback
     evidence:
-      path: examples/mobile/README.md
-      note: the author has the device; not run from the development session
+      path: examples/mobile/check.go
+      note: '2026-10-16, iPhone SE 3rd generation (iPhone14,6, A15, iOS 26.6.2), report filed by the author
+        as issue #31: 10 passed, 0 failed. H.264 / HEVC decode in hardware 525 / 669 fps (720x1280, 293
+        frames, display order), encode round trips 35.5 dB H.264 and 36.6 dB HEVC luma PSNR (order check
+        passed), AAC decode and AAC / Opus round trips, playback picture and sound answered yes. AV1 not
+        reported (no AV1 decoder before the A17 Pro). Background/foreground recovery not part of the check.'
   ios-existing-suites:
     state: passed
     method: integration
@@ -1837,7 +1841,8 @@ facts:
     simulator: no hardware decoder (VTIsHardwareDecodeSupported is 0, WithSoftwareFallback needed); the
       encoders accept RequireHardwareAcceleratedVideoEncoder and are listed as hardware; output valid
       (ffmpeg, about 49 dB PSNR). CLI decode output bit-identical to the Mac's hardware decode.
-    hardware_status: not yet run on an iPhone (milestone:ios-videotoolbox, iphone-run not_run).
+    hardware_status: 'verified on an iPhone SE 3rd generation (A15, iOS 26.6.2) with the mobile check, issue
+      #31; background recovery on a device not checked.'
   support_tier: tier1
   scope_note: Intel Macs are out of scope; the Intel Mac facts remain as reference only.
   implementation:

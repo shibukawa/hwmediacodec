@@ -97,7 +97,9 @@ playback stage plays the clips through the OS software decoder, labelled
 On the Android emulator the goldfish H.264 and HEVC decoders pass and
 the encoders, software only, are `unsupported`. Both were run that way
 (iPhone 17 Pro Simulator with iOS 26, Android 14 arm64 emulator as a
-tablet); the check has not run on a real phone or tablet yet.
+tablet). On an iPhone SE (3rd generation, iOS 26.6.2) every check passed
+([#31](https://github.com/shibukawa/hwmediacodec/issues/31)); an Android
+device run is still pending.
 
 ## Build and run on an Android device
 

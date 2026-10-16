@@ -326,7 +326,9 @@ verification:
         Share sheet Copy put the Markdown (Device: iPhone18,1 Simulator, iOS 26.0) on the pasteboard, Open
         issue opened github.com in Safari, Back reopened the player. Android 14 arm64 emulator (2560x1600
         tablet, scale 2): H.264 / HEVC decode OK on the goldfish decoders, encoders unsupported, the chooser
-        showed the report text, Open issue opened the GitHub login page, Back reopened the player.'
+        showed the report text, Open issue opened the GitHub login page, Back reopened the player. Same
+        day on the author''s iPhone SE (3rd generation, iPhone14,6, iOS 26.6.2): 10 passed, 0 failed,
+        filed as issue #31 through Open issue.'
     basis:
     - path: examples/mobile/check.go
       input_hash: f6c2f191fbc56891b2a2918f3c198a0e7fb8f0753b6fbea0579490f6167c809e
@@ -758,7 +760,8 @@ history:
     summary: After the author's M3 passed every desktop check and they connected an iPhone, the check was
       split into examples/internal/checker and a check mode was added to examples/mobile (Run check button,
       Yes / No buttons, Share and Open issue through native hooks). Run in the iPhone 17 Pro Simulator
-      (iOS 26) and on the Android 14 arm64 emulator; not yet on a real device.
+      (iOS 26) and on the Android 14 arm64 emulator; the author then ran it on an iPhone SE (3rd generation)
+      and filed issue #31 (10 passed, 0 failed).
   excheck-delivered-2026-10-16:
     summary: examples/check added after the author asked for one command others can run to report results.
       On the M3 the automatic stage passes (AV1 encode unsupported) and the WebRTC stage passed in the browser
