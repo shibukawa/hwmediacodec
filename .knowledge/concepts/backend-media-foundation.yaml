@@ -660,7 +660,8 @@ facts:
           in {Video, NV12}, out {Video, subtype}); keep candidates whose MF_TRANSFORM_FLAGS_Attribute
           has HARDWARE; with AllowSoftware and no hardware candidate, enumerate without HARDWARE for the
           Microsoft software encoder. Candidates are tried in order until one configures.
-        encoder_setup: GetStreamIDs; if MF_TRANSFORM_ASYNC then set MF_TRANSFORM_ASYNC_UNLOCK and QI IMFMediaEventGenerator;
+        encoder_setup: if MF_TRANSFORM_ASYNC then set MF_TRANSFORM_ASYNC_UNLOCK and QI IMFMediaEventGenerator (first: a locked
+          async MFT answers GetStreamIDs and every other call with MF_E_TRANSFORM_ASYNC_LOCKED, seen on Intel Quick Sync); GetStreamIDs;
           QI ICodecAPI; apply controls; SetOutputType (first type with the subtype from GetOutputAvailableType
           or a fresh one, with FRAME_SIZE, FRAME_RATE, PAR 1:1, progressive, AVG_BITRATE, MPEG2_PROFILE);
           SetInputType (NV12, DEFAULT_STRIDE = width); read stream infos; read MF_MT_MPEG_SEQUENCE_HEADER;
