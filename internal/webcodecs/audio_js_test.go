@@ -3,7 +3,13 @@
 package webcodecs
 
 import (
+	"context"
+	"errors"
+	"io"
+	"math"
+	"syscall/js"
 	"testing"
+	"time"
 
 	"github.com/shibukawa/hwmediacodec/internal/aac"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
@@ -99,5 +105,89 @@ func TestAudioConfigs(t *testing.T) {
 	cbr := codec.AudioEncoderConfig{Codec: codec.Opus, SampleRate: 48000, Channels: 2, Bitrate: 64000, RateControl: codec.CBR}
 	if c := audioEncoderConfig(&cbr); c["bitrateMode"] != "constant" || c["bitrate"] != 64000 || c["codec"] != "opus" {
 		t.Errorf("Opus CBR config: %v", c)
+	}
+}
+
+// A frame of a minute of PCM is handed to the browser in pieces: Send
+// stops feeding when the packets it will produce reach maxAudioPending,
+// Receive feeds the rest as it makes room, and Flush gets the last
+// samples out. Nothing is lost and the queue never grows past the bound
+// before Flush.
+func TestAudioEncoderFeedsLongFrameInParts(t *testing.T) {
+	if global.Get("AudioEncoder").Type() == js.TypeUndefined {
+		t.Skip(noWebCodecs)
+	}
+	const seconds, rate, channels = 60, 48000, 2
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	enc, err := Backend{}.NewAudioEncoder(ctx, codec.AudioEncoderConfig{Codec: codec.Opus, SampleRate: rate, Channels: channels, SampleFormat: codec.S16, TimeScale: rate, RateControl: codec.VBR})
+	if errors.Is(err, codec.ErrUnsupported) {
+		t.Skipf("not available in this browser: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	e := enc.(*audioEncoder)
+	samples := make([]int16, seconds*rate*channels)
+	for i := range samples {
+		samples[i] = int16(8000 * math.Sin(float64(i/channels)*2*math.Pi*440/rate))
+	}
+	if err := e.Send(ctx, codec.S16Frame(samples, rate, channels, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.input) == 0 {
+		t.Fatal("the whole minute was handed to the browser by Send")
+	}
+	if n := len(e.pending); n > maxAudioPending {
+		t.Fatalf("Send queued %d packets, the bound is %d", n, maxAudioPending)
+	}
+	var packets int
+	var duration int64
+	take := func(p codec.Packet) {
+		packets++
+		duration += p.Duration
+	}
+	// Receive feeds the rest while the page's event loop (a sleep yields
+	// to it) brings the packets back.
+	deadline := time.Now().Add(time.Minute)
+	for len(e.input) > 0 || len(e.pending) > 0 {
+		p, err := e.Receive(ctx)
+		if errors.Is(err, codec.ErrAgain) {
+			if time.Now().After(deadline) {
+				t.Fatalf("the browser stopped returning packets with %d bytes of input left", len(e.input))
+			}
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(e.pending) > maxAudioPending {
+			t.Fatalf("the queue grew to %d packets while receiving", len(e.pending))
+		}
+		take(p)
+	}
+	if packets <= maxAudioPending {
+		t.Fatalf("Receive handed out %d packets and stopped: it did not feed what Send left", packets)
+	}
+	if err := e.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		p, err := e.Receive(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		take(p)
+	}
+	if want := int64(seconds*rate + e.format.Delay); duration != want {
+		t.Fatalf("the packets cover %d samples, want %d", duration, want)
+	}
+	if min := seconds * rate / e.format.FrameSamples; packets < min {
+		t.Fatalf("%d packets for a minute, want at least %d", packets, min)
 	}
 }

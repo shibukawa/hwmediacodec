@@ -34,11 +34,12 @@ constraints:
   reporting the declared size. A seekable reader is read header-first, another one up to MaxInputBytes.'
 - 'The examples hls and webrtc listen on 127.0.0.1:8080 unless -addr says otherwise, because the streams
   are unauthenticated.'
+- 'An audio encoder encodes a frame longer than its queue in parts: Send stops at maxPending packets
+  (256 on AudioToolbox, 64 in the browser), Receive encodes the rest as it hands packets out, Flush
+  encodes what is left at once. The unencoded samples are at most the frame Send accepted last.'
 non_goals:
 - 'GPU/CPU overlap in the VA-API, VPL and NVDEC paths (one synchronous wait per frame), a staging texture
   ring for Media Foundation, pinned host memory for NVDEC: left for a session with the hardware.'
-- 'An audio encoder output queue that stays bounded for one PCM frame larger than its packet budget
-  (open since the first review).'
 acceptance:
   parsers-bounded:
     text: A stream that marks every picture long-term keeps at most max_num_ref_frames references; a slice
@@ -62,6 +63,14 @@ acceptance:
       milestone: security-review-2
     verified_by:
     - image-tests
+  audio-queue-bounded:
+    text: One frame of a minute of PCM leaves at most maxPending packets queued after Send, a second Send
+      gets ErrAgain, Receive encodes the rest without the queue growing past the bound, and after Flush
+      the packets cover every sample plus the encoder's delay.
+    scope:
+      milestone: security-review-2
+    verified_by:
+    - audio-queue-tests
 verification:
   parser-tests:
     state: passed
@@ -123,6 +132,24 @@ verification:
       input_hash: ffe04df8c4a6be24654d862fb46cd5a15aff83dbee401f50abc3036d166d938b
     - path: image/avif/avif.go
       input_hash: 78a4fce2526aec9642306fba75bfe32758b6b995c423bb2950ec5feb8cce828e
+  audio-queue-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: security-review-2
+    test: audiotoolbox.TestEncoderEncodesLongFrameInParts, webcodecs.TestAudioEncoderFeedsLongFrameInParts
+    evidence:
+      path: internal/audiotoolbox/longframe_test.go
+      locator: TestEncoderEncodesLongFrameInParts
+      note: run 2026-10-16 on macOS (AudioToolbox AAC) and in Chrome through scripts/browser_test.sh (Opus)
+    basis:
+    - path: internal/audiotoolbox/encoder.go
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
+    - path: internal/webcodecs/audioencoder.go
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
+    - path: internal/codec/audio.go
+      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
   static-analysis:
     state: passed
     method: static

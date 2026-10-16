@@ -36,6 +36,10 @@ type encoder struct {
 	samplesIn  int64
 	packetsOut int64
 
+	// pending holds at most maxPending packets between calls: Send and
+	// Receive run the converter only until it is full, and the samples
+	// that are not encoded yet wait in in.chunks (at most the frame Send
+	// accepted last, since Send refuses more while pending is full).
 	pending []codec.Packet
 	flushed bool
 	closed  bool
@@ -223,14 +227,15 @@ func (e *encoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	}
 	e.in.chunks = append(e.in.chunks, append([]byte(nil), f.Data...))
 	e.samplesIn += int64(len(f.Data) / e.in.unit)
-	return e.pump()
+	return e.pump(maxPending)
 }
 
 // pump runs the converter until it wants input that is not there (or, at
-// the end of the stream, until it has nothing more to give) and queues the
-// packets it produces.
-func (e *encoder) pump() error {
-	for {
+// the end of the stream, until it has nothing more to give) or until limit
+// packets are queued, and queues the packets it produces. A frame longer
+// than the queue is encoded in parts, the rest as Receive makes room.
+func (e *encoder) pump(limit int) error {
+	for len(e.pending) < limit {
 		list := sys.AudioBufferList{NumberBuffers: 1, Buffer: sys.AudioBuffer{
 			NumberChannels: uint32(e.cfg.Channels),
 			DataByteSize:   uint32(len(e.outBuf)),
@@ -254,7 +259,12 @@ func (e *encoder) pump() error {
 			return nil
 		}
 	}
+	return nil
 }
+
+// hasInput reports whether samples are waiting to be handed to the
+// converter.
+func (e *encoder) hasInput() bool { return len(e.in.chunks) > 0 }
 
 // emit queues one packet. Packet k codes the samples from k*FrameSamples -
 // Delay on, counted from the first sample sent; what lies past the last
@@ -282,6 +292,12 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	if err := ctx.Err(); err != nil {
 		return codec.Packet{}, err
 	}
+	if len(e.pending) < maxPending && e.hasInput() {
+		// Room for the samples Send left unencoded.
+		if err := e.pump(maxPending); err != nil {
+			return codec.Packet{}, err
+		}
+	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
 		e.pending[0] = codec.Packet{}
@@ -294,6 +310,9 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	return codec.Packet{}, codec.ErrAgain
 }
 
+// Flush implements codec.AudioEncoder. It encodes every sample still
+// waiting, so pending may exceed maxPending afterwards by what one frame
+// codes to; Receive hands the packets out and then reports io.EOF.
 func (e *encoder) Flush(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -306,7 +325,7 @@ func (e *encoder) Flush(ctx context.Context) error {
 	var err error
 	if e.started {
 		e.in.eof = true
-		err = e.pump()
+		err = e.pump(math.MaxInt)
 		e.in.eof = false
 	}
 	e.in.release()

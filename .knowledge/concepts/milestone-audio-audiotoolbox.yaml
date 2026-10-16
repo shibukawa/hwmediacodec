@@ -236,11 +236,11 @@ verification:
     - path: audio.go
       input_hash: ea935c4f34f7d0a9e122d00db55fbfded56f216833143317797d2aebfe21cf12
     - path: internal/codec/audio.go
-      input_hash: c6df88743aa866e0c552cf904d9c76c7fbe1191b505f202d856cad2a400c98f1
+      input_hash: 095d3a8d5bbf7a13e706b2664a4d99448c880fa5950996b222e2e00a7684f632
     - path: internal/audiotoolbox/decoder.go
       input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8105ee9377cb129ad4ee3a6f95de7dbb75286d6e99cf1573fc1300759e375497
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
     - path: internal/audiotoolbox/converter.go
       input_hash: 9f0b11730025cd6c5e07d4bb0a044ce3cb6641c7b3da8dcf04cf990188b7fb0f
     - path: internal/audiotoolbox/sys/sys.go
@@ -278,7 +278,7 @@ verification:
     - path: internal/audiotoolbox/decoder.go
       input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8105ee9377cb129ad4ee3a6f95de7dbb75286d6e99cf1573fc1300759e375497
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
   header-unit-tests:
     state: passed
     method: unit

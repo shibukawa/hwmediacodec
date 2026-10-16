@@ -904,7 +904,11 @@ m.Close()
   An encoder counts PTS and `Packet.Duration` in samples (the time scale
   defaults to the sample rate; `WithTimeScale` changes it), takes the PTS
   of the first frame as the start and treats everything sent after it as
-  one continuous signal, in frames of any length.
+  one continuous signal, in frames of any length. A frame longer than the
+  encoder's output queue (a minute of PCM in one `Send`) is encoded in
+  parts: `Send` stops once the queue is full and `Receive` encodes the
+  rest as it hands packets out, so the queue stays bounded while the
+  caller holds the frame; `Flush` encodes whatever is left at once.
 - **Delay.** Encoders start early: the first packets of a stream code
   samples that are not part of the recording (2112 for AudioToolbox's AAC,
   312 for its Opus; `AudioFormat.Delay`), and the last packet is padded to

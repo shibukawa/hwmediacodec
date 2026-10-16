@@ -154,7 +154,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
     - path: audio_mp4_test.go
@@ -183,7 +183,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: internal/aac/esds.go
       input_hash: 35eb2633e6c75b94821cbebeb617ef6a77673956eb10efb03e245f297ebc687e
     - path: exact_js_test.go
@@ -205,7 +205,7 @@ verification:
     - path: internal/webcodecs/audiodecoder.go
       input_hash: 204614d270f1f32e9c5609e6c54353880b847a5855352bc5fa350502b2c163bc
     - path: internal/webcodecs/audioencoder.go
-      input_hash: d4c4be627fd2f22653db3644c82cf2d50a9e7bc1e831481b02172bd05a776924
+      input_hash: 01fa375e8ef45acdd39eac6ae680265460115385667ef45295715aa7b4b1831c
     - path: audio_test.go
       input_hash: 0b9b7f3535c5102188760be1c0f3de883b138caf717f9f614690081df72e0c90
   chrome-full-run:
@@ -243,7 +243,7 @@ verification:
     - path: internal/audiotoolbox/decoder.go
       input_hash: 87038bcd164311b7254bd9535de4a21d654033f6636c2c3f0c3f15330df242f6
     - path: internal/audiotoolbox/encoder.go
-      input_hash: 8105ee9377cb129ad4ee3a6f95de7dbb75286d6e99cf1573fc1300759e375497
+      input_hash: 749de5fec273122994cd0a68d6ac6cdbdee0346171881499374e8cdef0f108be
   chrome-elsewhere:
     state: not_run
     method: manual

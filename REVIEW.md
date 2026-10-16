@@ -19,6 +19,7 @@
 | サンプル・CLI | `hls`・`webrtc` の既定 listen が全インターフェース（`:8080`）で、認証のない画面配信を LAN に公開していた。既定を `127.0.0.1:8080` にし、`ReadHeaderTimeout` を設定した。`thumbnails` はエンコード失敗時に部分ファイルを残さない。CLI は出力ファイルの Close エラーを返す。`ebitenvideo` はパディング行を含む plane を `WritePixels` に渡さない。`capture.Duration` はキャプチャロックを取らない。 |
 | スクリプト | 偽 VA ドライバのスクリプトが `TESTFLAGS` をコンテナ内シェルに再解釈させていた（位置引数で渡す）。知識更新スクリプトはファイルハンドルを閉じ、リポジトリ外を指す `path:` を拒否する。 |
 | HEIF/AVIF | グリッド画像のキャンバスにファイル側の宣言以外の上限がなく（前回の残課題）、iloc の extent は重複して同じタイルを指せるため、131 KB のファイルが 16 GiB のキャンバスと 65,280 回のデコードを要求できた。`heif.MaxPixels`（16384²）・`MaxTiles`（4096）・`MaxInputBytes`（256 MiB）と呼び出しごとの `Limits`（`DecodeWithLimits`・`DecodeBytesWithLimits`）を追加し、`ErrTooLarge` でデコーダを開く前に拒否する。`DecodeConfig`・`DecodeInfo` は宣言サイズを報告し続ける。`length_size = 0` の iloc は extent ごとの入力コストがなく、20,000 item × 65,535 extent で `DecodeConfig` に 21.5 秒かかっていた。単一 extent 以外では拒否し、ファイル全体の extent 数に上限を置く（107 µs）。`Decode(io.Reader)`・`DecodeConfig(io.Reader)` は seek できる入力ならヘッダと必要な extent だけ読み、そうでなければ `MaxInputBytes` までで打ち切る。`DecodeBytes` の二重パースを除去。ipma の property index が 7 bit を超えるときは 15 bit 形式で書き、32767 超はエラー。 |
+| 音声エンコーダ | 前回の残課題。1 分の PCM を 1 フレームで `Send` すると、出力キューの上限 `maxPending` を見るのは `Send` の前だけで、数千パケットが `Receive` まで保持されていた。`Send` はキューが満ちるまでしかエンコードせず、残りの入力は `Receive` がパケットを渡して空きができるたびに続きをエンコードする（AudioToolbox は converter を上限まで回す、WebCodecs は 16 パケット分ずつ `AudioData` を渡す）。満杯のキューへの次の `Send` は `ErrAgain`。`Flush` は残りを一度にエンコードするので、その時点でだけ 1 フレーム分だけ上限を超え得る。両バックエンドに 60 秒 PCM の回帰テストを追加。 |
 | MP4 | Reader の開始位置が 0 でないと、box の位置（reader 基準）と `stco` のオフセット（ファイル基準）が混ざり、`Sample` が別の場所のバイト列を黙って返していた。全オフセットをファイル基準に揃え、読み出しは `start` を足して seek する。サンプル索引は 1 サンプル 40 バイトで上限がなく、1 バイトサンプルの 100 MB ファイルが 4 GB を要求できた。索引を 24 バイトに縮め（継続時間は次の DTS から導出、sync はソート済み索引へ）、`MaxSamples`（800 万）で拒否する。パススルーの編集リストを出力の movie time scale に再スケールしていなかった（QuickTime の 600 や ffmpeg の 48000 のソースで音声が短く切られる）。`Demuxer.MovieTimeScale` を追加し、版の昇格を含めて再スケールする。Segmenter はキーフレームが来ないと際限なく保持していた。目標長の 4 倍または `MaxSegmentBytes` を超えたらエラー。`AccessUnit` の二重コピーを 1 回にし、`PresentationLength`・`KeyframeAtOrBefore` を O(n) 走査から事前計算と二分探索に、muxer の ctts を run-length に変えた。`Track.Info` は範囲外でゼロ値を返す。 |
 
 ## 性能測定
@@ -56,11 +57,10 @@ Apple M3。前回同様、該当箇所の局所的な測定で、コーデック
 | 静的検査 | `go vet`（4 モジュール、linux/windows amd64・arm64、js/wasm）、`gofmt`、`git diff --check`、staticcheck（実バグ報告 2 件は意図的なコード）、gosec（path・コマンド指摘はテスト専用の browserexec と test helper） |
 | 脆弱性 | govulncheck: 自前コードの脆弱性なし。標準ライブラリの HTTP/2 は go1.27.2 で解消 |
 | クロスビルド | macOS・Linux・Windows 各 amd64/arm64、js/wasm の 7 ターゲットが通過 |
-| MediaCodec・WebCodecs | `GOWORK=off go test -tags mediacodec_typecheck ./internal/mediacodec/...` と、js/wasm を Node.js 上で実行した webcodecs・codec・reorder・pixconv のテストが通過 |
+| MediaCodec・WebCodecs | `GOWORK=off go test -tags mediacodec_typecheck ./internal/mediacodec/...` と、js/wasm を Node.js 上で実行した webcodecs・codec・reorder・pixconv のテストが通過。音声テストと長フレームのテストは `scripts/browser_test.sh` で Chrome 上で実行 |
 | VA-API | `GOWORK=off sh scripts/vaapi_fake_driver_test.sh` の 4 設定すべて通過（監査が勧めた「エンコードコンテキストの render target に入力サーフェスも渡す」変更は偽ドライバが拒否したため採用せず） |
 
 - Linux/NVIDIA 系バックエンドは GPU と CPU が重ならない。VA-API エンコーダは毎フレーム `vaSyncBuffer`、VPL は `AsyncDepth = 1` で即 `SyncOperation`、NVDEC はデコードコールバック内で map とコピーを行う。Media Foundation のデコード読み戻しは staging texture 1 枚を毎フレーム `Map` する。いずれもエンジンの能力を下回る構造で、実ハードウェアのある環境でパイプライン化する課題。
-- 単一の巨大な PCM 入力から多数のパケットが生まれる場合の音声エンコーダ出力キューは前回から未変更。
 - `vaapi`・`vpl` の `HWMEDIACODEC_*_DEVICE` は任意パスを `O_RDWR` で開く。環境変数を制御できる者には新しい権限ではないが、`/dev/dri/` 以外は早期に拒否してもよい。
 - `net/webrtc`・`examples` は手元の loopback と pion の視聴者で確認した。ブラウザでの再接続挙動（切断された視聴者の再参加）は未確認。
 - Android 実機・Windows 実機・NVIDIA・Intel・AMD の実 GPU での今回変更の実行確認は未実施。
