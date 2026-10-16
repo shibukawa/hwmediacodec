@@ -241,6 +241,12 @@ acceptance:
       platform: windows
     verified_by:
     - audiomf-windows-run
+  audiomf-long-frame:
+    text: One Send of a minute of PCM to the Media Foundation AAC encoder queues at most maxAudioPending packets, Receive encodes the rest without the queue passing the bound, and after Flush the packets cover every sample plus the delay.
+    scope:
+      platform: windows
+    verified_by:
+    - audiomf-long-frame-run
 verification:
   mf-decode-reference-test-windows:
     state: not_run
@@ -409,7 +415,7 @@ verification:
     - path: internal/mediafoundation/backend.go
       input_hash: 7d1f296ce8e2400ca35f5fb905d31b2f9b9ac423e75bf8845d896f96e887c175
     - path: internal/mediafoundation/decoder.go
-      input_hash: 8aa6817e6808c10d946b25502503186cf13a3fb864342f963ed7d83873b23f41
+      input_hash: d24fe8f2c7facdcf296764c881a60756d3839327369e5fd66f14601b42fc6944
     - path: internal/mediafoundation/sys/sys.go
       input_hash: 84d9a03b80f96f6addcbbb652ea4badedfd118ce1ac7cd0a9694942b72267e49
     - path: internal/mediafoundation/sys/com.go
@@ -508,11 +514,11 @@ verification:
       note: 2026-10-14 on macOS; both architectures build and vet clean
     basis:
     - path: internal/mediafoundation/audio.go
-      input_hash: a34b8006e372d0fc4247c987be18ace301b42eb8be7b7015d0efd4e74d5b17f4
+      input_hash: fac99ab704d4114a7e5581c6d7f5592f2d666acf8bb6d705c05b241b33a29912
     - path: internal/mediafoundation/audiodecoder.go
-      input_hash: 125743e0c6980b00af63ea213ace4e6e6d9bf590c76962d144e3a11678ba605c
+      input_hash: b75c6c630dea2a4046fe4ce6ffd98975ffd4c391b8b561acf907ff74530fdef2
     - path: internal/mediafoundation/audioencoder.go
-      input_hash: 9907ee80ec0e9cdf23aebb232dce67c94ace415e01442956cc2f207d81961c6e
+      input_hash: 8c2542c59b261d6467c1e256152f8718675270b769360309fc787048dfefc3f3
     - path: internal/mediafoundation/sys/audio.go
       input_hash: 038db1a3951851faf5c71ce9ebc9b2ecf65edbcb4d993f9ddfaf63555186e0aa
     - path: backends_windows.go
@@ -531,6 +537,23 @@ verification:
         returns the samples of every packet from the first one on (the frame queue assumes it), the encoder''s
         delay, whether HE-AAC comes out 962 samples late as with FFmpeg, the order of SetOutputType and
         SetInputType on the encoder, and whether the Opus decoder takes the type at all'
+  audiomf-long-frame-run:
+    state: not_run
+    method: integration
+    authority: authored
+    scope:
+      platform: windows
+    test: go test -count=1 -run LongFrame ./internal/mediafoundation on Windows
+    evidence:
+      path: internal/mediafoundation/audio_longframe_test.go
+      note: 'written 2026-10-16, compiled for windows/amd64 and windows/arm64 only; no Windows machine was available'
+    basis:
+    - path: internal/mediafoundation/audioencoder.go
+      input_hash: 8c2542c59b261d6467c1e256152f8718675270b769360309fc787048dfefc3f3
+    - path: internal/mediafoundation/audio_longframe_test.go
+      input_hash: 578c0cba236f768cb9185d389fc19f83bf31ae18b35866a4bbc41f44d9343fb6
+    - path: internal/testutil/longframe.go
+      input_hash: fa710ae2501ad987fa3430c72a0ef8ba856586b832e90359ef36f758cc4d2dfe
 open_questions:
   mf-hardware-verification:
     text: Does the implementation work on real Intel hardware? The riskiest unverified points are (1)

@@ -93,7 +93,7 @@ for distro in $distros; do
       *) echo "unsupported container architecture" >&2; exit 1 ;;
     esac
     mkdir -p bin/linuxaudio
-    for pkg in . ./playback ./mediacontainer/mp4 ./encoding/adts ./internal/audioutil; do
+    for pkg in . ./playback ./mediacontainer/mp4 ./encoding/adts ./internal/audioutil ./internal/libopus ./internal/fdkaac; do
       name=$(basename "$(cd "$pkg" && pwd)")
       [ "$pkg" = . ] && name=hwmediacodec
       CGO_ENABLED=0 GOOS=linux GOARCH=$arch go test -c -o "bin/linuxaudio/$name.test" "$pkg"
@@ -108,8 +108,8 @@ for distro in $distros; do
         ffmpeg -version | head -1
         status=0
         cd /work && bin/linuxaudio/hwmediacodec.test -test.count=1 -test.run "Audio|SelectBackends|TestProbe" '"${TESTFLAGS:-}"' || status=1
-        for dir in playback mediacontainer/mp4 encoding/adts internal/audioutil; do
-          (cd /work/$dir && /work/bin/linuxaudio/$(basename $dir).test -test.count=1 -test.run "Audio|Sound|ADTS|Adts|Delay|Frames|Packet" '"${TESTFLAGS:-}"') || status=1
+        for dir in playback mediacontainer/mp4 encoding/adts internal/audioutil internal/libopus internal/fdkaac; do
+          (cd /work/$dir && /work/bin/linuxaudio/$(basename $dir).test -test.count=1 -test.run "Audio|Sound|ADTS|Adts|Delay|Frames|Packet|LongFrame" '"${TESTFLAGS:-}"') || status=1
         done
         exit $status
       ' || status=1

@@ -219,8 +219,8 @@ func (d *audioDecoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(p.Data) == 0 {
-		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
+	if err := audioutil.CheckPacket(p.Data); err != nil {
+		return err
 	}
 	if d.frames.Ready() >= maxAudioPending {
 		return codec.ErrAgain

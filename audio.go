@@ -30,6 +30,10 @@ const (
 	F32 = codec.F32
 )
 
+// maxAudioConfig bounds AudioFormat.Config. An AudioSpecificConfig or an
+// OpusHead is a few dozen bytes, a program config element included.
+const maxAudioConfig = 1 << 16
+
 // S16Frame wraps interleaved 16-bit samples as an encoder input frame
 // without copying: the frame shares the slice, which must stay untouched
 // until AudioEncoder.Send has returned. The opposite direction is
@@ -73,6 +77,8 @@ func NewAudioDecoder(ctx context.Context, format AudioFormat, opts ...AudioDecod
 		return nil, fmt.Errorf("hwmediacodec: sample rate and channel count must not be negative, got %d Hz and %d channels", format.SampleRate, format.Channels)
 	case format.SampleRate > math.MaxInt32 || format.Channels > math.MaxInt32 || format.FrameSamples < 0 || format.FrameSamples > math.MaxInt32 || format.Delay < 0 || format.Delay > math.MaxInt32:
 		return nil, fmt.Errorf("hwmediacodec: audio stream format is out of range")
+	case len(format.Config) > maxAudioConfig:
+		return nil, fmt.Errorf("hwmediacodec: an audio configuration of %d bytes is larger than %d", len(format.Config), maxAudioConfig)
 	}
 	var unsupported error
 	for _, b := range audioBackends() {

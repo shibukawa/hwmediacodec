@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -170,8 +171,8 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(p.Data) == 0 {
-		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
+	if err := audioutil.CheckPacket(p.Data); err != nil {
+		return err
 	}
 	if d.frames.Ready() >= maxPending {
 		return codec.ErrAgain
@@ -367,6 +368,10 @@ type encoder struct {
 	h      uintptr
 	times  audioutil.PacketTimes
 	out    []byte
+	// input holds 16-bit samples not handed to the encoder yet: the rest
+	// of the frame Send accepted last while pending is full (Send refuses
+	// more until Receive has made room).
+	input []byte
 
 	started bool
 	pending []codec.Packet
@@ -499,13 +504,26 @@ func (e *encoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 		return nil
 	}
 	e.times.Sent(len(f.Data) / e.unit)
-	return e.encode(audioutil.Convert(f.Data, e.cfg.SampleFormat, codec.S16))
+	e.input = append(e.input, audioutil.Convert(f.Data, e.cfg.SampleFormat, codec.S16)...)
+	return e.pump(maxPending)
 }
 
-// encode hands 16-bit samples to the encoder, which takes what fills its
-// next access unit at each call, and queues the packets it returns.
-func (e *encoder) encode(pcm []byte) error {
-	for len(pcm) > 0 {
+// hasInput reports whether samples wait to be handed to the encoder.
+func (e *encoder) hasInput() bool { return len(e.input) > 0 }
+
+// pump hands the waiting 16-bit samples to the encoder, which takes what
+// fills its next access unit at each call, and queues the packets it
+// returns, until the input is used up or limit packets are queued. A frame
+// longer than the queue is encoded in parts, the rest as Receive makes
+// room.
+func (e *encoder) pump(limit int) error {
+	for len(e.pending) < limit && len(e.input) > 0 {
+		// At most 4096 samples per channel a call, so that the sizes fit
+		// the library's 32-bit fields whatever the frame's length.
+		pcm := e.input
+		if n := 4096 * e.cfg.Channels * 2; len(pcm) > n {
+			pcm = pcm[:n]
+		}
 		in, out := unsafe.Pointer(&pcm[0]), unsafe.Pointer(&e.out[0])
 		inID, inSize, inEl := int32(bufInAudio), int32(len(pcm)), int32(2)
 		outID, outSize, outEl := int32(bufOutBitstream), int32(len(e.out)), int32(1)
@@ -518,6 +536,9 @@ func (e *encoder) encode(pcm []byte) error {
 		if code != encOK {
 			return backendErr("aacEncEncode", code)
 		}
+		if outArgs.NumOutBytes < 0 || int(outArgs.NumOutBytes) > len(e.out) {
+			return backendErr("aacEncEncode", 0) // wrote past the buffer it was given
+		}
 		if outArgs.NumOutBytes > 0 {
 			if p, keep := e.times.Next(append([]byte(nil), e.out[:outArgs.NumOutBytes]...)); keep {
 				e.pending = append(e.pending, p)
@@ -526,7 +547,13 @@ func (e *encoder) encode(pcm []byte) error {
 		if outArgs.NumInSamples <= 0 && outArgs.NumOutBytes <= 0 {
 			return backendErr("aacEncEncode", 0) // no progress
 		}
-		pcm = pcm[int(outArgs.NumInSamples)*2:]
+		if outArgs.NumInSamples < 0 || int(outArgs.NumInSamples) > len(pcm)/2 {
+			return backendErr("aacEncEncode", 0) // took more than it was given
+		}
+		e.input = e.input[int(outArgs.NumInSamples)*2:]
+	}
+	if len(e.input) == 0 {
+		e.input = nil
 	}
 	return nil
 }
@@ -536,6 +563,12 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	defer e.mu.Unlock()
 	if e.closed {
 		return codec.Packet{}, codec.ErrClosed
+	}
+	if len(e.pending) < maxPending && e.hasInput() {
+		// Room for the samples Send left unencoded.
+		if err := e.pump(maxPending); err != nil {
+			return codec.Packet{}, err
+		}
 	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
@@ -561,9 +594,13 @@ func (e *encoder) Flush(ctx context.Context) error {
 	}
 	var err error
 	if e.started && e.h != 0 {
-		err = e.encode(make([]byte, (e.format.Delay+2*e.format.FrameSamples)*e.cfg.Channels*2))
+		// What Send left unencoded goes first, so pending may exceed
+		// maxPending by what one frame codes to.
+		e.input = append(e.input, make([]byte, (e.format.Delay+2*e.format.FrameSamples)*e.cfg.Channels*2)...)
+		err = e.pump(math.MaxInt)
 		e.release()
 	}
+	e.input = nil
 	e.started, e.flushed = false, true
 	return err
 }
@@ -577,5 +614,6 @@ func (e *encoder) Close() error {
 	e.closed = true
 	e.release()
 	e.pending = nil
+	e.input = nil
 	return nil
 }

@@ -196,8 +196,8 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(p.Data) == 0 {
-		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
+	if err := audioutil.CheckPacket(p.Data); err != nil {
+		return err
 	}
 	if d.frames.Ready() >= maxPending {
 		return codec.ErrAgain
@@ -261,6 +261,9 @@ func (d *decoder) take(f *frame) error {
 	var channels int
 	var planes [][]byte
 	if planar {
+		if int(f.Linesize[0]) < samples*size {
+			return backendErr("avcodec_receive_frame", 0)
+		}
 		for channels < len(f.Data) && f.Data[channels] != nil {
 			planes = append(planes, unsafe.Slice((*byte)(f.Data[channels]), samples*size))
 			channels++

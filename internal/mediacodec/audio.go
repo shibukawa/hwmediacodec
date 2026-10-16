@@ -189,8 +189,8 @@ func (d *audioDecoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(p.Data) == 0 {
-		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
+	if err := audioutil.CheckPacket(p.Data); err != nil {
+		return err
 	}
 	if d.frames.Ready() >= maxPending {
 		return codec.ErrAgain
@@ -241,8 +241,13 @@ func (d *audioDecoder) drain(timeoutUs int64) error {
 		case idx >= 0:
 			var size uintptr
 			buf := sys.AMediaCodec_getOutputBuffer(d.codec, uintptr(idx), &size)
-			if buf != nil && info.Size > 0 && int(info.Offset)+int(info.Size) <= int(size) {
-				pcm := unsafe.Slice(buf, size)[info.Offset : info.Offset+info.Size]
+			start, end, ok := outputRange(size, info.Offset, info.Size)
+			if buf != nil && info.Size > 0 && !ok {
+				sys.AMediaCodec_releaseOutputBuffer(d.codec, uintptr(idx), false)
+				return &codec.BackendError{Backend: Name, Op: "AMediaCodec_getOutputBuffer", Message: fmt.Sprintf("buffer of %d bytes, samples at %d+%d", size, info.Offset, info.Size)}
+			}
+			if buf != nil && info.Size > 0 {
+				pcm := unsafe.Slice(buf, size)[start:end]
 				// The frames keep the samples: converted, or copied.
 				d.frames.Append(audioutil.Convert(pcm, codec.S16, d.cfg.SampleFormat))
 			}

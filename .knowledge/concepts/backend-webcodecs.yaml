@@ -653,7 +653,7 @@ verification:
     - path: internal/webcodecs/audioencoder.go
       input_hash: 1b56c90e87a06ea98fc002b756970a90fd06546cf2482e9c0739abb6d1c4ac19
     - path: audio_test.go
-      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
+      input_hash: 134804ac9526816137bc6c298818cdb6f1d36222cd27837704c561602268ff93
     - path: audio_mp4_test.go
       input_hash: 24f4903474b1c586ea5c2947e66939b13ab15b6405c57ce47b9b8dc5a4a300ef
     - path: internal/testutil/audio.go
@@ -706,7 +706,7 @@ verification:
     - path: internal/webcodecs/audioencoder.go
       input_hash: 1b56c90e87a06ea98fc002b756970a90fd06546cf2482e9c0739abb6d1c4ac19
     - path: audio_test.go
-      input_hash: 46deff9e5c2002723c5fb1891264c415ad4551dda56bb72501a3cb69a2a40a75
+      input_hash: 134804ac9526816137bc6c298818cdb6f1d36222cd27837704c561602268ff93
   audiowc-chrome-full-run:
     state: passed
     method: integration

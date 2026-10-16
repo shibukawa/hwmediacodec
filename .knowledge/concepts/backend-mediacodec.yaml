@@ -196,6 +196,12 @@ acceptance:
       platform: android
     verified_by:
     - audiomc-device-audio-run
+  audiomc-long-frame:
+    text: One Send of a minute of PCM to the MediaCodec AAC encoder hands the codec input only while fewer than maxPending packets wait (the queue passes the bound by at most what the codec's buffers in flight hold), Receive hands the rest over, and after Flush the packets cover every sample plus the delay.
+    scope:
+      platform: android
+    verified_by:
+    - audiomc-long-frame-run
 verification:
   typecheck:
     state: passed
@@ -460,12 +466,13 @@ verification:
       path: scripts/android_device_check.sh
       note: '2026-10-14, Android 14 (API 34, arm64) emulator on an Apple M3: AAC decode 63.4 dB and Opus
         decode 69.9 dB against ffmpeg at shift 0; AAC encoded on the device with a measured delay of 2048
-        and Opus with 312, ffmpeg decoding both to the input at shift 0'
+        and Opus with 312, ffmpeg decoding both to the input at shift 0; rerun 2026-10-16 after the bounded
+        encoder pump and the output range checks with the same results'
     basis:
     - path: internal/mediacodec/audio.go
-      input_hash: fdb158da8a2b4626d5572fa9ed60c1a4cfc1d4f40a6d2bfaa30cbe4e067111ba
+      input_hash: ac5a5e5939835c23a415dacf18098297dfe573db5d57a8862adc1a9a3021f08c
     - path: internal/mediacodec/audioenc.go
-      input_hash: 77d834bc1bc40e6cbfbc5f807e48f0d3fd5f0f700929ccdcafc6178539ff3e78
+      input_hash: 685a295cd81aec61a926441374f153021e469f017c6eb4d8cc2829f2e4ea7de5
     - path: internal/audioutil/trial.go
       input_hash: 4170b8a7eacac3ad1f75298f830f3fc0624ae1b3c5ecd23af7f8373bede4d25f
     - path: cmd/hwmediacodec/audio.go
@@ -485,6 +492,23 @@ verification:
     evidence:
       path: scripts/android_device_check.sh
       note: only the emulator was available; a device has the same framework codecs
+  audiomc-long-frame-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: android
+    test: go test -c ./internal/mediacodec with the NDK, then ./mediacodec.test -test.run LongFrame over adb
+    evidence:
+      path: internal/mediacodec/audioenc_longframe_test.go
+      note: '2026-10-16, Android 14 (API 34, arm64) emulator on an Apple M3 (c2.android.aac encoder), 8.2 s; the whole package test binary and SOFTWARE=1 scripts/android_device_check.sh passed too'
+    basis:
+    - path: internal/mediacodec/audioenc.go
+      input_hash: 685a295cd81aec61a926441374f153021e469f017c6eb4d8cc2829f2e4ea7de5
+    - path: internal/mediacodec/audioenc_longframe_test.go
+      input_hash: b9dbc98db84d53d479194ecae9009249b5cd381de9eb67314820468f55a84d88
+    - path: internal/testutil/longframe.go
+      input_hash: fa710ae2501ad987fa3430c72a0ef8ba856586b832e90359ef36f758cc4d2dfe
 facts:
   library: libmediandk.so (dlopen; part of every Android system image, public NDK API)
   api_model: full decoder/encoder; synchronous dequeue/queue with timeouts, no AMediaCodec_setAsyncNotifyCallback

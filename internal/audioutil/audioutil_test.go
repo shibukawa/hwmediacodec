@@ -2,6 +2,7 @@ package audioutil
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/shibukawa/hwmediacodec/internal/codec"
@@ -159,5 +160,20 @@ func TestPacketTimes(t *testing.T) {
 	pt.Sent(10)
 	if p, keep := pt.Next(nil); !keep || p.PTS != -3960 {
 		t.Errorf("first packet of the second signal: PTS %d keep %v", p.PTS, keep)
+	}
+}
+
+func TestCheckPacket(t *testing.T) {
+	for _, c := range []struct {
+		size int
+		ok   bool
+	}{{0, false}, {1, true}, {MaxPacketBytes, true}, {MaxPacketBytes + 1, false}} {
+		err := CheckPacket(make([]byte, c.size))
+		if (err == nil) != c.ok {
+			t.Errorf("CheckPacket(%d bytes) = %v", c.size, err)
+		}
+		if err != nil && !errors.Is(err, codec.ErrInvalidData) {
+			t.Errorf("CheckPacket(%d bytes) = %v, want ErrInvalidData", c.size, err)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"sync"
 
@@ -116,7 +117,9 @@ type audioEncoder struct {
 	// x is the transform of the signal under way, or nil between two.
 	x     *audioTransform
 	times audioutil.PacketTimes
-	// fifo holds the 16-bit samples that do not fill a packet yet, and fed
+	// fifo holds the 16-bit samples not encoded yet: less than a packet's
+	// worth, or the rest of the frame Send accepted last while pending is
+	// full (Send refuses more until Receive has made room); fed
 	// counts the samples handed to the transform.
 	fifo []byte
 	fed  int64
@@ -271,18 +274,23 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	}
 	e.times.Sent(len(f.Data) / e.unit)
 	e.fifo = append(e.fifo, audioutil.Convert(f.Data, e.cfg.SampleFormat, codec.S16)...)
-	return e.encode(false)
+	return e.encode(false, maxAudioPending)
 }
+
+// hasInput reports whether a packet's worth of samples waits in the fifo.
+func (e *audioEncoder) hasInput() bool { return len(e.fifo) >= aacFrameSamples*e.cfg.Channels*2 }
 
 // encode hands the transform the samples of the queue one packet's worth
 // at a time (all of them when the signal ends) and collects the access
-// units it returns.
-func (e *audioEncoder) encode(all bool) error {
+// units it returns, until fewer than limit packets are queued. A frame
+// longer than the queue is encoded in parts, the rest as Receive makes
+// room.
+func (e *audioEncoder) encode(all bool, limit int) error {
 	if err := e.x.begin(); err != nil {
 		return err
 	}
 	block := aacFrameSamples * e.cfg.Channels * 2
-	for len(e.fifo) >= block || (all && len(e.fifo) > 0) {
+	for len(e.pending) < limit && (len(e.fifo) >= block || (all && len(e.fifo) > 0)) {
 		n := min(block, len(e.fifo))
 		samples := int64(n / (e.cfg.Channels * 2))
 		at := samplesHNS(e.fed, e.cfg.SampleRate)
@@ -304,7 +312,7 @@ func (e *audioEncoder) encode(all bool) error {
 		}
 	}
 	if len(e.fifo) == 0 {
-		e.fifo = e.fifo[:0]
+		e.fifo = nil
 	}
 	return nil
 }
@@ -337,6 +345,12 @@ func (e *audioEncoder) Receive(ctx context.Context) (codec.Packet, error) {
 	if e.closed {
 		return codec.Packet{}, codec.ErrClosed
 	}
+	if len(e.pending) < maxAudioPending && e.hasInput() && e.x != nil {
+		// Room for the samples Send left unencoded.
+		if err := e.encode(false, maxAudioPending); err != nil {
+			return codec.Packet{}, err
+		}
+	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
 		e.pending[0] = codec.Packet{}
@@ -363,7 +377,9 @@ func (e *audioEncoder) Flush(ctx context.Context) error {
 	if e.started && e.x != nil {
 		silence := (e.format.Delay + 2*aacFrameSamples) * e.cfg.Channels * 2
 		e.fifo = append(e.fifo, make([]byte, silence)...)
-		if err = e.encode(true); err == nil {
+		// What Send left unencoded goes too, so pending may exceed
+		// maxAudioPending by what one frame codes to.
+		if err = e.encode(true, math.MaxInt); err == nil {
 			if err = e.x.drain(); err == nil {
 				err = e.fetch()
 			}
@@ -371,6 +387,7 @@ func (e *audioEncoder) Flush(ctx context.Context) error {
 		e.x.release()
 		e.x = nil
 	}
+	e.fifo = nil
 	e.started, e.flushed = false, true
 	return err
 }
@@ -387,5 +404,6 @@ func (e *audioEncoder) Close() error {
 		e.x = nil
 	}
 	e.pending = nil
+	e.fifo = nil
 	return nil
 }

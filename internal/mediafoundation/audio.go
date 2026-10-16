@@ -279,6 +279,10 @@ func (x *audioTransform) output() (data []byte, state int, err error) {
 	if hr := buf.Lock(&p, &maxLen, &curLen); hr.Failed() {
 		return nil, 0, backendErr("IMFMediaBuffer::Lock", hr)
 	}
+	if curLen > maxLen {
+		buf.Unlock()
+		return nil, 0, &codec.BackendError{Backend: Name, Op: "IMFMediaBuffer::Lock", Message: fmt.Sprintf("%d bytes reported in a buffer of %d", curLen, maxLen)}
+	}
 	if curLen > 0 && p != nil {
 		data = append([]byte(nil), unsafe.Slice(p, curLen)...)
 	}

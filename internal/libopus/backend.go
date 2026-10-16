@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"unsafe"
 
@@ -125,8 +126,8 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(p.Data) == 0 {
-		return fmt.Errorf("hwmediacodec: empty audio packet: %w", codec.ErrInvalidData)
+	if err := audioutil.CheckPacket(p.Data); err != nil {
+		return err
 	}
 	if len(d.out) >= maxPending {
 		return codec.ErrAgain
@@ -142,6 +143,9 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 	}
 	if n < 0 {
 		return fmt.Errorf("%w: %w", backendErr("opus_decode", n), codec.ErrInvalidData)
+	}
+	if n > opus.MaxPacketSamples {
+		return backendErr("opus_decode", 0) // more samples than the buffer holds
 	}
 	d.out = append(d.out, &codec.AudioFrame{
 		SampleRate: opus.SampleRate,
@@ -237,7 +241,9 @@ type encoder struct {
 	unit   int // one sample of every channel
 	st     uintptr
 	times  audioutil.PacketTimes
-	// fifo holds the samples that do not fill a packet yet.
+	// fifo holds the samples not encoded yet: less than a packet's worth,
+	// or the rest of the frame Send accepted last while pending is full
+	// (Send refuses more until Receive has made room).
 	fifo []byte
 	out  []byte
 
@@ -329,8 +335,15 @@ func (e *encoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	}
 	e.times.Sent(len(f.Data) / e.unit)
 	e.fifo = append(e.fifo, f.Data...)
+	return e.pump(maxPending)
+}
+
+// pump encodes whole packets from the fifo until fewer than a packet's
+// worth of samples is left or limit packets are queued. A frame longer
+// than the queue is encoded in parts, the rest as Receive makes room.
+func (e *encoder) pump(limit int) error {
 	size := frameSamples * e.unit
-	for len(e.fifo) >= size {
+	for len(e.pending) < limit && len(e.fifo) >= size {
 		if err := e.encodeFrame(e.fifo[:size]); err != nil {
 			return err
 		}
@@ -341,6 +354,9 @@ func (e *encoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	}
 	return nil
 }
+
+// hasInput reports whether a packet's worth of samples waits in the fifo.
+func (e *encoder) hasInput() bool { return len(e.fifo) >= frameSamples*e.unit }
 
 // encodeFrame codes one packet's worth of samples and queues the packet,
 // unless it codes nothing of the signal.
@@ -366,6 +382,12 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	if e.closed {
 		return codec.Packet{}, codec.ErrClosed
 	}
+	if len(e.pending) < maxPending && e.hasInput() {
+		// Room for the samples Send left unencoded.
+		if err := e.pump(maxPending); err != nil {
+			return codec.Packet{}, err
+		}
+	}
 	if len(e.pending) > 0 {
 		p := e.pending[0]
 		e.pending[0] = codec.Packet{}
@@ -378,9 +400,11 @@ func (e *encoder) Receive(ctx context.Context) (codec.Packet, error) {
 	return codec.Packet{}, codec.ErrAgain
 }
 
-// Flush implements codec.AudioEncoder: the samples that did not fill a
-// packet go out padded with silence, followed by as many packets of
-// silence as it takes to bring out what the encoder's look-ahead holds.
+// Flush implements codec.AudioEncoder: what Send left unencoded is
+// encoded at once (so pending may exceed maxPending by what one frame
+// codes to), the samples that did not fill a packet go out padded with
+// silence, followed by as many packets of silence as it takes to bring
+// out what the encoder's look-ahead holds.
 func (e *encoder) Flush(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -388,6 +412,9 @@ func (e *encoder) Flush(ctx context.Context) error {
 		return codec.ErrClosed
 	}
 	if e.started {
+		if err := e.pump(math.MaxInt); err != nil {
+			return err
+		}
 		size := frameSamples * e.unit
 		// Packets needed for the signal and the delay in front of it.
 		need := (e.times.Samples() + int64(e.format.Delay) + frameSamples - 1) / frameSamples
@@ -420,5 +447,6 @@ func (e *encoder) Close() error {
 	e.closed = true
 	e.release()
 	e.pending = nil
+	e.fifo = nil
 	return nil
 }

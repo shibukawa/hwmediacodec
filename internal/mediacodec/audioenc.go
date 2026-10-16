@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"time"
 	"unsafe"
@@ -127,6 +128,10 @@ type audioEncoder struct {
 	// sent counts the samples handed to the codec, the silence of Flush
 	// included, for the input timestamps.
 	sent int64
+	// input holds 16-bit samples not handed to the codec yet: the rest of
+	// the frame Send accepted last while pending is full (Send refuses
+	// more until Receive has made room).
+	input []byte
 
 	pending   []codec.Packet
 	eosQueued bool
@@ -266,14 +271,22 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 		return nil
 	}
 	e.times.Sent(len(f.Data) / e.unit)
-	return e.queue(ctx, audioutil.Convert(f.Data, e.cfg.SampleFormat, codec.S16))
+	e.input = append(e.input, audioutil.Convert(f.Data, e.cfg.SampleFormat, codec.S16)...)
+	return e.pump(ctx, maxPending)
 }
 
-// queue hands 16-bit samples to the codec, as many input buffers as they
-// take.
-func (e *audioEncoder) queue(ctx context.Context, pcm []byte) error {
+// hasInput reports whether samples wait to be handed to the codec.
+func (e *audioEncoder) hasInput() bool { return len(e.input) > 0 }
+
+// pump hands the waiting 16-bit samples to the codec, as many input
+// buffers as they take, while fewer than limit packets are queued. A frame
+// longer than the queue is handed over in parts, the rest as Receive makes
+// room; the queue can pass limit only by what the codec's few buffers in
+// flight hold.
+func (e *audioEncoder) pump(ctx context.Context, limit int) error {
 	unit := e.cfg.Channels * 2
-	for len(pcm) > 0 {
+	for len(e.input) > 0 && len(e.pending) < limit {
+		pcm := e.input
 		idx, err := dequeueInput(ctx, e.codec, e.drainReady)
 		if err != nil {
 			return err
@@ -290,7 +303,10 @@ func (e *audioEncoder) queue(ctx context.Context, pcm []byte) error {
 			return backendErr("AMediaCodec_queueInputBuffer", st)
 		}
 		e.sent += int64(n / unit)
-		pcm = pcm[n:]
+		e.input = pcm[n:]
+	}
+	if len(e.input) == 0 {
+		e.input = nil
 	}
 	return e.drainReady()
 }
@@ -307,9 +323,14 @@ func (e *audioEncoder) drain(timeoutUs int64) error {
 		case idx >= 0:
 			var size uintptr
 			buf := sys.AMediaCodec_getOutputBuffer(e.codec, uintptr(idx), &size)
+			start, end, ok := outputRange(size, info.Offset, info.Size)
+			if buf != nil && info.Size > 0 && !ok {
+				sys.AMediaCodec_releaseOutputBuffer(e.codec, uintptr(idx), false)
+				return &codec.BackendError{Backend: Name, Op: "AMediaCodec_getOutputBuffer", Message: fmt.Sprintf("buffer of %d bytes, packet at %d+%d", size, info.Offset, info.Size)}
+			}
 			// The configuration buffers repeat what Format already says.
-			if buf != nil && info.Size > 0 && info.Flags&sys.BufferFlagCodecConfig == 0 && int(info.Offset)+int(info.Size) <= int(size) {
-				data := append([]byte(nil), unsafe.Slice(buf, size)[info.Offset:info.Offset+info.Size]...)
+			if buf != nil && info.Size > 0 && info.Flags&sys.BufferFlagCodecConfig == 0 {
+				data := append([]byte(nil), unsafe.Slice(buf, size)[start:end]...)
 				if p, keep := e.times.Next(data); keep {
 					e.pending = append(e.pending, p)
 				}
@@ -337,6 +358,12 @@ func (e *audioEncoder) Receive(ctx context.Context) (codec.Packet, error) {
 	}
 	if err := ctx.Err(); err != nil {
 		return codec.Packet{}, err
+	}
+	if len(e.pending) < maxPending && e.hasInput() && e.codec != 0 {
+		// Room for the samples Send left unencoded.
+		if err := e.pump(ctx, maxPending); err != nil {
+			return codec.Packet{}, err
+		}
 	}
 	if len(e.pending) == 0 && e.codec != 0 && !e.flushed {
 		if err := e.drainReady(); err != nil {
@@ -369,8 +396,10 @@ func (e *audioEncoder) Flush(ctx context.Context) error {
 		return err
 	}
 	if e.started && e.codec != 0 {
-		silence := make([]byte, (e.format.Delay+2*e.format.FrameSamples)*e.cfg.Channels*2)
-		if err := e.queue(ctx, silence); err != nil {
+		// What Send left unencoded goes first, so pending may exceed
+		// maxPending by what one frame codes to.
+		e.input = append(e.input, make([]byte, (e.format.Delay+2*e.format.FrameSamples)*e.cfg.Channels*2)...)
+		if err := e.pump(ctx, math.MaxInt); err != nil {
 			return err
 		}
 		if !e.eosQueued {
@@ -393,6 +422,7 @@ func (e *audioEncoder) Flush(ctx context.Context) error {
 		}
 		e.release()
 	}
+	e.input = nil
 	e.started, e.flushed = false, true
 	return nil
 }
@@ -406,5 +436,6 @@ func (e *audioEncoder) Close() error {
 	e.closed = true
 	e.release()
 	e.pending = nil
+	e.input = nil
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"unsafe"
 
@@ -353,6 +354,9 @@ func (d *decoder) decode(data []byte, pts int64, keyframe bool) error {
 
 // newInputSample wraps one access unit in a sample with the given time.
 func newInputSample(data []byte, hns int64) (*sys.IMFSample, error) {
+	if uint64(len(data)) > math.MaxUint32 {
+		return nil, fmt.Errorf("hwmediacodec: a sample of %d bytes does not fit a media buffer: %w", len(data), codec.ErrInvalidData)
+	}
 	var buf *sys.IMFMediaBuffer
 	if hr := sys.MFCreateMemoryBuffer(uint32(len(data)), &buf); hr.Failed() {
 		return nil, backendErr("MFCreateMemoryBuffer", hr)
@@ -362,6 +366,10 @@ func newInputSample(data []byte, hns int64) (*sys.IMFSample, error) {
 	var maxLen, curLen uint32
 	if hr := buf.Lock(&p, &maxLen, &curLen); hr.Failed() {
 		return nil, backendErr("IMFMediaBuffer::Lock", hr)
+	}
+	if p == nil || uint64(maxLen) < uint64(len(data)) {
+		buf.Unlock()
+		return nil, &codec.BackendError{Backend: Name, Op: "IMFMediaBuffer::Lock", Message: fmt.Sprintf("a buffer of %d bytes for a %d byte sample", maxLen, len(data))}
 	}
 	copy(unsafe.Slice(p, len(data)), data)
 	buf.Unlock()
