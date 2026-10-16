@@ -58,8 +58,8 @@ github.com/pion/webrtc/v4 v4.2.23 h1:AlVixhTtQmxrheSv6lAH0w2sH5qjM7OTos5Lt811nk0
 github.com/pion/webrtc/v4 v4.2.23/go.mod h1:vzf5RQ0uMBuXAYTK2pabZUtnZyj2t3TF88eL4xzQZvI=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=
-github.com/shibukawa/hwmediacodec v0.2.0 h1:WCaUAAzo0eD9pVfxz8h4aeK/OuAfb64cUonNuw784r4=
-github.com/shibukawa/hwmediacodec v0.2.0/go.mod h1:ZAQZR/yHz3r/bCwiGCWq+iK0lE/sEfrWrFQwVCnQDis=
+github.com/shibukawa/hwmediacodec v0.3.1 h1:9WQtiUB0rToILvatZ1ECKxJS8bTCI4wP/1g/DEE/tJo=
+github.com/shibukawa/hwmediacodec v0.3.1/go.mod h1:SXQ4zBw9BJdqX+kjunxqXyrJXTj4mTV9rkDjVvlL0v8=
 github.com/shibukawa/hwmediacodec/ebitenvideo v0.2.0 h1:LflvhRH2VwjMZdU/ofQ+25E3MW24Ip0ty8uSPC0hWj4=
 github.com/shibukawa/hwmediacodec/ebitenvideo v0.2.0/go.mod h1:uGjdvdMLe3+wQOWmCVKXIMAN4czU/TCmKSGwWheYbX4=
 github.com/shibukawa/hwmediacodec/net/webrtc v0.2.0 h1:m2+//88zRa/h6fh4Fm+2asq9ebTYF5U0uQ9KSJ0Wa70=
