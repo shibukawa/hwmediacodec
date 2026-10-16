@@ -9,7 +9,7 @@ require (
 	github.com/gen2brain/h265 v0.2.3
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/shibukawa/hwmediacodec v0.3.1
+	github.com/shibukawa/hwmediacodec v0.3.2
 	github.com/shibukawa/hwmediacodec/ebitenvideo v0.3.0
 	github.com/shibukawa/hwmediacodec/net/webrtc v0.3.0
 	golang.org/x/image v0.45.0
