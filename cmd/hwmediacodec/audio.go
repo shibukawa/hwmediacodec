@@ -13,10 +13,11 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/encoding/adts"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
+	"github.com/shibukawa/hwmediacodec/mediacontainer/webm"
 )
 
-// audioInput is an audio stream of a file: an ADTS file (.aac) or the
-// audio track of an MP4 file.
+// audioInput is an audio stream of a file: an ADTS file (.aac), the Opus
+// track of a WebM file or the audio track of an MP4 file.
 type audioInput interface {
 	hwmediacodec.PacketReader
 	Format() hwmediacodec.AudioFormat
@@ -34,6 +35,18 @@ func openAudioInput(path string) (audioInput, io.Closer, error) {
 			return nil, nil, err
 		}
 		return r, f, nil
+	}
+	if strings.EqualFold(filepath.Ext(path), ".webm") {
+		d, err := webm.Open(path)
+		if err != nil {
+			return nil, nil, err
+		}
+		a := d.Audio()
+		if a == nil {
+			d.Close()
+			return nil, nil, fmt.Errorf("%s has no Opus audio track", path)
+		}
+		return a.PacketSource(), d, nil
 	}
 	d, err := mp4.Open(path)
 	if err != nil {
@@ -57,7 +70,7 @@ func parseSampleFormat(name string) (hwmediacodec.SampleFormat, error) {
 	return 0, fmt.Errorf("unknown sample format %q (s16 or f32)", name)
 }
 
-// decodeAudio decodes an .aac file or the audio track of an MP4 file to
+// decodeAudio decodes an .aac file or the audio track of a WebM or MP4 file to
 // raw interleaved samples: every sample the stream codes, the encoder's
 // delay and padding included, as ffmpeg gives them with -flags2
 // +skip_manual.
@@ -69,7 +82,7 @@ func decodeAudio(args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("decode-audio needs exactly one input file (.aac, or an MP4 file with an audio track)")
+		return errors.New("decode-audio needs exactly one input file (.aac, or a WebM or MP4 file with an audio track)")
 	}
 	sf, err := parseSampleFormat(*formatName)
 	if err != nil {
@@ -153,7 +166,7 @@ func decodeAudio(args []string) error {
 }
 
 // encodeAudio encodes raw interleaved 16-bit samples into an .aac file
-// (ADTS) or an MP4 file with one audio track.
+// (ADTS), a WebM file (Opus) or an MP4 file with one audio track.
 func encodeAudio(args []string) error {
 	fs := flag.NewFlagSet("encode-audio", flag.ExitOnError)
 	codecName := fs.String("codec", "aac", "aac or opus")
@@ -161,7 +174,7 @@ func encodeAudio(args []string) error {
 	channels := fs.Int("channels", 2, "channel count of the input")
 	bitrate := fs.String("bitrate", "", "target bitrate, for example 128k")
 	cbr := fs.Bool("cbr", false, "constant bitrate")
-	out := fs.String("o", "", "output file: .aac for ADTS, anything else for MP4 (required)")
+	out := fs.String("o", "", "output file: .aac for ADTS, .webm for WebM (Opus), anything else for MP4 (required)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -212,6 +225,17 @@ func encodeAudio(args []string) error {
 			return err
 		}
 		sink, finish = w, f.Close
+	} else if strings.EqualFold(filepath.Ext(*out), ".webm") {
+		m, err := webm.Create(*out)
+		if err != nil {
+			return err
+		}
+		aw, err := m.AddAudioTrack(format, uint32(*rate))
+		if err != nil {
+			m.Close()
+			return err
+		}
+		sink, finish = aw, m.Close
 	} else {
 		m, err := mp4.Create(*out)
 		if err != nil {

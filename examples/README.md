@@ -55,7 +55,7 @@ have no program of their own.
 | [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
 | [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (`mp4.Segmenter` + `hls.Playlist` from the core module); opens the player page |
-| [`player/`](player/) | The video player: plays the bundled clip or any MP4/raw stream with its sound in a window of the video's aspect ratio, with pause, seeking, volume and a progress bar |
+| [`player/`](player/) | The video player: plays the bundled clip or any MP4, WebM (AV1 + Opus) or raw stream with its sound in a window of the video's aspect ratio, with pause, seeking, volume and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |

@@ -1,11 +1,13 @@
 id: component:mediacontainer
 type: component
-title: 'Containers: mediacontainer/mp4 (demuxer, muxer, fMP4 segmenter, audio tracks) and mediacontainer/ivf'
+title: 'Containers: mediacontainer/mp4 (demuxer, muxer, fMP4 segmenter, audio tracks), mediacontainer/webm
+  (AV1 + Opus) and mediacontainer/ivf'
 summary: 'mediacontainer/mp4 reads and writes MP4/MOV around the codec API on top of mp4ff: Annex-B access
   units with parameter sets in front of keyframes out of avc1/hvc1/av01 tracks, a progressive muxer fed
   with encoder packets (DTS shift and edit list for B-frames, parameter sets into the sample entry), passthrough
   tracks, AAC and Opus audio tracks with the encoder delay in the edit list, PacketSource/AudioPacketSource
   for playback with keyframe seeking, VideoFile as an encoder sink and the CMAF/fMP4 Segmenter for HLS.
+  mediacontainer/webm (2026-10-16) reads and writes WebM with AV1 video and Opus audio without a dependency.
   mediacontainer/ivf reads and writes IVF (AV1). Consolidated on 2026-10-16 from milestone:mediacontainer-mp4
   and the container parts of the sample milestones.'
 lifecycle: active
@@ -17,6 +19,9 @@ aliases:
 - MP4 muxer
 - Segmenter
 - ivf
+- webm
+- WebM
+- Matroska
 - コンテナ
 constraints:
 - 'The earlier "two dependencies" wording (purego and golang.org/x/sys only) was a description in the
@@ -51,7 +56,66 @@ constraints:
   + SetAVCDescriptor/SetHEVCDescriptor.
 - ElementaryStream supports only Seek(0, io.SeekStart) (ebitenvideo loops by rewinding); other seeks return
   an error.
+- 'WebM scope (2026-10-16, asked for by the author as "WebM with AV1 + Opus/Ogg"): only V_AV1 and A_OPUS
+  tracks are read and written; VP8, VP9 and Vorbis are listed by Demuxer.Tracks but not read (no hwmediacodec
+  backend handles them). The author assumed Ogg needed a codec; Ogg is a container, not a codec, and WebM
+  carries Opus packets directly (OpusHead in CodecPrivate), so no Ogg code was added. An Ogg Opus file
+  (.opus/.ogg) writer would be a separate container package if ever wanted.'
+- 'webm has no dependency: the EBML reader/writer is in mediacontainer/webm/ebml.go, written from RFC
+  9559 (Matroska) and the WebM container guidelines.'
+- 'webm demuxer: indexes every AV1/Opus frame at open (32 bytes per frame, MaxFrames 8 million) instead
+  of reading Cues, so MediaRecorder-style files (Segment and Clusters of unknown size, no Cues, no Duration)
+  and files cut off mid-write open; a Cluster of unknown size ends at the next top-level ID. Tracks must
+  precede the first Cluster. Xiph, EBML and fixed lacing are split; laced frames are spaced by DefaultDuration.
+  Tracks with ContentEncodings (compression, encryption) are not read.'
+- 'webm timing: video packets use the block ticks as TimeScale (1000 for 1 ms TimestampScale; nanoseconds
+  when a second is not a whole number of ticks). Opus packets are in samples at 48 kHz on the presentation
+  time line - block time minus CodecDelay (the OpusHead pre-skip when the track has no CodecDelay), so
+  the first packet starts at -312 for ffmpeg/libopus files, matching ffprobe (pts -7 ms) and the hwmediacodec
+  encoder convention (first packet at -Delay). Packet.Duration = samples of the TOC minus DiscardPadding.
+  ffmpeg writes BlockDuration already without the padding; the demuxer treats a given BlockDuration that
+  way. AudioTrack.Length reads the last packet so it is exact in samples rather than rounded to ms.'
+- 'webm muxer: TimestampScale 1 ms; EBML header DocType webm v4/2; Segment size written as 8-byte unknown
+  and patched at Close; 96 bytes reserved after the Segment header for the SeekHead (Info, Tracks, Cues)
+  written at Close; Info Duration patched; Tracks written once every track has a packet (the AV1 av1C
+  and PixelWidth/Height come from the first sequence header, via av1.CodecConfigurationRecord); Clusters
+  start at each video keyframe (every 5 s audio-only, at most 30 s or 32 MiB) with a CuePoint each; temporal
+  delimiters are stripped; Opus block time = PTS + Delay so the first block is at 0, CodecDelay = Delay,
+  SeekPreRoll 80 ms, and a last packet with Duration below its TOC samples becomes a BlockGroup with BlockDuration
+  and DiscardPadding. Tracks are interleaved by time with InterleaveWindow 1 s.'
+- 'No hwmediacodec backend encodes AV1 yet (2026-10-16), so the WebM video writer serves remuxes (MP4
+  av01, IVF, WebM) until the AV1 encode slice lands; Opus WebM files can be produced from the system encoders
+  today (cmd/hwmediacodec encode-audio -o x.webm).'
 acceptance:
+  webm-demux-matches-ffprobe:
+    text: For ffmpeg-made WebM files (SVT-AV1 + libopus; default, -live 1 with unknown sizes and no Cues,
+      and 100 ms clusters) every AV1 and Opus packet has ffprobe's PTS (Opus within 1 ms, as ffprobe
+      rounds the codec delay), keyframe flag and data, the Opus delay is 312 samples, the last packet's
+      duration leaves the DiscardPadding out, and a file cut to two thirds opens with the frames it has.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - webm-container-tests
+  webm-mux-round-trip:
+    text: Remuxing an ffmpeg WebM file through the Muxer gives the same packets (PTS, keyframes, discard
+      padding, Opus data) to ffprobe, the same framemd5 pictures and audio start; IVF temporal units with
+      temporal delimiters written into WebM decode with ffmpeg to the IVF's pictures.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - webm-container-tests
+  webm-codec-round-trip:
+    text: AV1 temporal units written to WebM and read back decode with the VideoToolbox AV1 decoder bit-exactly
+      against libdav1d; Opus from ffmpeg-made WebM decodes like ffmpeg's libopus decoder (above 50 dB)
+      and presents the input in place; Opus from the system encoder written to WebM is played by ffmpeg
+      as exactly the input samples and reads back with the same packets, PTS and durations.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - webm-codec-tests
   av1mac-ivf-round-trip:
     text: ivf.Writer output is read back by ivf.Reader (and by ffprobe) with the same frames, timestamps,
       frame count and timebase, is byte-identical to ffmpeg's IVF of the same frames, and truncated files
@@ -129,6 +193,55 @@ acceptance:
     verified_by:
     - extex-stream-test
 verification:
+  webm-container-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./mediacontainer/webm/ (TestDemuxMatchesFFprobe, TestDemuxTruncated, TestSeek, TestRemux,
+      TestFromIVF, TestWriterErrors, TestLacing, TestHostileFiles, TestMaxFrames, FuzzDemuxer 60 s)
+    evidence:
+      path: mediacontainer/webm/webm_test.go
+      locator: TestRemux
+      note: 2026-10-16, Apple M3, macOS 27, ffmpeg with SVT-AV1 4.2.0 and libopus; no hardware needed;
+        the fuzzer ran 6 million inputs without a failure
+    basis:
+    - path: mediacontainer/webm/ebml.go
+      input_hash: 752658f01f5105f4282b75a854dbde3516c17bbe3deda20d278fbc128648c208
+    - path: mediacontainer/webm/demux.go
+      input_hash: 5ba02e3d59449890023c33bcf64d2282c53db4e6169691d55d620ce0f29ab146
+    - path: mediacontainer/webm/packetsource.go
+      input_hash: 7b47a602baa7027720a52dba85969594555ae86a013b6907eedb6fdb8224bfb0
+    - path: mediacontainer/webm/mux.go
+      input_hash: 335ceee9fedd3d4297bfd7a1f46f051b1baa8bee54602f54aee8fd72e394a894
+    - path: mediacontainer/webm/webm_test.go
+      input_hash: 0cecf63c0a0388a6686f915def67345bbc8fa3d2d85ae401bd23903ebcfab971
+    - path: mediacontainer/webm/safety_test.go
+      input_hash: 204a43b63b3de22f4b603fd9e4084f5db606de29e5a8cee85a6f3f2f590eba3e
+  webm-codec-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+    test: go test -run WebM . (TestDecodeAV1FromWebM, TestOpusWebMDecode, TestOpusWebMRoundTrip)
+    evidence:
+      path: webm_test.go
+      locator: TestOpusWebMRoundTrip
+      note: 2026-10-16, Apple M3 (VideoToolbox AV1 decode, AudioToolbox Opus); ffmpeg's libopus decoding
+        of the ffmpeg files matched at 107-108 dB; the system encoder's Opus through WebM reached ffmpeg
+        at 35.7 dB (mono) and 36.3 dB (stereo) against the input, at shift 0. Not run on the other backends
+        or in the browser.
+    basis:
+    - path: webm_test.go
+      input_hash: 601afaf55b4a6d44fc90b8492e99d356af03e931c88d073bec83a61a5a386e7d
+    - path: mediacontainer/webm/demux.go
+      input_hash: 5ba02e3d59449890023c33bcf64d2282c53db4e6169691d55d620ce0f29ab146
+    - path: mediacontainer/webm/mux.go
+      input_hash: 335ceee9fedd3d4297bfd7a1f46f051b1baa8bee54602f54aee8fd72e394a894
   av1mac-ivf-unit-test:
     state: passed
     method: unit
@@ -306,6 +419,21 @@ verification:
     - path: mediacontainer/mp4/stream_test.go
       input_hash: 462cf73e816f88864da210d31f46654af9f4ebf2ac63ca69f61fd6b12159b35d
 open_questions:
+  webm-ogg-container:
+    text: Should Opus also be written to and read from Ogg (.opus/.ogg files), the container the author
+      had in mind with "opus/ogg"?
+    state: open
+    resolution: Not needed for WebM (Opus goes into Matroska blocks directly); left for the author to
+      ask for as a separate container package.
+    scope:
+      platform: any
+  webm-av1-encode:
+    text: The WebM video writer has no AV1 encoder to take packets from; the agreed AV1 encode slice (NVENC,
+      VPL, VA-API, vendor MFTs, WebCodecs) will be the first live producer, and a recorder to WebM (capture
+      + webm.Muxer) would follow it.
+    state: open
+    scope:
+      platform: any
   mp4-next-candidates:
     text: Which other sample code should follow - the HLS playlist server (examples/hls/server.go, standard
       library only, depends on mp4.Segment), the HEIC/AVIF codec (examples/heif, mp4ff) or the WebRTC
@@ -355,6 +483,12 @@ facts:
     segmenter: NewSegmenter(codec, timeScale, target, onInit, onSegment) -> WritePacket, Close; Segment{Seq,
       Data, Start, Duration}
     container_extex: VideoTrack.ElementaryStream() io.ReadSeeker
+    webm: import github.com/shibukawa/hwmediacodec/mediacontainer/webm; Open(path) / NewDemuxer(io.ReadSeeker)
+      -> Demuxer{Video() *VideoTrack, Audio() *AudioTrack, Tracks(), TimestampScale(), Duration(), Close};
+      VideoTrack{Codec, Width, Height, TimeScale, FrameCount, Packet(i), KeyframeAtOrBefore, Length, PacketSource()};
+      AudioTrack{Format(), FrameCount, Packet(i), Length, PacketSource()}; Create(path) / NewMuxer(io.WriteSeeker)
+      -> Muxer{AddVideoTrack(AV1, timeScale) *VideoWriter, AddAudioTrack(format, timeScale) *AudioWriter,
+      Close}; MaxFrames, InterleaveWindow
   delivery_results:
     milestone:mediacontainer-mp4:
       result:
@@ -383,6 +517,10 @@ relations:
 - relation: depends_on
   to: component:core-api
 history:
+  webm-delivered-2026-10-16:
+    summary: The author asked for WebM next to MP4 with AV1 + Opus/Ogg; mediacontainer/webm was written
+      without a dependency, with the player sample and cmd/hwmediacodec decode-audio/encode-audio taking
+      .webm files; Ogg was explained as a container WebM does not need.
   mp4-delivered-2026-10-10:
     summary: After capture, the author asked what else in the samples was generally useful, accepted the
       mp4ff dependency and proposed the mediacontainer/mp4 path; the package moved with its tests.
