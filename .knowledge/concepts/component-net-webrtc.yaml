@@ -83,7 +83,7 @@ verification:
     - path: net/webrtc/broadcaster.go
       input_hash: b8cd22748c6f88dd11cda1999e712351dc9ff54c29178c11f690be6316655b16
     - path: net/webrtc/broadcaster_test.go
-      input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
+      input_hash: f00ebf5afcbec5b5f2497daed36654147cc64c8b29d9844d764bd13faf0c600f
     - path: mediacontainer/mp4/demux.go
       input_hash: ade75a9559583d82ba715ee425c02feb58f098809a2ea772775da1f822029bc4
   webrtc-broadcaster-test:
@@ -101,7 +101,7 @@ verification:
     - path: net/webrtc/broadcaster.go
       input_hash: b8cd22748c6f88dd11cda1999e712351dc9ff54c29178c11f690be6316655b16
     - path: net/webrtc/broadcaster_test.go
-      input_hash: 428b6bec38eaae2ed040b2b91087b13109758b327ddad2fc62758ebfbb29e891
+      input_hash: f00ebf5afcbec5b5f2497daed36654147cc64c8b29d9844d764bd13faf0c600f
     - path: net/webrtc/go.mod
       input_hash: 31186a22ec42381582cd819b8f1c5d560f9d5cdc0a2bcc8a588bbb65394ddf2b
   webrtc-page-test:
