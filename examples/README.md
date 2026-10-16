@@ -59,7 +59,7 @@ have no program of their own.
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
-| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec); see its README |
+| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec), and the check of `check/` on the device; see its README |
 
 ## check
 
@@ -104,6 +104,14 @@ platform, the `Probe` table, every result and the browser's user agent;
 the GPU model is left for the reporter to fill in. The exit status is 1
 when a check failed. On an Apple M3 every check passes (AV1 encode is
 reported as unsupported: Apple Silicon has no AV1 encoder).
+
+The checks, the playback stage and the report live in
+[`internal/checker`](internal/checker), shared with the check mode of the
+mobile sample: on an iPhone, iPad or Android device the **Run check**
+button of [`mobile/`](mobile/) runs the automatic checks and the playback
+stage with Yes / No buttons, then shares the Markdown report through the
+platform's share sheet or opens the GitHub issue with it filled in (no
+WebRTC stage there). See [mobile/README.md](mobile/README.md#the-check-on-a-phone-or-tablet).
 
 ## convert
 

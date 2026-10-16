@@ -1,9 +1,10 @@
 // Package mobile is the hwmediacodec video player as an Ebitengine mobile
 // game. `ebitenmobile bind` turns it into an iOS xcframework that the Xcode
 // project in ios/ embeds (see README.md in this directory); the Android
-// project will follow with the Android backend. The game plays the bundled
-// waterfall clip in a loop through the device's hardware decoder and shows
-// which backend serves it; a tap pauses and resumes.
+// project in android/ embeds the same code as an aar. The game plays the
+// bundled waterfall clip in a loop through the device's hardware decoder
+// and shows which backend serves it; a tap pauses and resumes. The Run
+// check button starts the machine check of examples/check (check.go).
 package mobile
 
 import (
@@ -27,8 +28,9 @@ import (
 )
 
 // Dummy exists for gomobile, which binds a package only when it exports
-// something. Nothing else is exported on purpose: gobind would try to bind
-// the game type and fail on the ebiten.Game method signatures.
+// something. Besides it only the check's Host, SetHost and SetDeviceInfo
+// are exported, on purpose: gobind would try to bind the game type and
+// fail on the ebiten.Game method signatures.
 func Dummy() {}
 
 // game plays the bundled clip. It is also usable from a desktop main
@@ -44,6 +46,7 @@ type game struct {
 	status string
 	at     time.Time
 	opened bool
+	check  *check // the machine check, while it runs
 }
 
 // newGame returns the game; the clip is opened on the first Update so that
@@ -110,10 +113,27 @@ func (g *game) open() {
 	g.say("playing")
 }
 
+// checkButton is the tap target that starts the check, above the
+// progress bar and the home indicator.
+func (g *game) checkButton() button {
+	return button{x: float64(g.w) - 120, y: float64(g.h) - 96, w: 108, h: btnH, label: "Run check", on: true}
+}
+
 // Update implements ebiten.Game.
 func (g *game) Update() error {
+	if g.check != nil {
+		g.check.update()
+		if g.check.closed {
+			g.check.close()
+			g.check, g.opened = nil, false // reopen the player
+		}
+		return nil
+	}
 	if !g.opened {
 		g.open()
+	}
+	if g.startCheck() {
+		return nil
 	}
 	if g.player == nil {
 		return nil
@@ -133,6 +153,32 @@ func (g *game) Update() error {
 	return g.player.Update()
 }
 
+// startCheck starts the check when its button was tapped; the player is
+// closed so that the check has the decoders to itself.
+func (g *game) startCheck() bool {
+	b := g.checkButton()
+	var taps [][2]int
+	for _, id := range inpututil.AppendJustPressedTouchIDs(nil) {
+		x, y := ebiten.TouchPosition(id)
+		taps = append(taps, [2]int{x, y})
+	}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		taps = append(taps, [2]int{x, y})
+	}
+	for _, t := range taps {
+		if b.hit(t[0], t[1]) {
+			g.Close()
+			g.err = nil
+			g.check = newCheck()
+			// This frame's Draw comes before the next Layout.
+			g.check.layout(g.w, g.h)
+			return true
+		}
+	}
+	return false
+}
+
 // Draw implements ebiten.Game.
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{18, 18, 22, 255})
@@ -140,6 +186,11 @@ func (g *game) Draw(screen *ebiten.Image) {
 		g.pixel = ebiten.NewImage(1, 1)
 		g.pixel.Fill(color.White)
 	}
+	if g.check != nil {
+		g.check.draw(screen, g)
+		return
+	}
+	defer g.drawCheckButton(screen)
 	if g.err != nil {
 		ebitenutil.DebugPrintAt(screen, g.info+"\n\n"+g.err.Error(), 0, textTop)
 		return
@@ -172,6 +223,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 		g.info, g.name, vw, vh, g.player.Position().Seconds(), g.player.Length().Seconds(), ebiten.ActualFPS(), g.player.Skipped(), status), 0, textTop)
 }
 
+func (g *game) drawCheckButton(screen *ebiten.Image) {
+	b := g.checkButton()
+	g.rect(screen, b.x, b.y, b.w, b.h, color.RGBA{40, 44, 52, 200})
+	ebitenutil.DebugPrintAt(screen, b.label, int(b.x+(b.w-float64(len(b.label)*charW))/2), int(b.y+(b.h-lineH)/2))
+}
+
 func (g *game) rect(dst *ebiten.Image, x, y, w, h float64, c color.RGBA) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(w, h)
@@ -183,10 +240,13 @@ func (g *game) rect(dst *ebiten.Image, x, y, w, h float64, c color.RGBA) {
 // Layout implements ebiten.Game: the game fills the screen in points.
 func (g *game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	g.w, g.h = outsideWidth, outsideHeight
+	if g.check != nil {
+		g.check.layout(outsideWidth, outsideHeight)
+	}
 	return outsideWidth, outsideHeight
 }
 
-// Close releases the decoder.
+// Close releases the decoder (the player's; a running check keeps its own).
 func (g *game) Close() {
 	if g.player != nil {
 		g.player.Close()

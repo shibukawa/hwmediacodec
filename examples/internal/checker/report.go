@@ -1,4 +1,4 @@
-package main
+package checker
 
 import (
 	"fmt"
@@ -13,89 +13,132 @@ import (
 	"github.com/shibukawa/hwmediacodec"
 )
 
-// status is the outcome of one check.
-type status int
+// Status is the outcome of one check.
+type Status int
 
 const (
-	pending status = iota
-	running
-	passed
-	failed
-	unsupported // no backend for it on this machine: not a failure
-	skipped     // the user skipped it, or it could not run
+	Pending Status = iota
+	Running
+	Passed
+	Failed
+	Unsupported // no backend for it on this machine: not a failure
+	Skipped     // the user skipped it, or it could not run
 )
 
-func (s status) String() string {
+func (s Status) String() string {
 	return [...]string{"pending", "running", "pass", "FAIL", "unsupported", "skipped"}[s]
 }
 
-// mark is the short form for the window and the Markdown table.
-func (s status) mark() string {
+// Mark is the short form for the window and the Markdown table.
+func (s Status) Mark() string {
 	return [...]string{"..", ">>", "OK", "NG", "--", "-"}[s]
 }
 
-// result is one line of the report.
-type result struct {
+// Result is one line of the report.
+type Result struct {
 	Section string // "Decode", "Encode", "Audio", "Playback", "WebRTC"
 	Name    string // "H.264 / videotoolbox"
-	Status  status
+	Status  Status
 	Detail  string
 }
 
-// report collects the results; the automatic checks, the window and the
+// Report collects the results; the automatic checks, the window and the
 // web page write to it from their own goroutines.
-type report struct {
+type Report struct {
+	// Generator names what made the report, in its last line. Device, when
+	// set, takes the place of the GPU line for the reporter to fill in, and
+	// PasteHint is the issue body when the report is too long for the
+	// link. Set them before the checks start.
+	Generator string
+	Device    string
+	PasteHint string
+
 	mu      sync.Mutex
 	started time.Time
 	caps    []hwmediacodec.Capability
 	probe   error
-	results []*result
+	results []*Result
 	browser string // the user agent of the WebRTC page
 	notes   []string
 }
 
-func newReport() *report { return &report{started: time.Now()} }
+// NewReport returns an empty report with the desktop check's wording.
+func NewReport() *Report {
+	return &Report{
+		Generator: "`go run github.com/shibukawa/hwmediacodec/examples/check@latest`",
+		PasteHint: "_The report was too long for the link: please paste hwmediacodec-report.md here._",
+		started:   time.Now(),
+	}
+}
 
-// add appends a result and returns it for later updates through set.
-func (r *report) add(section, name string) *result {
+// SetProbe records what Probe found.
+func (r *Report) SetProbe(caps []hwmediacodec.Capability, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	res := &result{Section: section, Name: name}
+	r.caps, r.probe = caps, err
+}
+
+// Caps returns what Probe found, nil before the checks probed.
+func (r *Report) Caps() []hwmediacodec.Capability {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.caps
+}
+
+// SetBrowser records the user agent of the WebRTC page.
+func (r *Report) SetBrowser(ua string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.browser = ua
+}
+
+// Browser returns the user agent SetBrowser recorded.
+func (r *Report) Browser() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.browser
+}
+
+// Add appends a result and returns it for later updates through Set.
+func (r *Report) Add(section, name string) *Result {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	res := &Result{Section: section, Name: name}
 	r.results = append(r.results, res)
 	return res
 }
 
-func (r *report) set(res *result, s status, format string, args ...any) {
+func (r *Report) Set(res *Result, s Status, format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	res.Status = s
 	res.Detail = fmt.Sprintf(format, args...)
 }
 
-func (r *report) note(format string, args ...any) {
+func (r *Report) Note(format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.notes = append(r.notes, fmt.Sprintf(format, args...))
 }
 
-// snapshot copies the results for drawing.
-func (r *report) snapshot() []result {
+// Snapshot copies the results for drawing.
+func (r *Report) Snapshot() []Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]result, len(r.results))
+	out := make([]Result, len(r.results))
 	for i, res := range r.results {
 		out[i] = *res
 	}
 	return out
 }
 
-// counts returns how many results passed and failed.
-func (r *report) counts() (pass, fail int) {
-	for _, res := range r.snapshot() {
+// Counts returns how many results passed and failed.
+func (r *Report) Counts() (pass, fail int) {
+	for _, res := range r.Snapshot() {
 		switch res.Status {
-		case passed:
+		case Passed:
 			pass++
-		case failed:
+		case Failed:
 			fail++
 		}
 	}
@@ -121,7 +164,7 @@ func libraryVersion() string {
 }
 
 // backendNames lists the video backends Probe reported, in order.
-func (r *report) backendNames() []string {
+func (r *Report) backendNames() []string {
 	var names []string
 	seen := map[string]bool{}
 	for _, c := range r.caps {
@@ -133,17 +176,17 @@ func (r *report) backendNames() []string {
 	return names
 }
 
-// title is the issue title: the platform and the backends, nothing about
+// Title is the issue title: the platform and the backends, nothing about
 // the user or the machine beyond that.
-func (r *report) title() string {
+func (r *Report) Title() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pass, fail := 0, 0
 	for _, res := range r.results {
 		switch res.Status {
-		case passed:
+		case Passed:
 			pass++
-		case failed:
+		case Failed:
 			fail++
 		}
 	}
@@ -154,25 +197,25 @@ func (r *report) title() string {
 	return fmt.Sprintf("Check report: %s/%s (%s), %d passed, %d failed", runtime.GOOS, runtime.GOARCH, b, pass, fail)
 }
 
-// maxIssueURL keeps the new-issue link below the length GitHub accepts
+// MaxIssueURL keeps the new-issue link below the length GitHub accepts
 // (it answers 414 somewhere above 8 KB).
-const maxIssueURL = 8000
+const MaxIssueURL = 8000
 
-// issueURL opens a new issue with the title and the report filled in;
+// IssueURL opens a new issue with the title and the report filled in;
 // nothing is sent until the user submits the form. A report too long for
-// a link is left out and has to be pasted from the file. full reports
-// whether the body is in the link.
-func (r *report) issueURL() (link string, full bool) {
-	base := "https://github.com/shibukawa/hwmediacodec/issues/new?title=" + url.QueryEscape(r.title())
-	if link := base + "&body=" + url.QueryEscape(r.markdown()); len(link) <= maxIssueURL {
+// a link is left out (the body is PasteHint) and has to be pasted. full
+// reports whether the body is in the link.
+func (r *Report) IssueURL() (link string, full bool) {
+	base := "https://github.com/shibukawa/hwmediacodec/issues/new?title=" + url.QueryEscape(r.Title())
+	if link := base + "&body=" + url.QueryEscape(r.Markdown()); len(link) <= MaxIssueURL {
 		return link, true
 	}
-	return base + "&body=" + url.QueryEscape("_The report was too long for the link: please paste hwmediacodec-report.md here._"), false
+	return base + "&body=" + url.QueryEscape(r.PasteHint), false
 }
 
-// markdown renders the report for a GitHub issue.
-func (r *report) markdown() string {
-	title := r.title()
+// Markdown renders the report for a GitHub issue.
+func (r *Report) Markdown() string {
+	title := r.Title()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var b strings.Builder
@@ -183,7 +226,11 @@ func (r *report) markdown() string {
 		fmt.Fprintf(&b, "- Browser: %s\n", r.browser)
 	}
 	fmt.Fprintf(&b, "- Run: %s, %s\n", r.started.UTC().Format("2006-01-02 15:04 MST"), time.Since(r.started).Round(time.Second))
-	b.WriteString("- GPU / driver: _(please fill in, e.g. Intel UHD 770, driver 31.0.101.5186)_\n\n")
+	if r.Device != "" {
+		fmt.Fprintf(&b, "- Device: %s\n\n", r.Device)
+	} else {
+		b.WriteString("- GPU / driver: _(please fill in, e.g. Intel UHD 770, driver 31.0.101.5186)_\n\n")
+	}
 
 	b.WriteString("### Probe\n\n")
 	if r.probe != nil {
@@ -203,7 +250,7 @@ func (r *report) markdown() string {
 		b.WriteString("\n")
 	}
 
-	sections := map[string][]*result{}
+	sections := map[string][]*Result{}
 	var order []string
 	for _, res := range r.results {
 		if _, ok := sections[res.Section]; !ok {
@@ -227,7 +274,7 @@ func (r *report) markdown() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("_Generated by `go run github.com/shibukawa/hwmediacodec/examples/check@latest`._\n")
+	fmt.Fprintf(&b, "_Generated by %s._\n", r.Generator)
 	return b.String()
 }
 

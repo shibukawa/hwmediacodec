@@ -12,6 +12,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
+	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
 	"github.com/shibukawa/hwmediacodec/net/webrtc"
 )
 
@@ -22,13 +23,13 @@ type stream struct {
 	bc    *webrtc.Broadcaster
 	rec   *capture.Recorder
 
-	received *result // the page saw frames
-	picture  *result // the user saw the fireworks
+	received *checker.Result // the page saw frames
+	picture  *checker.Result // the user saw the fireworks
 }
 
 // web serves the check page and the signalling for every stream.
 type web struct {
-	r       *report
+	r       *checker.Report
 	streams []*stream
 	url     string
 	srv     *http.Server
@@ -43,18 +44,18 @@ const webW, webH, webFPS = 640, 360, 30
 // startWeb opens an encoder and a broadcaster for every codec in codecs
 // and serves the page on addr. Codecs whose encoder does not open get a
 // result saying so and no stream.
-func startWeb(r *report, addr string, codecs []hwmediacodec.Codec) (*web, error) {
+func startWeb(r *checker.Report, addr string, codecs []hwmediacodec.Codec) (*web, error) {
 	w := &web{r: r, answered: map[string]bool{}}
 	for _, c := range codecs {
 		s := &stream{codec: c, key: strings.ToLower(c.String())}
-		s.received = r.add("WebRTC", codecName(c)+" stream received by the browser")
+		s.received = r.Add("WebRTC", checker.CodecName(c)+" stream received by the browser")
 		bc, err := webrtc.NewCodecBroadcaster(c, webFPS, nil, func() {
 			if s.rec != nil {
 				s.rec.RequestKeyframe()
 			}
 		})
 		if err != nil {
-			r.set(s.received, unsupported, "%v", err)
+			r.Set(s.received, checker.Unsupported, "%v", err)
 			continue
 		}
 		opts := capture.Options{Codec: c, FPS: webFPS, Bitrate: 2_000_000, KeyframeInterval: webFPS * 4, LowLatency: true}
@@ -65,13 +66,13 @@ func startWeb(r *report, addr string, codecs []hwmediacodec.Codec) (*web, error)
 		rec, err := capture.New(webW, webH, bc, opts)
 		if err != nil {
 			bc.Close()
-			r.set(s.received, statusOf(err), "encoder: %v", err)
+			r.Set(s.received, checker.StatusOf(err), "encoder: %v", err)
 			continue
 		}
 		s.bc, s.rec = bc, rec
-		s.picture = r.add("WebRTC", codecName(c)+" picture in the browser")
-		r.set(s.received, running, "waiting for the browser")
-		r.set(s.picture, pending, "")
+		s.picture = r.Add("WebRTC", checker.CodecName(c)+" picture in the browser")
+		r.Set(s.received, checker.Running, "waiting for the browser")
+		r.Set(s.picture, checker.Pending, "")
 		w.streams = append(w.streams, s)
 	}
 	if len(w.streams) == 0 {
@@ -95,11 +96,6 @@ func startWeb(r *report, addr string, codecs []hwmediacodec.Codec) (*web, error)
 	w.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go w.srv.Serve(ln)
 	return w, nil
-}
-
-func statusOf(err error) status {
-	s, _ := outcome(err)
-	return s
 }
 
 // done reports whether the user answered for every stream.
@@ -153,28 +149,26 @@ func (w *web) result(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if ua := strings.TrimSpace(pr.UserAgent); ua != "" {
-		w.r.mu.Lock()
-		w.r.browser = truncate(ua, 200)
-		w.r.mu.Unlock()
+		w.r.SetBrowser(truncate(ua, 200))
 	}
 	switch {
 	case pr.Answer == "yes" || pr.Answer == "no":
-		st := passed
+		st := checker.Passed
 		if pr.Answer == "no" {
-			st = failed
+			st = checker.Failed
 		}
-		w.r.set(s.picture, st, "answered %s in the browser", pr.Answer)
+		w.r.Set(s.picture, st, "answered %s in the browser", pr.Answer)
 		w.mu.Lock()
 		w.answered[s.key] = true
 		w.mu.Unlock()
 	case pr.Error != "":
-		w.r.set(s.received, failed, "%s", truncate(pr.Error, 300))
+		w.r.Set(s.received, checker.Failed, "%s", truncate(pr.Error, 300))
 	default:
 		dec := truncate(pr.Decoder, 60)
 		if dec == "" {
 			dec = "not reported"
 		}
-		w.r.set(s.received, passed, "%d frames %dx%d (%s), browser decoder %s", pr.Frames, pr.Width, pr.Height, truncate(pr.MimeType, 30), dec)
+		w.r.Set(s.received, checker.Passed, "%d frames %dx%d (%s), browser decoder %s", pr.Frames, pr.Width, pr.Height, truncate(pr.MimeType, 30), dec)
 	}
 	rw.WriteHeader(http.StatusNoContent)
 }
@@ -190,7 +184,7 @@ func (w *web) page(rw http.ResponseWriter, _ *http.Request) {
 	type entry struct{ Key, Name string }
 	var list []entry
 	for _, s := range w.streams {
-		list = append(list, entry{s.key, codecName(s.codec)})
+		list = append(list, entry{s.key, checker.CodecName(s.codec)})
 	}
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	pageTemplate.Execute(rw, list)

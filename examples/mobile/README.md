@@ -6,8 +6,11 @@ library that a normal Xcode or Android Studio project embeds. The game
 plays the bundled waterfall clip ([`../assets`](../assets)) in a loop
 through the device's hardware decoder (VideoToolbox on iOS, MediaCodec on
 Android), shows what `hwmediacodec.Probe` found at the top of the screen,
-and pauses and resumes on a tap. `ios/` is the Xcode project, `android/`
-the Android Studio project; both embed the same Go code.
+and pauses and resumes on a tap. The **Run check** button at the bottom
+right runs the machine check of [`../check`](../check) on the device (see
+[The check on a phone or tablet](#the-check-on-a-phone-or-tablet)).
+`ios/` is the Xcode project, `android/` the Android Studio project; both
+embed the same Go code.
 
 ## Build and run on an iPhone
 
@@ -52,6 +55,49 @@ xcrun simctl launch booted jp.shibu.hwmediacodec.player
 The Go side is tested on the Mac (`go test ./mobile` in `examples` opens the
 clip the way the first frame does); the iOS build itself is covered by
 `scripts/mobilebuild.sh` in the repository root.
+
+## The check on a phone or tablet
+
+**Run check** does what `go run ./check` does on a desktop, minus the
+WebRTC stage (that needs a desktop browser), with the same checks from
+[`../internal/checker`](../internal/checker):
+
+1. **Automatic** (about a minute): `Probe`, then decode of the bundled clip
+   in H.264, HEVC and AV1, the encode round trips with their PSNR and order
+   checks, and the AAC / Opus round trips, once per backend. The list
+   fills in as the checks run; **Stop** ends the run and keeps what was
+   checked.
+2. **Playback**: the clip plays with sound in every codec the device
+   decodes, and the screen asks whether picture and sound were right:
+   **Yes**, **No** or **Skip**.
+3. **Report**: the results (drag to scroll), with **Share**, which hands
+   the Markdown report to the share sheet (Copy, Mail, Notes, ... on iOS;
+   the chooser with its copy button on Android), and **Open issue**, which
+   opens a new issue on GitHub with the title and the report filled in
+   (a report over about 8 KB is left out of the link: share it and paste
+   it). Nothing is sent until the issue is submitted. **Back** returns to
+   the player once the automatic checks are over.
+
+The report names the device: the model identifier and OS version on iOS
+(`iPhone16,1, iOS 26.0`), maker, model, SoC and Android version on
+Android, passed in by the native code (`Mobile.setDeviceInfo`). The share
+sheet and the browser are native too: `Host` in
+[`check.go`](check.go) is implemented by `ReportHost` in
+[`AppDelegate.swift`](ios/HWMediaCodecPlayer/AppDelegate.swift) and in
+[`MainActivity.java`](android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java).
+Both apps keep the screen on, because a locked screen takes the hardware
+codecs away in the middle of a check. On tablets the text is drawn two
+points to a pixel so that it stays readable; the video keeps its full
+resolution.
+
+In the iOS Simulator nothing decodes in hardware: the decode checks say
+`unsupported`, the encode round trips code a synthetic picture, and the
+playback stage plays the clips through the OS software decoder, labelled
+`(software decoder)` in the report, so that the stage can be tried there.
+On the Android emulator the goldfish H.264 and HEVC decoders pass and
+the encoders, software only, are `unsupported`. Both were run that way
+(iPhone 17 Pro Simulator with iOS 26, Android 14 arm64 emulator as a
+tablet); the check has not run on a real phone or tablet yet.
 
 ## Build and run on an Android device
 

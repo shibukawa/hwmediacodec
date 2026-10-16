@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
 )
 
 func main() {
@@ -46,17 +48,17 @@ func main() {
 	webrtc := flag.Bool("webrtc", true, "run the WebRTC stage")
 	flag.Parse()
 
-	r := newReport()
-	k := &checker{r: r}
+	r := checker.NewReport()
+	k := &checker.Checker{R: r}
 	if *auto {
-		k.run(context.Background())
+		k.Run(context.Background())
 		os.Exit(finish(r, *out))
 	}
 
 	g := newGame(r, *out, *addr, *open, *play)
 	g.skipPlayback, g.skipWebRTC = !*playback, !*webrtc
 	go func() {
-		k.run(context.Background())
+		k.Run(context.Background())
 		g.autoDone.Store(true)
 	}()
 	ebiten.SetWindowSize(winW, winH)
@@ -67,7 +69,7 @@ func main() {
 	code := 0
 	if !g.saved {
 		code = finish(r, *out)
-	} else if _, fail := r.counts(); fail > 0 {
+	} else if _, fail := r.Counts(); fail > 0 {
 		code = 1
 	}
 	if err != nil {
@@ -78,22 +80,22 @@ func main() {
 
 // finish prints and saves the report and returns the exit code: 1 when a
 // check failed.
-func finish(r *report, path string) int {
-	md := r.markdown()
+func finish(r *checker.Report, path string) int {
+	md := r.Markdown()
 	fmt.Println(md)
 	if err := os.WriteFile(path, []byte(md), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, "check: saving the report:", err)
 	} else if abs, err := filepath.Abs(path); err == nil {
 		fmt.Println("Report saved to", abs)
 	}
-	link, full := r.issueURL()
+	link, full := r.IssueURL()
 	if full {
 		fmt.Println("Please open an issue with it; this link fills the report in:")
 	} else {
 		fmt.Println("Please open an issue with it (paste the report from the file as the body):")
 	}
 	fmt.Println(link)
-	if _, fail := r.counts(); fail > 0 {
+	if _, fail := r.Counts(); fail > 0 {
 		return 1
 	}
 	return 0

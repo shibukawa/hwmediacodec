@@ -1,4 +1,9 @@
-package main
+// Package checker is the platform-independent part of the check sample:
+// the automatic checks (decode, encode round trips, audio, once per
+// backend), the playback stage without its input, and the report with its
+// Markdown and GitHub issue link. examples/check runs it in a desktop
+// window and examples/mobile on a phone or tablet.
+package checker
 
 import (
 	"context"
@@ -35,15 +40,17 @@ const (
 	srcTick    = 90000 / srcFPS // PTS step in the default 90 kHz time scale
 )
 
-// clip is one encoding of the bundled waterfall.
-type clip struct {
-	codec hwmediacodec.Codec
-	clip  assets.Clip
+// Clip is one encoding of the bundled waterfall.
+type Clip struct {
+	Codec hwmediacodec.Codec
+	Clip  assets.Clip
 }
 
-func clips() []clip {
+// Clips lists the waterfall in H.264, HEVC and AV1, the order the checks
+// and the playback take them in.
+func Clips() []Clip {
 	all := assets.Clips() // HEVC, H.264
-	return []clip{
+	return []Clip{
 		{hwmediacodec.H264, all[1]},
 		{hwmediacodec.HEVC, all[0]},
 		{hwmediacodec.AV1, assets.AV1()},
@@ -52,7 +59,8 @@ func clips() []clip {
 
 var videoCodecs = []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC, hwmediacodec.AV1}
 
-func codecName(c hwmediacodec.Codec) string {
+// CodecName is the name of c in the report.
+func CodecName(c hwmediacodec.Codec) string {
 	switch c {
 	case hwmediacodec.H264:
 		return "H.264"
@@ -68,16 +76,16 @@ func codecName(c hwmediacodec.Codec) string {
 	return c.String()
 }
 
-// checker runs the automatic checks.
-type checker struct {
-	r   *report
+// Checker runs the automatic checks and writes their results to R.
+type Checker struct {
+	R   *Report
 	src []*hwmediacodec.Frame // pictures for the encoders, from the first decoder that works
 }
 
 // backendsFor lists the backends that report c in direction dir.
-func (k *checker) backendsFor(c hwmediacodec.Codec, dir hwmediacodec.Direction) []string {
+func (k *Checker) backendsFor(c hwmediacodec.Codec, dir hwmediacodec.Direction) []string {
 	var out []string
-	for _, cp := range k.r.caps {
+	for _, cp := range k.R.Caps() {
 		if cp.Codec == c && cp.Direction == dir {
 			out = append(out, cp.Backend)
 		}
@@ -112,32 +120,31 @@ func anyBackend(env string, fn func() error) error {
 	return fn()
 }
 
-// run probes the machine and runs every automatic check in turn.
-func (k *checker) run(ctx context.Context) {
+// Run probes the machine and runs every automatic check in turn; it
+// takes about a minute on a machine with every codec.
+func (k *Checker) Run(ctx context.Context) {
 	caps, err := hwmediacodec.Probe(ctx)
-	k.r.mu.Lock()
-	k.r.caps, k.r.probe = caps, err
-	k.r.mu.Unlock()
+	k.R.SetProbe(caps, err)
 
-	for _, cl := range clips() {
-		k.each("Decode", cl.codec, hwmediacodec.Decode, backendsEnv, func(ctx context.Context) (status, string) {
+	for _, cl := range Clips() {
+		k.each("Decode", cl.Codec, hwmediacodec.Decode, backendsEnv, func(ctx context.Context) (Status, string) {
 			return k.decodeClip(ctx, cl)
 		})
 	}
 	if len(k.src) == 0 {
 		k.src = synthFrames()
-		k.r.note("No decoder worked, so the encoders coded a synthetic picture instead of the waterfall.")
+		k.R.Note("No decoder worked, so the encoders coded a synthetic picture instead of the waterfall.")
 	}
 	for _, c := range videoCodecs {
-		k.each("Encode", c, hwmediacodec.Encode, backendsEnv, func(ctx context.Context) (status, string) {
+		k.each("Encode", c, hwmediacodec.Encode, backendsEnv, func(ctx context.Context) (Status, string) {
 			return k.roundTrip(ctx, c)
 		})
 	}
-	k.each("Audio", hwmediacodec.AAC, hwmediacodec.Decode, audioBackendsEnv, func(ctx context.Context) (status, string) {
+	k.each("Audio", hwmediacodec.AAC, hwmediacodec.Decode, audioBackendsEnv, func(ctx context.Context) (Status, string) {
 		return decodeClipAudio(ctx)
 	})
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.AAC, hwmediacodec.Opus} {
-		k.each("Audio", c, hwmediacodec.Encode, audioBackendsEnv, func(ctx context.Context) (status, string) {
+		k.each("Audio", c, hwmediacodec.Encode, audioBackendsEnv, func(ctx context.Context) (Status, string) {
 			return audioRoundTrip(ctx, c)
 		})
 	}
@@ -145,53 +152,59 @@ func (k *checker) run(ctx context.Context) {
 
 // each runs check once per backend that reports c in direction dir, or
 // records that none does.
-func (k *checker) each(section string, c hwmediacodec.Codec, dir hwmediacodec.Direction, env string, check func(context.Context) (status, string)) {
+func (k *Checker) each(section string, c hwmediacodec.Codec, dir hwmediacodec.Direction, env string, check func(context.Context) (Status, string)) {
 	verb := "decode"
 	if dir == hwmediacodec.Encode {
 		verb = "encode"
 	}
 	backends := k.backendsFor(c, dir)
 	if len(backends) == 0 {
-		res := k.r.add(section, codecName(c)+" "+verb)
-		k.r.set(res, unsupported, "no backend reports it on this machine")
+		res := k.R.Add(section, CodecName(c)+" "+verb)
+		k.R.Set(res, Unsupported, "no backend reports it on this machine")
 		return
 	}
 	for _, b := range backends {
-		res := k.r.add(section, codecName(c)+" "+verb+" / "+b)
-		k.r.set(res, running, "")
+		res := k.R.Add(section, CodecName(c)+" "+verb+" / "+b)
+		k.R.Set(res, Running, "")
 		withBackend(env, b, func() {
 			ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 			defer cancel()
 			s, detail := check(ctx)
-			k.r.set(res, s, "%s", detail)
+			k.R.Set(res, s, "%s", detail)
 		})
 	}
 }
 
-// outcome turns an error into a result: ErrUnsupported is not a failure.
-func outcome(err error) (status, string) {
+// Outcome turns an error into a result: ErrUnsupported is not a failure.
+func Outcome(err error) (Status, string) {
 	if errors.Is(err, hwmediacodec.ErrUnsupported) {
-		return unsupported, err.Error()
+		return Unsupported, err.Error()
 	}
-	return failed, err.Error()
+	return Failed, err.Error()
+}
+
+// StatusOf is the status of a check that ended with err.
+func StatusOf(err error) Status {
+	s, _ := Outcome(err)
+	return s
 }
 
 // decodeClip decodes the whole clip and checks the frames: count, size,
 // display order and a picture that is not flat. The first clip that
 // decodes also provides the encoders' pictures.
-func (k *checker) decodeClip(ctx context.Context, cl clip) (status, string) {
-	d, err := mp4.NewDemuxer(cl.clip.Open())
+func (k *Checker) decodeClip(ctx context.Context, cl Clip) (Status, string) {
+	d, err := mp4.NewDemuxer(cl.Clip.Open())
 	if err != nil {
-		return failed, err.Error()
+		return Failed, err.Error()
 	}
 	v := d.Video()
 	if v == nil {
-		return failed, "no video track in " + cl.clip.Name
+		return Failed, "no video track in " + cl.Clip.Name
 	}
 	src := v.PacketSource()
 	dec, err := hwmediacodec.NewDecoder(ctx, v.Codec, hwmediacodec.WithTimeScale(src.TimeScale()))
 	if err != nil {
-		return outcome(err)
+		return Outcome(err)
 	}
 	defer dec.Close()
 	frames := hwmediacodec.NewDecodeReader(dec, src)
@@ -206,9 +219,9 @@ func (k *checker) decodeClip(ctx context.Context, cl clip) (status, string) {
 		}
 		if err != nil {
 			if n == 0 {
-				return outcome(err)
+				return Outcome(err)
 			}
-			return failed, fmt.Sprintf("frame %d: %v", n, err)
+			return Failed, fmt.Sprintf("frame %d: %v", n, err)
 		}
 		bad := ""
 		switch {
@@ -223,7 +236,7 @@ func (k *checker) decodeClip(ctx context.Context, cl clip) (status, string) {
 		}
 		if bad != "" {
 			f.Release()
-			return failed, bad
+			return Failed, bad
 		}
 		last = f.PTS
 		if keep && len(kept) < srcFrames {
@@ -234,12 +247,12 @@ func (k *checker) decodeClip(ctx context.Context, cl clip) (status, string) {
 	}
 	elapsed := time.Since(start)
 	if n != v.SampleCount() {
-		return failed, fmt.Sprintf("%d of %d frames came out", n, v.SampleCount())
+		return Failed, fmt.Sprintf("%d of %d frames came out", n, v.SampleCount())
 	}
 	if keep && len(kept) == srcFrames {
 		k.src = kept
 	}
-	return passed, fmt.Sprintf("%d frames %dx%d in %.2fs (%.0f fps)", n, v.Width, v.Height, elapsed.Seconds(), float64(n)/elapsed.Seconds())
+	return Passed, fmt.Sprintf("%d frames %dx%d in %.2fs (%.0f fps)", n, v.Width, v.Height, elapsed.Seconds(), float64(n)/elapsed.Seconds())
 }
 
 // flat reports whether the luma of a picture barely varies.
@@ -341,11 +354,11 @@ func (p *packets) ReadPacket() (hwmediacodec.Packet, error) {
 // roundTrip encodes the source pictures, decodes the stream again (on any
 // backend when the encoder's has no decoder) and measures the PSNR of the
 // luma against the source.
-func (k *checker) roundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) {
+func (k *Checker) roundTrip(ctx context.Context, c hwmediacodec.Codec) (Status, string) {
 	enc, err := hwmediacodec.NewEncoder(ctx, c, srcW, srcH,
 		hwmediacodec.WithFrameRate(srcFPS), hwmediacodec.WithBitrate(4_000_000), hwmediacodec.WithKeyframeInterval(srcFPS))
 	if err != nil {
-		return outcome(err)
+		return Outcome(err)
 	}
 	defer enc.Close()
 	var out []hwmediacodec.Packet
@@ -358,20 +371,20 @@ func (k *checker) roundTrip(ctx context.Context, c hwmediacodec.Codec) (status, 
 	start := time.Now()
 	for _, f := range k.src {
 		if err := w.WriteFrame(ctx, f); err != nil {
-			return failed, fmt.Sprintf("frame %d: %v", f.PTS/srcTick, err)
+			return Failed, fmt.Sprintf("frame %d: %v", f.PTS/srcTick, err)
 		}
 	}
 	if err := w.Flush(ctx); err != nil {
-		return failed, "flush: " + err.Error()
+		return Failed, "flush: " + err.Error()
 	}
 	elapsed := time.Since(start)
 	encoded := fmt.Sprintf("%d frames %dx%d at %.1f Mbit/s, %.0f fps", len(out), srcW, srcH,
 		float64(bytes)*8/(float64(len(k.src))/srcFPS)/1e6, float64(len(k.src))/elapsed.Seconds())
 	switch {
 	case len(out) != len(k.src):
-		return failed, fmt.Sprintf("%d packets for %d frames", len(out), len(k.src))
+		return Failed, fmt.Sprintf("%d packets for %d frames", len(out), len(k.src))
 	case !out[0].Keyframe:
-		return failed, "the first packet is not a keyframe"
+		return Failed, "the first packet is not a keyframe"
 	}
 
 	// next compares each picture with the following source picture: a
@@ -412,13 +425,13 @@ func (k *checker) roundTrip(ctx context.Context, c hwmediacodec.Codec) (status, 
 		}
 	}()
 	if errors.Is(err, hwmediacodec.ErrUnsupported) {
-		return passed, encoded + "; no decoder here to check the stream"
+		return Passed, encoded + "; no decoder here to check the stream"
 	}
 	if err != nil {
-		return failed, encoded + "; decoding it back: " + err.Error()
+		return Failed, encoded + "; decoding it back: " + err.Error()
 	}
 	if len(psnrs) != len(k.src) {
-		return failed, fmt.Sprintf("%s; %d of %d frames decoded back", encoded, len(psnrs), len(k.src))
+		return Failed, fmt.Sprintf("%s; %d of %d frames decoded back", encoded, len(psnrs), len(k.src))
 	}
 	avg, lo := 0.0, math.Inf(1)
 	for _, p := range psnrs {
@@ -436,11 +449,11 @@ func (k *checker) roundTrip(ctx context.Context, c hwmediacodec.Codec) (status, 
 	// more at this rate, a broken stream stays far below 20.
 	switch {
 	case avg < 25 || lo < 20:
-		return failed, detail + ": the pictures do not match"
+		return Failed, detail + ": the pictures do not match"
 	case avg < neighbour+1:
-		return failed, detail + ": the pictures come back in the wrong order"
+		return Failed, detail + ": the pictures come back in the wrong order"
 	}
-	return passed, detail
+	return Passed, detail
 }
 
 // lumaPSNR compares the luma of two NV12 pictures of the same size.
@@ -537,40 +550,40 @@ func dBFS(rms float64) float64 {
 }
 
 // decodeClipAudio decodes the AAC track of the bundled clip.
-func decodeClipAudio(ctx context.Context) (status, string) {
+func decodeClipAudio(ctx context.Context) (Status, string) {
 	d, err := mp4.NewDemuxer(assets.Clips()[0].Open())
 	if err != nil {
-		return failed, err.Error()
+		return Failed, err.Error()
 	}
 	a := d.Audio()
 	if a == nil {
-		return failed, "the bundled clip has no audio track"
+		return Failed, "the bundled clip has no audio track"
 	}
 	format := a.Format()
 	dec, err := hwmediacodec.NewAudioDecoder(ctx, format)
 	if err != nil {
-		return outcome(err)
+		return Outcome(err)
 	}
 	defer dec.Close()
 	src := a.PacketSource()
 	samples, rms, err := decodeAudio(ctx, dec, src)
 	if err != nil {
-		return failed, err.Error()
+		return Failed, err.Error()
 	}
 	secs := float64(samples) / float64(format.SampleRate)
 	detail := fmt.Sprintf("%.2fs at %d Hz, %d channels, level %.0f dBFS", secs, format.SampleRate, format.Channels, dBFS(rms))
 	switch want := src.Length().Seconds(); {
 	case secs < want*0.97 || secs > want*1.05:
-		return failed, fmt.Sprintf("%s; the track lasts %.2fs", detail, want)
+		return Failed, fmt.Sprintf("%s; the track lasts %.2fs", detail, want)
 	case dBFS(rms) < -50:
-		return failed, detail + ": silent"
+		return Failed, detail + ": silent"
 	}
-	return passed, detail
+	return Passed, detail
 }
 
 // audioRoundTrip encodes two seconds of a soft two-tone chord and decodes
 // it again (on any backend when the encoder's has no decoder).
-func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) {
+func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (Status, string) {
 	const rate, channels, seconds = 48000, 2, 2
 	pcm := make([]int16, rate*channels*seconds)
 	for i := 0; i < rate*seconds; i++ {
@@ -581,7 +594,7 @@ func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) 
 	in := 8000.0 / 32768 / math.Sqrt2
 	enc, err := hwmediacodec.NewAudioEncoder(ctx, c, rate, channels)
 	if err != nil {
-		return outcome(err)
+		return Outcome(err)
 	}
 	defer enc.Close()
 	var out []hwmediacodec.Packet
@@ -604,24 +617,24 @@ func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) 
 			err := enc.Send(ctx, f)
 			if errors.Is(err, hwmediacodec.ErrAgain) {
 				if err := drain(); err != nil {
-					return failed, err.Error()
+					return Failed, err.Error()
 				}
 				continue
 			}
 			if err != nil {
-				return failed, err.Error()
+				return Failed, err.Error()
 			}
 			break
 		}
 		if err := drain(); err != nil {
-			return failed, err.Error()
+			return Failed, err.Error()
 		}
 	}
 	if err := enc.Flush(ctx); err != nil {
-		return failed, "flush: " + err.Error()
+		return Failed, "flush: " + err.Error()
 	}
 	if err := drain(); err != nil {
-		return failed, err.Error()
+		return Failed, err.Error()
 	}
 	format := enc.Format()
 	bytes := 0
@@ -630,7 +643,7 @@ func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) 
 	}
 	encoded := fmt.Sprintf("%d packets, %.0f kbit/s", len(out), float64(bytes)*8/seconds/1000)
 	if len(out) == 0 {
-		return failed, "no packets"
+		return Failed, "no packets"
 	}
 
 	var samples int
@@ -651,15 +664,15 @@ func audioRoundTrip(ctx context.Context, c hwmediacodec.Codec) (status, string) 
 		return err
 	}()
 	if errors.Is(err, hwmediacodec.ErrUnsupported) {
-		return passed, encoded + "; no decoder here to check the stream"
+		return Passed, encoded + "; no decoder here to check the stream"
 	}
 	if err != nil {
-		return failed, encoded + "; decoding it back: " + err.Error()
+		return Failed, encoded + "; decoding it back: " + err.Error()
 	}
 	detail := fmt.Sprintf("%s; decoded back %.2fs at %.1f dB of the input level", encoded,
 		float64(samples)/float64(format.SampleRate), dBFS(rms)-dBFS(in))
 	if float64(samples)/float64(format.SampleRate) < seconds || rms < in/2 || rms > in*2 {
-		return failed, detail + ": the sound does not match"
+		return Failed, detail + ": the sound does not match"
 	}
-	return passed, detail
+	return Passed, detail
 }

@@ -16,9 +16,8 @@ import (
 	"github.com/pkg/browser"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/ebitenvideo"
+	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
 	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
-	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
 const (
@@ -37,17 +36,8 @@ const (
 	stDone
 )
 
-// question is what the playback stage is waiting for.
-type question int
-
-const (
-	watching question = iota
-	askPicture
-	askSound
-)
-
 type game struct {
-	r        *report
+	r        *checker.Report
 	out      string
 	addr     string
 	open     bool
@@ -60,12 +50,7 @@ type game struct {
 	skipPlayback, skipWebRTC bool
 
 	// Playback.
-	queue      []clip
-	player     *ebitenvideo.Player
-	playing    clip
-	playStart  time.Time
-	ask        question
-	soundAsked bool
+	pb *checker.Playback
 
 	// WebRTC.
 	web    *web
@@ -78,7 +63,7 @@ type game struct {
 	message string
 }
 
-func newGame(r *report, out, addr string, open bool, playLen time.Duration) *game {
+func newGame(r *checker.Report, out, addr string, open bool, playLen time.Duration) *game {
 	pixel := ebiten.NewImage(1, 1)
 	pixel.Fill(color.White)
 	return &game{r: r, out: out, addr: addr, open: open, playLen: playLen, pixel: pixel}
@@ -107,7 +92,7 @@ func (g *game) Update() error {
 		}
 	case stDone:
 		if inpututil.IsKeyJustPressed(ebiten.KeyO) {
-			link, _ := g.r.issueURL()
+			link, _ := g.r.IssueURL()
 			if err := browser.OpenURL(link); err != nil {
 				g.message = "could not open the browser: " + err.Error()
 			}
@@ -116,101 +101,29 @@ func (g *game) Update() error {
 	return nil
 }
 
-// startPlayback queues the clips of every codec some backend decodes.
+// startPlayback plays the clips of every codec some backend decodes.
 func (g *game) startPlayback() {
 	g.stage = stPlayback
 	if g.skipPlayback {
 		g.startWebRTC()
 		return
 	}
-	for _, cl := range clips() {
-		for _, c := range g.r.caps {
-			if c.Codec == cl.codec && c.Direction == hwmediacodec.Decode {
-				g.queue = append(g.queue, cl)
-				break
-			}
-		}
+	g.pb = checker.NewPlayback(g.r, g.playLen, false)
+	if g.pb.Done() {
+		g.startWebRTC()
 	}
-	g.nextClip()
-}
-
-func (g *game) nextClip() {
-	if g.player != nil {
-		g.player.Close()
-		g.player = nil
-	}
-	for len(g.queue) > 0 {
-		cl := g.queue[0]
-		g.queue = g.queue[1:]
-		p, err := openClip(cl)
-		if err != nil {
-			res := g.r.add("Playback", codecName(cl.codec)+" picture")
-			g.r.set(res, statusOf(err), "%v", err)
-			continue
-		}
-		if err := p.AudioErr(); err != nil && !g.soundAsked {
-			g.soundAsked = true
-			res := g.r.add("Playback", "Sound (AAC)")
-			g.r.set(res, failed, "%v", err)
-		}
-		p.Play()
-		g.player, g.playing, g.playStart, g.ask = p, cl, time.Now(), watching
-		return
-	}
-	g.startWebRTC()
-}
-
-func openClip(cl clip) (*ebitenvideo.Player, error) {
-	d, err := mp4.NewDemuxer(cl.clip.Open())
-	if err != nil {
-		return nil, err
-	}
-	v := d.Video()
-	if v == nil {
-		return nil, fmt.Errorf("no video track in %s", cl.clip.Name)
-	}
-	var opts []ebitenvideo.Option
-	if a := d.Audio(); a != nil {
-		opts = append(opts, ebitenvideo.WithAudio(a.PacketSource()))
-	}
-	return ebitenvideo.NewPlayerFromSource(v.PacketSource(), opts...)
 }
 
 func (g *game) updatePlayback() {
-	if err := g.player.Update(); err != nil {
-		res := g.r.add("Playback", codecName(g.playing.codec)+" picture")
-		g.r.set(res, failed, "%v", err)
-		g.nextClip()
-		return
+	if !g.pb.Update() {
+		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+			g.pb.Skip()
+		} else if yes, ok := answer(); ok {
+			g.pb.Answer(yes)
+		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-		res := g.r.add("Playback", codecName(g.playing.codec)+" picture")
-		g.r.set(res, skipped, "skipped by the user")
-		g.nextClip()
-		return
-	}
-	switch g.ask {
-	case watching:
-		if time.Since(g.playStart) >= g.playLen {
-			g.ask = askPicture
-		}
-	case askPicture:
-		if yes, ok := answer(); ok {
-			res := g.r.add("Playback", codecName(g.playing.codec)+" picture")
-			g.r.set(res, pick(yes), "user answered %s; %d frames skipped by the player", yesNo(yes), g.player.Skipped())
-			if g.player.HasAudio() && !g.soundAsked {
-				g.ask = askSound
-				return
-			}
-			g.nextClip()
-		}
-	case askSound:
-		if yes, ok := answer(); ok {
-			g.soundAsked = true
-			res := g.r.add("Playback", "Sound (AAC)")
-			g.r.set(res, pick(yes), "user answered %s", yesNo(yes))
-			g.nextClip()
-		}
+	if g.pb.Done() {
+		g.startWebRTC()
 	}
 }
 
@@ -225,20 +138,6 @@ func answer() (yes, ok bool) {
 	return false, false
 }
 
-func pick(yes bool) status {
-	if yes {
-		return passed
-	}
-	return failed
-}
-
-func yesNo(yes bool) string {
-	if yes {
-		return "yes"
-	}
-	return "no"
-}
-
 // startWebRTC opens a stream for every codec some backend encodes and
 // opens the page.
 func (g *game) startWebRTC() {
@@ -248,7 +147,7 @@ func (g *game) startWebRTC() {
 	}
 	var codecs []hwmediacodec.Codec
 	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
-		for _, cp := range g.r.caps {
+		for _, cp := range g.r.Caps() {
 			if cp.Codec == c && cp.Direction == hwmediacodec.Encode {
 				codecs = append(codecs, c)
 				break
@@ -256,15 +155,15 @@ func (g *game) startWebRTC() {
 		}
 	}
 	if len(codecs) == 0 {
-		res := g.r.add("WebRTC", "Streaming")
-		g.r.set(res, unsupported, "no H.264 or HEVC encoder on this machine")
+		res := g.r.Add("WebRTC", "Streaming")
+		g.r.Set(res, checker.Unsupported, "no H.264 or HEVC encoder on this machine")
 		g.finish()
 		return
 	}
 	w, err := startWeb(g.r, g.addr, codecs)
 	if err != nil {
-		res := g.r.add("WebRTC", "Page")
-		g.r.set(res, failed, "%v", err)
+		res := g.r.Add("WebRTC", "Page")
+		g.r.Set(res, checker.Failed, "%v", err)
 		g.finish()
 		return
 	}
@@ -323,9 +222,8 @@ func wrap(s string, n int) []string {
 }
 
 func (g *game) close() {
-	if g.player != nil {
-		g.player.Close()
-		g.player = nil
+	if g.pb != nil {
+		g.pb.Close()
 	}
 	if g.web != nil {
 		g.web.close()
@@ -338,9 +236,9 @@ func (g *game) Draw(screen *ebiten.Image) {
 	g.rect(screen, panelW, 0, 1, winH, color.RGBA{60, 64, 72, 255})
 	switch g.stage {
 	case stPlayback:
-		if g.player != nil {
-			if img := g.player.Image(); img != nil {
-				vw, vh := g.player.Size()
+		if p := g.pb.Player(); p != nil {
+			if img := p.Image(); img != nil {
+				vw, vh := p.Size()
 				g.fit(screen, img, vw, vh)
 			}
 		}
@@ -378,17 +276,17 @@ func (g *game) drawPanel(screen *ebiten.Image) {
 	line("hwmediacodec check - " + titles[g.stage])
 	y += lineH / 2
 	section := ""
-	for _, res := range g.r.snapshot() {
+	for _, res := range g.r.Snapshot() {
 		if res.Section != section {
 			section = res.Section
 			y += 4
 			line(section)
 		}
 		detail := res.Detail
-		if res.Status == running && detail == "" {
+		if res.Status == checker.Running && detail == "" {
 			detail = "running..."
 		}
-		line(fmt.Sprintf(" [%s] %s  %s", res.Status.mark(), res.Name, detail))
+		line(fmt.Sprintf(" [%s] %s  %s", res.Status.Mark(), res.Name, detail))
 	}
 
 	var prompt []string
@@ -396,25 +294,24 @@ func (g *game) drawPanel(screen *ebiten.Image) {
 	case stAuto:
 		prompt = []string{"Checking the codecs; this takes up to a minute.", "[Esc] stop and save the report"}
 	case stPlayback:
-		name := codecName(g.playing.codec)
-		switch g.ask {
-		case watching:
-			left := g.playLen - time.Since(g.playStart)
-			prompt = []string{fmt.Sprintf("Playing the %s clip with sound (%.0fs).", name, math.Max(0, left.Seconds())), "[S] skip  [Esc] stop and save the report"}
-		case askPicture:
+		name := checker.CodecName(g.pb.Codec())
+		switch g.pb.Question() {
+		case checker.Watching:
+			prompt = []string{fmt.Sprintf("Playing the %s clip with sound (%.0fs).", name, g.pb.Left().Seconds()), "[S] skip  [Esc] stop and save the report"}
+		case checker.AskPicture:
 			prompt = []string{fmt.Sprintf("Did the %s video play smoothly, with natural colours?", name), "[Y] yes  [N] no  [S] skip"}
-		case askSound:
+		case checker.AskSound:
 			prompt = []string{"Did you hear the sound of the waterfall?", "[Y] yes  [N] no  [S] skip"}
 		}
 	case stWebRTC:
 		prompt = []string{"The browser shows the fireworks over WebRTC: answer there for each codec.", "Page: " + g.web.url, "[Enter] finish  [Esc] stop and save the report"}
 	case stDone:
-		pass, fail := g.r.counts()
+		pass, fail := g.r.Counts()
 		where := "the report could not be saved"
 		if g.savedAt != "" {
 			where = "Report saved to " + g.savedAt
 		}
-		_, full := g.r.issueURL()
+		_, full := g.r.IssueURL()
 		issue := "[O] opens a new GitHub issue with the report filled in; please submit it there."
 		if !full {
 			issue = "[O] opens a new GitHub issue; please paste the report from the file into it."

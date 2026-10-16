@@ -22,9 +22,30 @@ constraints:
   per backend; the root package reads them at every NewDecoder, so the playback stage only starts after
   the automatic stage), then playback of the clip per decodable codec with Y/N questions, then WebRTC of
   the fireworks scene in H.264 and HEVC to a browser page that posts getStats results and Yes/No answers
-  to /result; the Markdown report goes to stdout and hwmediacodec-report.md, the issue link carries only
-  the title (platform, backends, counts). The author chose window + browser, Markdown + issue link,
-  a bundled AV1 clip and audio checks.'
+  to /result; the Markdown report goes to stdout and hwmediacodec-report.md, the issue link carries the
+  title (platform, backends, counts) and the report as its body while the link stays under 8000 bytes
+  (GitHub answers 414 above about 8 KB; longer reports get a paste hint instead). The author chose window
+  + browser, Markdown + issue link, a bundled AV1 clip and audio checks.'
+- 'examples/internal/checker (2026-10-16) holds the platform-independent part of the check: Checker.Run
+  (the automatic checks), Playback (the playback stage without input: Update, Answer, Skip, Done), Report
+  (results, Markdown, IssueURL). examples/check keeps the window, the WebRTC page and the flags; examples/mobile
+  adds a check mode behind a Run check button: automatic checks, playback with Yes / No / Skip buttons,
+  then the report with Share (platform share sheet) and Open issue. No WebRTC stage on the phone. Report.Generator,
+  Device and PasteHint carry the mobile wording; the desktop defaults reproduce the previous report text.'
+- 'Mobile check native hooks: package mobile exports Host (Share(subject, text), OpenURL(url)), SetHost
+  and SetDeviceInfo besides Dummy; gobind binds them (Swift sees MobileHostProtocol, Java jp.shibu.hwmediacodec.mobile.Host
+  and Mobile.setHost). ReportHost in AppDelegate.swift uses UIActivityViewController (popover anchor for
+  iPad) and UIApplication.open; MainActivity.java uses ACTION_SEND through createChooser and ACTION_VIEW.
+  Both apps keep the screen on during the app (isIdleTimerDisabled, FLAG_KEEP_SCREEN_ON) so that a lock
+  does not take the codecs away mid-check.'
+- 'Mobile check drawing: the interface is drawn into an offscreen image of (points / scale) with scale = max(1,
+  shorter side / 360), then scaled up, so the debug font is readable on tablets; the video is drawn on
+  the screen at full resolution. The check must be laid out (check.layout) when it is created: the Draw
+  of the frame that creates it comes before the next Layout, and a 0x0 offscreen image froze the Android
+  emulator in eglSwapBuffers.'
+- 'Mobile check playback: where Probe reports no hardware video decoder (iOS Simulator), the clips play
+  through WithSoftwareFallback and the results are labelled "(software decoder)"; the desktop check never
+  falls back.'
 - 'check encode round trip: 60 pictures of the clip, luma box-averaged 2x down and cropped to 352x640, at
   4 Mbit/s; pass at average >= 25 dB and lowest >= 20 dB luma PSNR and average at least 1 dB above the
   PSNR against the next source picture (order check). Point-sampled 2 Mbit/s input gave only 28 dB on
@@ -33,8 +54,8 @@ constraints:
 - 'assets.AV1() is the waterfall in AV1 (libsvtav1 preset 4, 900 kbit/s, Main 8-bit, same AAC track, 1.2
   MB), not in assets.Clips() so the players keep trying HEVC then H.264.'
 - The public API, the ebitenvideo and playback packages and the examples are unchanged in behaviour; the
-  Ebitengine mobile sample exports only a Dummy function because gobind cannot bind ebiten.Game method
-  signatures.
+  Ebitengine mobile sample exports only Dummy and the check's Host / SetHost / SetDeviceInfo, never the
+  game type, because gobind cannot bind ebiten.Game method signatures.
 - Timestamps pass through unchanged. Both decoder and encoder are opened with WithTimeScale(track time
   scale), so frame PTS are MP4 sample times and encoder packets carry PTS/DTS in the same unit; the muxer
   stores them as given, apart from a constant DTS shift.
@@ -289,6 +310,32 @@ acceptance:
     verified_by:
     - imgconv-imgconv-run
 verification:
+  excheck-mobile-simulator-emulator:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      platform: ios, android
+    test: ebitenmobile bind for iOS and Android, the Xcode project built for the Simulator and build-apk.sh
+      for the emulator; Run check tapped, playback answered with the on-screen buttons, the report scrolled,
+      shared and opened as an issue link
+    evidence:
+      path: examples/mobile/check.go
+      note: '2026-10-16, iPhone 17 Pro Simulator (iOS 26): decode unsupported, H.264 / HEVC encode OK
+        on synthetic pictures, AAC / Opus OK, H.264 playback through the software decoder answered Yes,
+        Share sheet Copy put the Markdown (Device: iPhone18,1 Simulator, iOS 26.0) on the pasteboard, Open
+        issue opened github.com in Safari, Back reopened the player. Android 14 arm64 emulator (2560x1600
+        tablet, scale 2): H.264 / HEVC decode OK on the goldfish decoders, encoders unsupported, the chooser
+        showed the report text, Open issue opened the GitHub login page, Back reopened the player.'
+    basis:
+    - path: examples/mobile/check.go
+      input_hash: f6c2f191fbc56891b2a2918f3c198a0e7fb8f0753b6fbea0579490f6167c809e
+    - path: examples/internal/checker/playback.go
+      input_hash: a54e2c1e95f35fbfb5d35af0b6bca714adce691e356dd9b481af8e32a1d6aaf2
+    - path: examples/mobile/ios/HWMediaCodecPlayer/AppDelegate.swift
+      input_hash: bc20de176f93adcfc870f5b6369e4c82b8d52a457018663d84c3b0ca01ceda7d
+    - path: examples/mobile/android/app/src/main/java/jp/shibu/hwmediacodec/player/MainActivity.java
+      input_hash: a510f7a074e69c6b272f3ce9e59f1bae11c613977931a3bc39b4a077f55597fd
   browser-player-in-browser:
     state: passed
     method: manual
@@ -707,6 +754,11 @@ relations:
 - relation: depends_on
   to: component:image
 history:
+  excheck-mobile-2026-10-16:
+    summary: After the author's M3 passed every desktop check and they connected an iPhone, the check was
+      split into examples/internal/checker and a check mode was added to examples/mobile (Run check button,
+      Yes / No buttons, Share and Open issue through native hooks). Run in the iPhone 17 Pro Simulator
+      (iOS 26) and on the Android 14 arm64 emulator; not yet on a real device.
   excheck-delivered-2026-10-16:
     summary: examples/check added after the author asked for one command others can run to report results.
       On the M3 the automatic stage passes (AV1 encode unsupported) and the WebRTC stage passed in the browser
