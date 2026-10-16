@@ -17,6 +17,22 @@ scope:
   - linux
   - windows
   gpu: intel
+constraints:
+- CGO_ENABLED=0; libvpl.so.2 is dlopened with purego and no module dependency is added. The structs mirror
+  the VPL headers at API 2.8 (Debian libvpl-dev 2023.1.1); only the API 1.x call set is used (external
+  system-memory surfaces, MFXVideoCORE_SyncOperation), so the legacy Media SDK runtime libmfxhw64 behind
+  the same dispatcher is served by the same code.
+- Same public API and Send/Receive/Flush contract as the other backends. The runtime emits display order,
+  so the decoder implements codec.DisplayOrderer and is not wrapped in the Go reorder layer; WithDecodeOrder
+  has no effect, as on Media Foundation.
+- NV12 in CPU memory, 8-bit 4:2:0. The GPU runtime needs the application's VADisplay (MFXVideoCORE_SetHandle
+  with MFX_HANDLE_VA_DISPLAY), so the backend reuses the libva bindings of internal/vaapi/sys and owns
+  a DRM file descriptor and display per decoder or encoder.
+- Registered after nvidia and before vaapi in backends_linux.go - on an Intel GPU with a VPL runtime it
+  serves the request, and VA-API takes over through the ErrUnsupported chain when the runtime is missing
+  or rejects a configuration.
+- Hardware only - the dispatcher filter mfxImplDescription.Impl = MFX_IMPL_TYPE_HARDWARE is set and MFX_WRN_PARTIAL_ACCELERATION
+  is reported as ErrUnsupported.
 capabilities:
   decode/h264:
     state: implemented
@@ -29,8 +45,8 @@ capabilities:
     - requirement:hwmediacodec
     evidence:
       path: internal/vpl/decoder.go
-      note: Code complete 2026-10-09 (MFXVideoDECODE, system-memory NV12 surfaces, display order from the
-        runtime); struct layouts, symbol binding and the dispatcher filter verified without a GPU;
+      note: Code complete 2026-10-09 (MFXVideoDECODE, system-memory NV12 surfaces, display order from
+        the runtime); struct layouts, symbol binding and the dispatcher filter verified without a GPU;
         hardware conformance not yet run, hence authority inferred.
     verified_by:
     - layout-test
@@ -78,8 +94,7 @@ capabilities:
     evidence:
       path: internal/vpl/encoder.go
       note: Code complete 2026-10-09 (MFXVideoENCODE, NV12 input, B-frames, CBR/VBR/CQP, low latency,
-        profiles, forced IDR); parameter mapping unit-tested on the host; hardware verification
-        pending.
+        profiles, forced IDR); parameter mapping unit-tested on the host; hardware verification pending.
     verified_by:
     - layout-test
     - symbol-binding
@@ -104,123 +119,96 @@ capabilities:
   encode/av1:
     state: unknown
     about: capability:hwmediacodec/encode-av1
-facts:
-  libraries:
-    linux:
-    - libvpl.so.2 (dispatcher)
-    - libmfx-gen.so.1.2 (Gen12+ runtime)
-    - libmfxhw64.so.1 (legacy Media SDK runtime for Gen9/Gen11)
-    windows:
-    - libvpl.dll or direct runtime libmfx64-gen.dll shipped with the Intel graphics driver
-  licence: MIT for both the dispatcher (intel/libvpl) and the GPU runtime (intel/vpl-gpu-rt).
-  api_model: full decoder/encoder (MFXVideoDECODE_DecodeFrameAsync takes a bitstream; MFXVideoENCODE_EncodeFrameAsync
-    emits a bitstream); mfxSession / mfxVideoParam / mfxFrameSurface1.
-  dispatcher_behaviour: The dispatcher itself scans library folders and resolves MFXQueryImplsDescription
-    at run time; a Go backend can skip the dispatcher and dlopen the runtime directly, or dlopen the dispatcher.
-  hardware_floor:
-    linux: Tiger Lake (Gen12) and newer for the VPL runtime; Gen9/Gen11 only through the deprecated Media
-      SDK runtime.
-    windows: Broad; the driver bundles the runtime.
-  ffi_notes:
-  - Plain C ABI with large versioned structs (mfxVideoParam unions); Go struct layouts must match the
-    headers exactly.
-  - Surfaces can be system memory (simplest, copies) or VA/D3D11 surfaces (zero-copy, later).
-  - Depends on libva/libva-drm at run time on Linux; errors from the VA layer surface as mfxStatus codes.
-  why_it_matters: Gives Intel GPUs on Linux a full-API path without the Go bitstream parser that raw VA-API
-    needs; the same API works on Windows as an alternative to Media Foundation with richer controls (look-ahead,
-    low-power encode).
-  evidence:
-  - url: https://github.com/nanazhan/vpl-gpu-rt
-    claim: Intel VPL GPU Runtime is MIT licensed, depends on LibVA and supports platforms starting with
-      Tiger Lake.
-  - url: https://packages.debian.org/ja/sid/libmfx-gen1.2
-    claim: Debian packages the runtime as libmfx-gen1.2 depending on libva2 and libva-drm2.
-  - url: https://oneapi-spec.uxlfoundation.org/specifications/oneapi/v1.2-rev-1/elements/onevpl/source/programming_guide/vpl_prg_session
-    claim: The dispatcher loads candidate runtime libraries at run time and resolves MFXQueryImplsDescription.
-  support_tier: tier1 (Linux Intel Gen12+; optional on Windows)
-  implementation:
-    package: internal/vpl (doc.go, backend.go, session.go, decoder.go, encoder.go, encparam.go,
-      pixels.go, paramsets.go) over internal/vpl/sys (purego loader for libvpl.so.2, struct mirrors of
-      the API 2.8 headers checked by layout_test.go against gcc sizeof/offsetof for x86_64) and the
-      libva bindings of internal/vaapi/sys for the display.
-    api_level: only API 1.x calls (MFXVideoCORE_SetHandle/SyncOperation, MFXVideoDECODE_*,
-      MFXVideoENCODE_* with application-allocated surfaces) plus the 2.x dispatcher entry points
-      (MFXLoad, MFXCreateConfig, MFXSetConfigFilterProperty, MFXCreateSession), so both libmfx-gen and
-      the legacy libmfxhw64 runtime are driven the same way.
-    session: first /dev/dri/renderD128..143 whose sysfs PCI vendor is 0x8086 (or whose VA vendor
-      string names Intel when sysfs is unreadable; HWMEDIACODEC_VPL_DEVICE overrides); open,
-      vaGetDisplayDRM, vaInitialize with libva messages silenced; MFXLoad, one config with
-      mfxImplDescription.Impl = MFX_IMPL_TYPE_HARDWARE (the mfxVariant passed by value as two uint64
-      words), MFXCreateSession(index 0), MFXVideoCORE_SetHandle(MFX_HANDLE_VA_DISPLAY) tolerating
-      MFX_ERR_UNDEFINED_BEHAVIOR; one session, loader, display and file descriptor per decoder or
-      encoder; MFXVideoCORE_SyncOperation waits at most 60 s and MFX_WRN_DEVICE_BUSY is retried every
-      millisecond for at most 5 s.
-    probe: MFXVideoDECODE_Query and MFXVideoENCODE_Query for 1080p NV12 4:2:0 (High / Main profile,
-      CQP for the encoder); an error or MFX_WRN_PARTIAL_ACCELERATION means not supported; no size
-      limits are reported yet.
-    decoder: a Go keyframe gate with a VPS/SPS/PPS cache by id (the first keyframe after start or
-      Flush is prefixed with the cached sets when it lacks them); MFXVideoDECODE_DecodeHeader on that
-      packet, 8-bit 4:2:0 NV12 check, MFXVideoDECODE_QueryIOSurf, MFXVideoDECODE_Init with
-      MFX_IOPATTERN_OUT_SYSTEM_MEMORY and AsyncDepth 1; NumFrameSuggested surfaces up front, more on
-      demand (64 at most), each an mfxFrameSurface1 plus a pixel buffer on the Go heap with a
-      64-byte-aligned pitch; per access unit one mfxBitstream with the PTS plus 2^40 as TimeStamp (so
-      that a negative PTS is neither MFX_TIMESTAMP_UNKNOWN nor damaged by the runtime's double-seconds
-      arithmetic) and MFX_BITSTREAM_COMPLETE_FRAME when DecodeHeader reported a progressive sequence,
-      DecodeFrameAsync repeated until MFX_ERR_MORE_DATA (MFX_ERR_MORE_SURFACE
-      and MFX_WRN_VIDEO_PARAM_CHANGED continue, MFX_ERR_INCOMPATIBLE_VIDEO_PARAM drains, closes and
-      re-initialises from the same access unit once); every output is synchronised at once and its
-      CropX/Y/W/H rectangle copied into a pooled NV12 buffer; Flush drains with a NULL bitstream and
-      calls MFXVideoDECODE_Reset (Close on failure).
-    encoder: mfxVideoParam with coded size aligned to 16 and the picture as crop, NV12 4:2:0
-      progressive, frame rate fraction (30/1 when unknown), TargetUsage 4, GopPicSize = keyframe
-      interval (two seconds or 60 frames by default), MFX_GOP_CLOSED, IdrInterval 0 for H.264 and 1 for
-      HEVC (every I-frame is IDR), GopRefDist 1 or 3 with WithBFrames (never with low latency or
-      Baseline), rate control CQP (qp = round(51 - 45*quality), 26 by default), VBR with a 2x peak or
-      CBR in kbit/s with BRCParamMultiplier above 65535, profiles Constrained Baseline/Main/High and
-      HEVC Main, LowPower left to the runtime, AsyncDepth 1, MFX_IOPATTERN_IN_SYSTEM_MEMORY;
-      mfxExtCodingOption (AUDelimiter off) and mfxExtCodingOption2 (AdaptiveI, AdaptiveB and RepeatPPS
-      off, BRefType off with B-frames) and, for HEVC, mfxExtCodingOption3 with GPB off (plain P
-      pictures instead of generalised B, which ffprobe reports as B-frames); when Init rejects the
-      configuration it is retried without mfxExtCodingOption3 and then without any buffer;
-      MFXVideoENCODE_GetVideoParam with mfxExtCodingOptionSPSPPS (+VPS) for the parameter sets, the
-      real GopRefDist and BufferSizeInKB; a changed rate control method is ErrUnsupported; per frame
-      the picture is copied into a free surface with edge replication, mfxEncodeCtrl.FrameType =
-      I|REF|IDR forces a keyframe, EncodeFrameAsync then SyncOperation and a copy of the bitstream;
-      MFX_ERR_NOT_ENOUGH_BUFFER doubles the buffer, MFX_WRN_DEVICE_BUSY and MFX_WRN_IN_EXECUTION are
-      retried and any other warning counts as "frame taken" (as FFmpeg does); Flush drains with a NULL
-      surface and the next Send closes and re-initialises the encoder (MFXVideoENCODE_Reset leaves it
-      to the runtime whether a new sequence starts) and forces an IDR.
-    output_contract: display-order NV12 frames with the packet's PTS (codec.DisplayOrderer, no Go
-      reorder layer); Annex-B packets with Keyframe from the NAL types, VPS/SPS/PPS prepended from
-      GetVideoParam when a keyframe lacks them, DTS = input PTS of the k-th frame minus
-      (GopRefDist - 1) frame durations.
-    limitations:
-    - 8-bit 4:2:0 NV12 only in both directions (RGBA/BGRA through the conversion in Go, no 10-bit);
-      AV1 is decoded only (8-bit Main profile).
-    - WithDecodeOrder has no effect; the runtime's own reorder delay applies.
-    - Even picture dimensions for encoding; one synchronous operation per frame.
-    - Needs libvpl (the legacy libmfx.so.1 dispatcher alone is not used); Linux only.
-    - Probe reports no maximum picture size.
-  host_verification_2026-10-09:
-    layouts: 159 sizes/offsets and 13 constants equal the values gcc prints from Debian's libvpl-dev
-      2023.1.1 headers for x86_64-linux-gnu.
-    symbols: all 24 entry points bind against libvpl 2.8 in a Debian bookworm amd64 container with
-      libmfx-gen1.2 22.6.4; the dispatcher accepts the hardware filter and refuses a mistyped variant;
-      MFXCreateSession reports MFX_ERR_NOT_FOUND without a GPU and Probe returns an empty list.
-    unit: encoder parameter mapping, bitstream sizing, surface upload/crop copies and the
-      parameter-set cache are tested without the library.
-    pending: decode and encode conformance on real Intel hardware (see milestone:linux-intel-vpl).
-relations:
-- relation: candidate_for
-  to: requirement:hwmediacodec
-- relation: implemented_in
-  to: milestone:linux-intel-vpl
-- relation: layered_on
-  to: backend:vaapi
-  scope:
-    platform: linux
-- relation: ranked_by
-  to: policy:support-tiers
+acceptance:
+  vpl-mfx-struct-layout:
+    text: Go mirrors of mfxFrameInfo, mfxInfoMFX, mfxVideoParam, mfxBitstream, mfxFrameData, mfxFrameSurface1,
+      mfxFrameAllocRequest, mfxEncodeCtrl, mfxExtCodingOption, mfxExtCodingOption2, mfxExtCodingOptionSPSPPS,
+      mfxExtCodingOptionVPS and mfxVersion have the sizes and field offsets a C compiler measures for
+      x86_64-linux-gnu (several are declared with pragma pack(4) in C), and the FourCC identifiers and
+      enumerators equal the header values.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-layout-test
+  vpl-symbols-bind:
+    text: Every libvpl entry point the backend uses binds against a real dispatcher build, and the dispatcher
+      accepts the hardware filter whose mfxVariant is passed by value as two integer register words (and
+      refuses the same property with a wrong variant type).
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-symbol-binding-container
+  vpl-graceful-without-hardware:
+    text: Without libvpl or libva, or with them but without an Intel GPU, Probe returns an empty list
+      and NewDecoder/NewEncoder return ErrUnsupported; nothing crashes and nothing is printed.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-symbol-binding-container
+  vpl-parameter-mapping:
+    text: The public encoder controls map to mfxVideoParam as documented (coded size aligned to 16 with
+      the picture as crop, GopPicSize, IdrInterval 0 for H.264 and 1 for HEVC so that every I-frame is
+      IDR, GopRefDist 3 for B-frames, CQP/VBR/CBR with BRCParamMultiplier beyond 65535 kbit/s, profiles),
+      unsupported combinations are ErrUnsupported, and the pixel copies (edge replication into the alignment
+      padding, cropped copy out) and the parameter-set cache behave as specified.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-host-unit-tests
+  vpl-decode-reference-linux:
+    text: On a Linux machine with an Intel GPU and a VPL runtime, TestDecodeMatchesReference/h264-bf0,
+      TestDecodeMatchesReference/hevc-bf0, the B-frame display-order tests, TestDecodeParameterSetChange,
+      TestFlushResumesAtKeyframe and TestInvalidData pass (per-frame NV12 checksums equal ffmpeg's software
+      decoder); TestDecodeOrderOption skips because the runtime reorders natively.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-hardware-decode
+  vpl-encode-reference-linux:
+    text: On the same machine the encode conformance tests (PSNR against the source, keyframe interval,
+      forced keyframes, B-frames with monotonic DTS, CBR/VBR sizes, quality ordering, low latency, profiles,
+      flush/reuse) and the transcode round trip pass; RGBA/BGRA input skips.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-hardware-encode
+  vpl-backend-selection:
+    text: HWMEDIACODEC_BACKENDS restricts and orders the backends Probe, NewDecoder and NewEncoder consult,
+      so the VA-API and VPL backends can each be exercised on the same Intel GPU.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-host-unit-tests
+  vpl-cross-build:
+    text: CGO_ENABLED=0 builds succeed for all six targets with the new packages.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-cross-build-check
+  vpl-host-suite-unaffected:
+    text: The full macOS test suite still passes with the backend wired in.
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    verified_by:
+    - vpl-host-suite
 verification:
   layout-test:
     state: passed
@@ -259,8 +247,8 @@ verification:
     scope:
       platform: linux
       gpu: intel
-    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on an
-      Intel Linux machine
+    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on an Intel
+      Linux machine
     evidence:
       path: decode_test.go
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
@@ -278,8 +266,7 @@ verification:
     scope:
       platform: linux
       gpu: intel
-    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Encode|Transcode' . on an Intel Linux
-      machine
+    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Encode|Transcode' . on an Intel Linux machine
     evidence:
       path: encode_test.go
       note: Needs an Intel GPU with libvpl2, a GPU runtime, the iHD driver and ffmpeg; not yet run.
@@ -290,11 +277,418 @@ verification:
       input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
     - path: internal/vpl/backend.go
       input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+  vpl-layout-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: internal/vpl/sys TestStructLayouts, TestConstants, TestVariantWords
+    evidence:
+      path: internal/vpl/sys/layout_test.go
+      note: expected values printed by a C program (sizeof/offsetof, enumerators) compiled with gcc 12
+        for x86_64-linux-gnu against Debian bookworm's libvpl-dev 2023.1.1 in a container on 2026-10-09;
+        159 sizes and offsets and 13 constants; the Go test runs on any 64-bit host
+    basis:
+    - path: internal/vpl/sys/types.go
+      input_hash: 554ecb18443e2911b3c6d5b6989b42986be44bb6f0adab1e94694c0b4f18d411
+    - path: internal/vpl/sys/layout_test.go
+      input_hash: 5e8f33e72b47635706e1e8ebaf9d197490da13d2f6e7144434a5228e0f240106
+  vpl-symbol-binding-container:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: internal/vpl/sys TestLoad and TestDispatcherFilter, internal/vpl TestWithoutDevice, the root
+      TestProbe/TestUnsupported* and the CLI probe as CGO_ENABLED=0 linux/amd64 binaries in a Debian bookworm
+      container with libvpl2 2023.1.1, libmfx-gen1.2 22.6.4, libva2 2.17 and no GPU
+    evidence:
+      path: internal/vpl/sys/sys_linux_test.go
+      note: all 24 symbols bound; MFXSetConfigFilterProperty(mfxImplDescription.Impl = hardware) returns
+        MFX_ERR_NONE and the same property with a U16 variant is refused; MFXCreateSession returns MFX_ERR_NOT_FOUND
+        without a GPU; Probe returns an empty list, NewDecoder/NewEncoder return ErrUnsupported ("no usable
+        Intel GPU"); the CLI prints that no backend is available (2026-10-09)
+    basis:
+    - path: internal/vpl/sys/sys_linux.go
+      input_hash: c4d5ceedf8eeab9215d637cb0bdfe722012b8db40eb80f2b486d0c61ed2930cf
+    - path: internal/vpl/sys/sys_linux_test.go
+      input_hash: 5ea74658f7bbf3ac6e91e051170528db1e1bd3a6c60cdb827537ebd1172c9565
+    - path: internal/vpl/session.go
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
+    - path: internal/vpl/backend.go
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+    - path: internal/vpl/backend_linux_test.go
+      input_hash: d2655bf320771c414545f58d46aa5c952f3289a0c52358d5bfdc2894cdfd2f6e
+    - path: backends_linux.go
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+  vpl-host-unit-tests:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: internal/vpl TestEncodeParamsDefaults, TestEncodeParamsControls, TestEncodeParamsUnsupported,
+      TestBitstreamCapacity, TestWithStartCode, TestSurfaceUpload, TestParamSetsInspect, TestStamp and
+      the root TestSelectBackends
+    evidence:
+      path: internal/vpl/vpl_test.go
+      note: hardware-free; run on the author's M3 and as linux/amd64 binaries in the container (2026-10-09)
+    basis:
+    - path: internal/vpl/encparam.go
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
+    - path: internal/vpl/pixels.go
+      input_hash: 2608790206cbeae5fb7f099df41646ae2e1b10c597f9687864f121f6d7f4dd84
+    - path: internal/vpl/paramsets.go
+      input_hash: 30de04f52b14b8e5d122572a85661a554384a15b88dbb6337feaed4bb6e41261
+    - path: internal/vpl/vpl_test.go
+      input_hash: 30d05e3857414ef5eabf7126b020d8a9a4d1951c2f8aadff0bdddd42af1fe5f6
+    - path: backends_test.go
+      input_hash: a7f05f083a75b16213466291210ab3c6a6837e540e0cd66d2ee332aea2a41e0d
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+  vpl-hardware-decode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Decode|Flush|Invalid|Probe' . on Linux with
+      an Intel GPU, libvpl2, the GPU runtime, the iHD VA driver and ffmpeg with libx264/libx265
+    evidence:
+      path: decode_test.go
+      note: 'Not yet run. Points to watch: MFXVideoCORE_SetHandle must accept the VADisplay opened through
+        internal/vaapi/sys (MFX_ERR_UNDEFINED_BEHAVIOR is tolerated as "the runtime already has one");
+        MFXVideoDECODE_DecodeHeader must find the parameter sets in the first keyframe packet; with MFX_BITSTREAM_COMPLETE_FRAME
+        (set for progressive sequences only) the picture of an access unit should be returned without
+        waiting for the next one once the DPB allows it; the output surface must be one of the system-memory
+        surfaces handed in (looked up by address) with CropX/Y/W/H filled in; the 160x120 stream after
+        the 320x240 one arrives either as MFX_WRN_VIDEO_PARAM_CHANGED or as MFX_ERR_INCOMPATIBLE_VIDEO_PARAM
+        (drain, close, DecodeHeader from the same access unit); MFXVideoDECODE_Reset after the drain at
+        Flush.'
+    basis:
+    - path: internal/vpl/decoder.go
+      input_hash: 2763179b8adc0bf4cc1e796331a036daa324e6fbf7c36e5fbe0b3733c6f83a05
+    - path: internal/vpl/session.go
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
+    - path: internal/vpl/backend.go
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+    - path: internal/vpl/pixels.go
+      input_hash: 2608790206cbeae5fb7f099df41646ae2e1b10c597f9687864f121f6d7f4dd84
+    - path: internal/vpl/paramsets.go
+      input_hash: 30de04f52b14b8e5d122572a85661a554384a15b88dbb6337feaed4bb6e41261
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+  vpl-hardware-encode:
+    state: not_run
+    method: integration
+    authority: inferred
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: HWMEDIACODEC_BACKENDS=vpl go test -count=1 -v -run 'Encode|Transcode' . on the same machine
+    evidence:
+      path: encode_test.go
+      note: 'Not yet run. Points to watch: MFXVideoENCODE_Init with mfxExtCodingOption (AUDelimiter off),
+        mfxExtCodingOption2 (AdaptiveI/AdaptiveB/RepeatPPS off, BRefType off with B-frames) and, for HEVC,
+        mfxExtCodingOption3 (GPB off) - a rejection is retried without the third buffer and then without
+        any; the forced IDR through mfxEncodeCtrl.FrameType = I|REF|IDR in display-order mode; Close +
+        Init after the drain at Flush, with the next frame forced to IDR; GopRefDist read back with MFXVideoENCODE_GetVideoParam
+        decides the DTS offset; a GPU whose HEVC encoder only does generalised B pictures ignores GPB
+        off, and ffprobe then reports B-frames that TestEncodeMatchesSource/hevc and TestEncodeBFrames
+        flag although the stream is in display order; the CBR/VBR thresholds came from VideoToolbox.'
+    basis:
+    - path: internal/vpl/encoder.go
+      input_hash: ccb6b24a920c4d248f82b35e848f0f2d5b87af9b3e7c73e194a2436917d3b2af
+    - path: internal/vpl/encparam.go
+      input_hash: f569cb7a7bc117241ddb9a12e43cf81486934207c9b14799a1ba7977cd2c89b3
+    - path: internal/vpl/session.go
+      input_hash: d6e50f0014462b0169fc9488279f7f4dbf36de88a2c87ff10fe6a2cb9868bb9e
+    - path: internal/vpl/backend.go
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+  vpl-cross-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: scripts/crossbuild.sh
+    evidence:
+      path: scripts/crossbuild.sh
+      note: all six targets ok on 2026-10-09 with internal/vpl; go vet passes for darwin and for GOOS=linux
+        GOARCH=amd64
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+    - path: backends_linux.go
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+  vpl-host-suite:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-intel-vpl
+      platform: linux
+      gpu: intel
+    test: go test -count=1 ./... on the author's M3 (darwin/arm64, 2026-10-09), VideoToolbox conformance
+      included, and cd ebitenvideo && go test ./...
+    evidence:
+      path: probe_test.go
+    basis:
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+open_questions:
+  av1lw-vpl-hidden-frames:
+    text: The VPL decoder is assumed to return MFX_ERR_MORE_DATA after a hidden frame with the rest of
+      the temporal unit unread, which the loop answers by calling again (ffmpeg's qsvdec re-submits the
+      remainder the same way). Not observed.
+    state: open
+    resolution: Run TestDecodeAV1MatchesReference with HWMEDIACODEC_BACKENDS=vpl on Tiger Lake or newer.
+    scope:
+      platform:
+      - linux
+      - windows
+facts:
+  libraries:
+    linux:
+    - libvpl.so.2 (dispatcher)
+    - libmfx-gen.so.1.2 (Gen12+ runtime)
+    - libmfxhw64.so.1 (legacy Media SDK runtime for Gen9/Gen11)
+    windows:
+    - libvpl.dll or direct runtime libmfx64-gen.dll shipped with the Intel graphics driver
+  licence: MIT for both the dispatcher (intel/libvpl) and the GPU runtime (intel/vpl-gpu-rt).
+  api_model: full decoder/encoder (MFXVideoDECODE_DecodeFrameAsync takes a bitstream; MFXVideoENCODE_EncodeFrameAsync
+    emits a bitstream); mfxSession / mfxVideoParam / mfxFrameSurface1.
+  dispatcher_behaviour: The dispatcher itself scans library folders and resolves MFXQueryImplsDescription
+    at run time; a Go backend can skip the dispatcher and dlopen the runtime directly, or dlopen the dispatcher.
+  hardware_floor:
+    linux: Tiger Lake (Gen12) and newer for the VPL runtime; Gen9/Gen11 only through the deprecated Media
+      SDK runtime.
+    windows: Broad; the driver bundles the runtime.
+  ffi_notes:
+  - Plain C ABI with large versioned structs (mfxVideoParam unions); Go struct layouts must match the
+    headers exactly.
+  - Surfaces can be system memory (simplest, copies) or VA/D3D11 surfaces (zero-copy, later).
+  - Depends on libva/libva-drm at run time on Linux; errors from the VA layer surface as mfxStatus codes.
+  why_it_matters: Gives Intel GPUs on Linux a full-API path without the Go bitstream parser that raw VA-API
+    needs; the same API works on Windows as an alternative to Media Foundation with richer controls (look-ahead,
+    low-power encode).
+  evidence:
+  - url: https://github.com/nanazhan/vpl-gpu-rt
+    claim: Intel VPL GPU Runtime is MIT licensed, depends on LibVA and supports platforms starting with
+      Tiger Lake.
+  - url: https://packages.debian.org/ja/sid/libmfx-gen1.2
+    claim: Debian packages the runtime as libmfx-gen1.2 depending on libva2 and libva-drm2.
+  - url: https://oneapi-spec.uxlfoundation.org/specifications/oneapi/v1.2-rev-1/elements/onevpl/source/programming_guide/vpl_prg_session
+    claim: The dispatcher loads candidate runtime libraries at run time and resolves MFXQueryImplsDescription.
+  support_tier: tier1 (Linux Intel Gen12+; optional on Windows)
+  implementation:
+    package: internal/vpl (doc.go, backend.go, session.go, decoder.go, encoder.go, encparam.go, pixels.go,
+      paramsets.go) over internal/vpl/sys (purego loader for libvpl.so.2, struct mirrors of the API 2.8
+      headers checked by layout_test.go against gcc sizeof/offsetof for x86_64) and the libva bindings
+      of internal/vaapi/sys for the display.
+    api_level: only API 1.x calls (MFXVideoCORE_SetHandle/SyncOperation, MFXVideoDECODE_*, MFXVideoENCODE_*
+      with application-allocated surfaces) plus the 2.x dispatcher entry points (MFXLoad, MFXCreateConfig,
+      MFXSetConfigFilterProperty, MFXCreateSession), so both libmfx-gen and the legacy libmfxhw64 runtime
+      are driven the same way.
+    session: first /dev/dri/renderD128..143 whose sysfs PCI vendor is 0x8086 (or whose VA vendor string
+      names Intel when sysfs is unreadable; HWMEDIACODEC_VPL_DEVICE overrides); open, vaGetDisplayDRM,
+      vaInitialize with libva messages silenced; MFXLoad, one config with mfxImplDescription.Impl = MFX_IMPL_TYPE_HARDWARE
+      (the mfxVariant passed by value as two uint64 words), MFXCreateSession(index 0), MFXVideoCORE_SetHandle(MFX_HANDLE_VA_DISPLAY)
+      tolerating MFX_ERR_UNDEFINED_BEHAVIOR; one session, loader, display and file descriptor per decoder
+      or encoder; MFXVideoCORE_SyncOperation waits at most 60 s and MFX_WRN_DEVICE_BUSY is retried every
+      millisecond for at most 5 s.
+    probe: MFXVideoDECODE_Query and MFXVideoENCODE_Query for 1080p NV12 4:2:0 (High / Main profile, CQP
+      for the encoder); an error or MFX_WRN_PARTIAL_ACCELERATION means not supported; no size limits are
+      reported yet.
+    decoder: a Go keyframe gate with a VPS/SPS/PPS cache by id (the first keyframe after start or Flush
+      is prefixed with the cached sets when it lacks them); MFXVideoDECODE_DecodeHeader on that packet,
+      8-bit 4:2:0 NV12 check, MFXVideoDECODE_QueryIOSurf, MFXVideoDECODE_Init with MFX_IOPATTERN_OUT_SYSTEM_MEMORY
+      and AsyncDepth 1; NumFrameSuggested surfaces up front, more on demand (64 at most), each an mfxFrameSurface1
+      plus a pixel buffer on the Go heap with a 64-byte-aligned pitch; per access unit one mfxBitstream
+      with the PTS plus 2^40 as TimeStamp (so that a negative PTS is neither MFX_TIMESTAMP_UNKNOWN nor
+      damaged by the runtime's double-seconds arithmetic) and MFX_BITSTREAM_COMPLETE_FRAME when DecodeHeader
+      reported a progressive sequence, DecodeFrameAsync repeated until MFX_ERR_MORE_DATA (MFX_ERR_MORE_SURFACE
+      and MFX_WRN_VIDEO_PARAM_CHANGED continue, MFX_ERR_INCOMPATIBLE_VIDEO_PARAM drains, closes and re-initialises
+      from the same access unit once); every output is synchronised at once and its CropX/Y/W/H rectangle
+      copied into a pooled NV12 buffer; Flush drains with a NULL bitstream and calls MFXVideoDECODE_Reset
+      (Close on failure).
+    encoder: mfxVideoParam with coded size aligned to 16 and the picture as crop, NV12 4:2:0 progressive,
+      frame rate fraction (30/1 when unknown), TargetUsage 4, GopPicSize = keyframe interval (two seconds
+      or 60 frames by default), MFX_GOP_CLOSED, IdrInterval 0 for H.264 and 1 for HEVC (every I-frame
+      is IDR), GopRefDist 1 or 3 with WithBFrames (never with low latency or Baseline), rate control CQP
+      (qp = round(51 - 45*quality), 26 by default), VBR with a 2x peak or CBR in kbit/s with BRCParamMultiplier
+      above 65535, profiles Constrained Baseline/Main/High and HEVC Main, LowPower left to the runtime,
+      AsyncDepth 1, MFX_IOPATTERN_IN_SYSTEM_MEMORY; mfxExtCodingOption (AUDelimiter off) and mfxExtCodingOption2
+      (AdaptiveI, AdaptiveB and RepeatPPS off, BRefType off with B-frames) and, for HEVC, mfxExtCodingOption3
+      with GPB off (plain P pictures instead of generalised B, which ffprobe reports as B-frames); when
+      Init rejects the configuration it is retried without mfxExtCodingOption3 and then without any buffer;
+      MFXVideoENCODE_GetVideoParam with mfxExtCodingOptionSPSPPS (+VPS) for the parameter sets, the real
+      GopRefDist and BufferSizeInKB; a changed rate control method is ErrUnsupported; per frame the picture
+      is copied into a free surface with edge replication, mfxEncodeCtrl.FrameType = I|REF|IDR forces
+      a keyframe, EncodeFrameAsync then SyncOperation and a copy of the bitstream; MFX_ERR_NOT_ENOUGH_BUFFER
+      doubles the buffer, MFX_WRN_DEVICE_BUSY and MFX_WRN_IN_EXECUTION are retried and any other warning
+      counts as "frame taken" (as FFmpeg does); Flush drains with a NULL surface and the next Send closes
+      and re-initialises the encoder (MFXVideoENCODE_Reset leaves it to the runtime whether a new sequence
+      starts) and forces an IDR.
+    output_contract: display-order NV12 frames with the packet's PTS (codec.DisplayOrderer, no Go reorder
+      layer); Annex-B packets with Keyframe from the NAL types, VPS/SPS/PPS prepended from GetVideoParam
+      when a keyframe lacks them, DTS = input PTS of the k-th frame minus (GopRefDist - 1) frame durations.
+    limitations:
+    - 8-bit 4:2:0 NV12 only in both directions (RGBA/BGRA through the conversion in Go, no 10-bit); AV1
+      is decoded only (8-bit Main profile).
+    - WithDecodeOrder has no effect; the runtime's own reorder delay applies.
+    - Even picture dimensions for encoding; one synchronous operation per frame.
+    - Needs libvpl (the legacy libmfx.so.1 dispatcher alone is not used); Linux only.
+    - Probe reports no maximum picture size.
+  host_verification_2026-10-09:
+    layouts: 159 sizes/offsets and 13 constants equal the values gcc prints from Debian's libvpl-dev 2023.1.1
+      headers for x86_64-linux-gnu.
+    symbols: all 24 entry points bind against libvpl 2.8 in a Debian bookworm amd64 container with libmfx-gen1.2
+      22.6.4; the dispatcher accepts the hardware filter and refuses a mistyped variant; MFXCreateSession
+      reports MFX_ERR_NOT_FOUND without a GPU and Probe returns an empty list.
+    unit: encoder parameter mapping, bitstream sizing, surface upload/crop copies and the parameter-set
+      cache are tested without the library.
+    pending: decode and encode conformance on real Intel hardware (see milestone:linux-intel-vpl).
+  milestone_notes:
+    vpl:
+      steps:
+      - internal/vpl/sys - status codes, FourCC identifiers and struct mirrors of the VPL headers (types.go,
+        no build constraint), a purego loader for libvpl.so.2 with 24 entry points (sys_linux.go), layout/constant
+        tests and a dispatcher test that runs without a GPU.
+      - internal/vpl/session.go - Intel render node selection (sysfs PCI vendor 0x8086, else the VA vendor
+        string; HWMEDIACODEC_VPL_DEVICE overrides), vaGetDisplayDRM/vaInitialize through internal/vaapi/sys,
+        MFXLoad + MFXCreateConfig + MFXSetConfigFilterProperty(Impl = hardware) + MFXCreateSession, MFXVideoCORE_SetHandle(VA
+        display), bounded SyncOperation and busy waits.
+      - internal/vpl/decoder.go - keyframe gate with a parameter-set cache in Go; DecodeHeader on the
+        first keyframe, QueryIOSurf, Init with system-memory output and AsyncDepth 1; a DecodeFrameAsync
+        loop per access unit (MFX_BITSTREAM_COMPLETE_FRAME for progressive sequences) that synchronises
+        every output at once and copies the crop rectangle into pooled NV12 buffers; the PTS travels as
+        TimeStamp with a 2^40 bias (stamp.go); surfaces grow on demand; MFX_ERR_INCOMPATIBLE_VIDEO_PARAM
+        drains, closes and re-initialises from the same access unit; Flush drains with a NULL bitstream
+        and resets.
+      - internal/vpl/encparam.go, encoder.go - mfxVideoParam from the public controls (see backend:intel-vpl
+        facts.implementation.encoder), Init with staged retries without extension buffers, GetVideoParam
+        for the real GopRefDist, buffer size and the SPS/PPS/VPS; one EncodeFrameAsync + SyncOperation
+        per frame; forced IDR through mfxEncodeCtrl; DTS from the input PTS queue; drain with a NULL surface
+        at Flush, Close + Init before the next frame.
+      - Root wiring (vpl registered between nvidia and vaapi), HWMEDIACODEC_BACKENDS backend selection,
+        probe and decode-order test adjustments, README status row and Linux notes.
+      oracle_recipes:
+        layout: docker build --platform linux/amd64 with apt-get install libvpl-dev gcc; a C program including
+          vpl/mfx.h prints sizeof and offsetof for every mirrored struct and the enumerators the Go code
+          hard-codes; a script turns the output into internal/vpl/sys/layout_test.go.
+        symbols: the same image with libvpl2, libmfx-gen1.2, libva2 and libva-drm2; run the CGO_ENABLED=0
+          linux/amd64 test binaries (go test -c). The dispatcher loads and validates the filter without
+          a GPU; MFXCreateSession then reports MFX_ERR_NOT_FOUND.
+        headers: the doc comments in vpl/mfxvideo.h and vpl/mfxstructures.h are the API contract (DecodeFrameAsync
+          status codes, IdrInterval per codec, SetHandle's MFX_ERR_UNDEFINED_BEHAVIOR, drain with NULL).
+      design_choices:
+      - VPL instead of extending the VA-API backend for Intel - it gives HEVC and B-frame encoding at
+        once and keeps parsing, reference management and rate control in the runtime (as NVDEC/NVENC do
+        for NVIDIA); VA-API stays the fallback for Intel GPUs without a runtime and for H.264 on AMD.
+      - The dispatcher (libvpl) rather than dlopening libmfx-gen directly - MFXInitialize takes a large
+        struct by value, the dispatcher also finds the legacy runtime, and its filter API needs only one
+        16-byte by-value argument, passed as two uint64 words.
+      - External system-memory surfaces (API 1.x model) rather than the 2.x internal allocation (MFXMemory_GetSurfaceForDecode
+        + FrameInterface function pointers) - no callbacks, works with the legacy runtime, and frames
+        are copied to Go memory anyway.
+      - Synchronise every operation immediately (AsyncDepth 1, one bitstream buffer) - the simplest correct
+        mapping to Send/Receive; throughput is bounded by per-picture latency.
+      - Surface and bitstream structures keep buffer addresses as uintptr and live on the Go heap, so
+        the garbage collector never scans memory the runtime's threads write to.
+      - A HWMEDIACODEC_BACKENDS environment variable instead of a public option - two backends now cover
+        the same Intel GPU and the conformance suite has to run against each without an API change.
+      review_2026-10-09:
+        method: An independent read of internal/vpl against the doc comments of the VPL headers, with
+          the conformance tests walked through by hand, since nothing can run without an Intel GPU.
+        fixed:
+        - The encoder queued a frame's PTS after the call that may already return its access unit, so
+          every DTS lagged one frame (DTS != PTS without B-frames).
+        - HEVC P pictures default to generalised B (GPB); mfxExtCodingOption3.GPB is now off.
+        - A warning without a sync point no longer resubmits the same surface; only device-busy and in-execution
+          are retried.
+        - Flush is followed by Close + Init instead of MFXVideoENCODE_Reset, whose effect on the coded
+          sequence is left to the runtime.
+        - MFX_BITSTREAM_COMPLETE_FRAME is set for progressive sequences only; MFX_ERR_MORE_SURFACE with
+          an unlocked work surface counts as a stalled call; time stamps carry a bias so that negative
+          PTS values survive.
+        open:
+        - With two Intel GPUs the dispatcher's implementation 0 is paired with the first Intel render
+          node; a second node is not tried when that pair cannot serve the codec.
+    av1lw:
+      implementation:
+        vpl: decodeCodecID adds MFX_CODEC_AV1; Send gates on the key frame like NVDEC; the DecodeFrameAsync
+          loop continues after MFX_ERR_MORE_DATA when the unit is not consumed (AV1 only). Film grain
+          surfaces come from the existing MFX_ERR_MORE_SURFACE handling.
+  learned:
+  - The VPL dispatcher can be exercised without a GPU far enough to prove the by-value mfxVariant convention
+    - it checks the variant type against the property name.
+  - Several mfx structs are declared with pragma pack(4); their mirrors need no manual padding as long
+    as no 64-bit member sits at a 4-byte offset in the fields used (the Width/Height arm of the mfxFrameInfo
+    union instead of the BufferSize arm).
+  - MFXVideoDECODE_Query and MFXVideoENCODE_Query select the codec by the output structure's CodecId (runtime
+    behaviour recalled from the Media SDK sources, not stated in the headers).
+  next_candidates:
+  - Run the decode and encode conformance tests on an Intel Linux machine (HWMEDIACODEC_BACKENDS=vpl and
+    =vaapi); record GPU generation, runtime version and fps here and flip the verification states.
+  - RGBA/BGRA through MFXVideoVPP (NV12 to RGB4 after decode, RGB4 to NV12 before encode) instead of the
+    Go conversion of internal/pixconv.
+  - Maximum picture size per codec in Probe from the dispatcher's mfxImplDescription.
+  - AV1 encoding (Arc/DG2 and newer) and 10-bit HEVC (P010); AV1 decoding was added in milestone:av1-decode-linux-windows.
+  - Batch throughput with AsyncDepth > 1 and a ring of bitstream buffers.
+  - Share the parameter-set cache with internal/mediafoundation (the two copies are identical).
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: implemented_in
+  to: milestone:linux-intel-vpl
+- relation: layered_on
+  to: backend:vaapi
+  scope:
+    platform: linux
+- relation: ranked_by
+  to: policy:support-tiers
+- relation: supersedes
+  to: milestone:linux-intel-vpl
+- relation: supersedes
+  to: milestone:av1-decode-linux-windows
 history:
   researched-2026-10-08:
     summary: Backend landscape entry written from Intel and Debian documentation (libraries, API model,
       hardware floor).
   implemented-2026-10-09:
-    summary: Linux backend implemented in internal/vpl with purego (milestone:linux-intel-vpl);
-      lifecycle moved to active; capabilities implemented with inferred authority until the hardware
-      run.
+    summary: Linux backend implemented in internal/vpl with purego (milestone:linux-intel-vpl); lifecycle
+      moved to active; capabilities implemented with inferred authority until the hardware run.
+  vpl-requested-2026-10-09:
+    summary: Author asked for Linux Intel support.
+  vpl-implemented-2026-10-09:
+    summary: 'Code complete on branch claude/linux-intel-support-9562f0: layouts verified against the
+      VPL headers, symbols and the dispatcher filter verified against libvpl 2.8 in a container, host
+      suite and cross builds pass; hardware conformance pending.'
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:linux-intel-vpl, milestone:av1-decode-linux-windows
+      was folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as
+      evidence notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:linux-intel-vpl
+    - milestone:av1-decode-linux-windows

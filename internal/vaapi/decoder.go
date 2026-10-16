@@ -30,12 +30,11 @@ type surface struct {
 	pendingOutput bool
 	dummy         bool // shared stand-in for non-existing (frame_num gap) frames
 
-	pts                 int64
-	order               codec.Order
-	cropX, cropY        int
-	width, height       int
-	codedW, codedH      int
-	deriveTried, derive bool
+	pts            int64
+	order          codec.Order
+	cropX, cropY   int
+	width, height  int
+	codedW, codedH int
 }
 
 // surfaceID implements vaSurface.

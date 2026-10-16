@@ -3,7 +3,7 @@ type: backend
 title: VideoToolbox (macOS / iOS)
 summary: Apple's C-level hardware video codec API. Full decoder/encoder sessions that accept AVCC NAL
   units and return CVPixelBuffers; the simplest target for M1.
-lifecycle: proposed
+lifecycle: active
 authority: inferred
 aliases:
 - VideoToolbox
@@ -14,6 +14,43 @@ scope:
   - darwin
   - ios
   gpu: apple-silicon
+constraints:
+- Annex-B input (start codes); the backend converts to AVCC and builds the CMVideoFormatDescription from
+  in-band SPS/PPS.
+- Output frames are NV12 ('420v') copied into Go-owned buffers with Release().
+- CGO_ENABLED=0; CMTime arguments of VTCompressionSessionEncodeFrame/CompleteFrames are passed by value
+  through purego struct support.
+- Input frames are NV12 owned by the caller and copied into a CVPixelBuffer from the session pool before
+  Send returns.
+- Output is Annex-B with VPS/SPS/PPS prepended to every keyframe; packets are returned in decode order
+  with PTS and DTS.
+- Unsupported controls (profile not defined for the codec, CBR before macOS 13, quality mode rejected
+  by the encoder) are reported as ErrUnsupported, never silently ignored.
+- RGBA/BGRA frames are one plane with rows of exactly 4*Width bytes so that Planes[0] feeds ebiten.Image.WritePixels
+  as is; the conversion stays in the backend, never in the public API.
+- CGO_ENABLED=0; every framework call goes through internal/videotoolbox/sys via purego; ffmpeg (libsvtav1
+  as the encoder, libdav1d as the reference decoder) is a test oracle only.
+- The AV1 decoder implements codec.DisplayOrderer returning true, so NewDecoder does not wrap it in the
+  reorder layer; WithDecodeOrder is a no-op; Frame.PTS equals Packet.PTS; one Receive per temporal unit.
+- Probe lists av1 decode only when VTIsHardwareDecodeSupported('av01') is non-zero; NewDecoder returns
+  *UnsupportedError otherwise, also with WithSoftwareFallback, because VideoToolbox does not let applications
+  instantiate its software AV1 decoder (checked with a probe session at NewDecoder time).
+- Streams outside Main profile 4:2:0 (High and Professional profiles, monochrome) report ErrUnsupported
+  from Send before a session is created; a different sequence header replaces the session.
+- iOS builds use CGO_ENABLED=1 with Xcode's clang (purego's is_ios.go rejects CGO_ENABLED=0; purego Tier
+  1 lists iOS and Android as cgo-only). The library has no cgo source; the desktop targets stay CGO_ENABLED=0
+  (scripts/crossbuild.sh unchanged, scripts/mobilebuild.sh added for ios and android).
+- Every VideoToolbox symbol the backend binds must exist on iOS 11, or be optional. Optional on iOS (checked
+  in the iOS 27.0 SDK headers on 2026-10-11) are kVTVideoDecoderSpecification_{Require,Enable}HardwareAcceleratedVideoDecoder
+  (iOS 17.0), kVTVideoEncoderSpecification_{Require,Enable}HardwareAcceleratedVideoEncoder (iOS 17.4),
+  kVTVideoEncoderSpecification_EnableLowLatencyRateControl (iOS 14.5), kVTCompressionPropertyKey_ConstantBitRate
+  (iOS 16.0) and VTRegisterSupplementalVideoDecoderIfAvailable (iOS 26.2). When a hardware key is absent
+  the specification dictionary stays empty, which is correct because every iOS codec is hardware.
+- kVTInvalidSessionErr (-12903) from VTDecompressionSessionDecodeFrame, VTCompressionSessionEncodeFrame,
+  VTCompressionSessionCompleteFrames or an output callback is recovered inside the backend, never reported
+  from Send or Flush. Decoder - new session on the same format description, frames in flight lost, resume
+  at the next keyframe (the triggering packet itself when it is one). Encoder - new session with the same
+  properties, next frame forced to a keyframe; Flush on a dead session just reopens it.
 capabilities:
   decode/h264:
     state: implemented
@@ -148,202 +185,313 @@ capabilities:
       path: internal/videotoolbox/backend.go
       note: No Apple Silicon chip has an AV1 encoder; NewEncoder(AV1) reports ErrUnsupported without asking
         VideoToolbox (2026-10-09)
-facts:
-  libraries:
-  - /System/Library/Frameworks/VideoToolbox.framework/VideoToolbox
-  - /System/Library/Frameworks/CoreMedia.framework/CoreMedia
-  - /System/Library/Frameworks/CoreVideo.framework/CoreVideo
-  - /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
-  api_model: full decoder/encoder (no application-side DPB management)
-  key_calls:
-    decode:
-    - CMVideoFormatDescriptionCreateFromH264ParameterSets
-    - CMVideoFormatDescriptionCreateFromHEVCParameterSets
-    - CMVideoFormatDescriptionCreate ('av01' for AV1, with the av1C record under the SampleDescriptionExtensionAtoms extension)
-    - VTDecompressionSessionCreate
-    - VTDecompressionSessionDecodeFrame
-    - VTDecompressionSessionWaitForAsynchronousFrames
-    - VTDecompressionSessionInvalidate
-    encode:
-    - VTCompressionSessionCreate
-    - VTSessionSetProperty
-    - VTCompressionSessionPrepareToEncodeFrames
-    - VTCompressionSessionEncodeFrame
-    - VTCompressionSessionCompleteFrames
-    probe:
-    - VTIsHardwareDecodeSupported
-    - VTCopySupportedPropertyDictionaryForEncoder
-    - VTCopyVideoEncoderList
-  input_format: AVCC/HVCC length-prefixed NAL units in a CMSampleBuffer; Annex-B must be converted; parameter
-    sets go in the format description.
-  output_format: CVPixelBuffer, typically NV12 ('420v'/'420f') or BGRA on request ('RGBA' is accepted
-    at session creation but fails at decode time with -6680); encoder returns CMSampleBuffer with AVCC
-    data and parameter sets in the format description.
-  ffi_notes:
-  - Plain C functions plus CoreFoundation types; purego.Dlopen + RegisterLibFunc work; callbacks via purego.NewCallback.
-  - CFRelease discipline for every returned CF object; use CFRetain when a buffer outlives the callback.
-  - Output callback runs on a VideoToolbox thread; copy or retain inside the callback and hand off to
-    a Go channel.
-  - purego v0.11.1 passes CMTime by value (24-byte struct) to VTCompressionSessionEncodeFrame and CompleteFrames
-    on darwin/arm64 and amd64.
-  - The compression callback is invoked on a VideoToolbox thread; purego.NewCallback + fakecgo handle
-    it with CGO_ENABLED=0 (verified 2026-10-09).
-  quirks:
-  - Encoder buffers frames; a forced-keyframe property must be set until output appears.
-  - Session must be recreated when SPS/PPS change.
-  - Global registry state makes concurrent session creation racy; serialize creation.
-  - Hardware availability differs between Apple Silicon and Intel Macs; software fallback exists inside
-    VideoToolbox unless kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder is set.
-  - Temporal processing flag did not produce display-order output for H.264/HEVC with correct PTS (sync
-    and async tried, 2026-10-09, M3); reorder in Go.
-  - Encoder output samples never contain parameter sets; fetch them from the format description with CMVideoFormatDescriptionGet{H264,HEVC}ParameterSetAtIndex
-    (verified 2026-10-09).
-  - EnableLowLatencyRateControl implies an infinite GOP, no reordering and High profile; enforce a GOP
-    from the application with ForceKeyFrame.
-  - RealTime=true did not reduce throughput on an M3 (2026-10-09); it is a scheduling hint, not a pacing
-    control.
-  - A forced keyframe after VTCompressionSessionCompleteFrames keeps a reused session decodable from the
-    first new packet.
-  - Pixel buffers of type 'RGBA' are rejected at use (kCVReturnInvalidPixelFormat -6680) both as decompression
-    destination and as CVPixelBufferCreate format; use BGRA and swap in Go (verified 2026-10-09).
-  - VTCompressionSessionGetPixelBufferPool must be called per frame - with BGRA source attributes the
-    pool is replaced after the first frame and a cached pool crashes. Buffers created with CVPixelBufferCreate
-    need kCVPixelBufferIOSurfacePropertiesKey, otherwise the encoder's pixel transfer fails with -12905.
-  - The encoder converts BGRA input with BT.709 and writes no colour description unless kVTCompressionPropertyKey_ColorPrimaries/TransferFunction/YCbCrMatrix
-    are set; the decoder converts untagged 320x240 output with BT.601 (verified 2026-10-09).
-  - The hardware H.264 encoder writes no VUI bitstream_restriction (pic_order_cnt_type 0), so a spec-exact
-    reorder buffer holds its streams back by the DPB size; the HEVC encoder writes sps_max_num_reorder_pics.
-  - The hardware decoder rejects 64x48 pictures with kVTVideoDecoderMalfunctionErr (-12911); 96x64 works.
-  - AV1 needs a format description built with CMVideoFormatDescriptionCreate('av01', w, h, extensions),
-    where extensions maps kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms to a dictionary
-    whose "av1C" entry is the ISOBMFF AV1CodecConfigurationRecord (CFData) with the sequence header OBU
-    as configOBUs. A whole temporal unit is one sample; temporal delimiter OBUs may stay in or be stripped
-    (same output, M3, 2026-10-09).
-  - VTIsHardwareDecodeSupported('av01') is 1 on the M3 without VTRegisterSupplementalVideoDecoderIfAvailable,
-    and that call changes nothing for AV1 (VP9 stays 0 even after registering it).
-  - macOS 26 lists "SW AV1 Decoder" (com.apple.videotoolbox.videodecoder.av1.sw) in VTCopyVideoDecoderList
-    but a session with EnableHardwareAcceleratedVideoDecoder=false fails with -12906, as does naming the
-    DecoderID, so WithSoftwareFallback cannot deliver AV1 on M1/M2.
-  - The AV1 decoder converts Main profile 10-bit pictures to '420v' (8-bit) itself, within 53.5 dB of ffmpeg's
-    conversion; 8-bit AV1 output is bit-exact with libdav1d, and one temporal unit yields exactly one frame
-    in presentation order (show_existing_frame units output the hidden frame).
-  evidence:
-  - url: https://pkg.go.dev/github.com/go-macos/videotoolbox
-    claim: Pure Go purego-based H.264/HEVC hardware decoding on macOS.
-  - url: https://pkg.go.dev/github.com/tmc/apple/videotoolbox
-    claim: Go bindings exposing VTCompressionSession and VTDecompressionSession.
-  - url: https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/apple
-    claim: Hardware AV1 decoding on Apple Silicon starts with the M3 generation.
-  - url: https://searchfox.org/mozilla-central/source/dom/media/platforms/apple/AppleDecoderModule.cpp
-    claim: Firefox calls VTRegisterSupplementalVideoDecoderIfAvailable (macOS 11+) before probing VP9/AV1
-      hardware decode.
-  codec_support_by_hardware:
-    note: Inferred from public sources; confirm with VTIsHardwareDecodeSupported / VTCopyVideoEncoderList
-      on the target machine.
-    apple-silicon-m1-m2:
-      decode_hw:
-      - h264
-      - hevc
-      - vp9 (after VTRegisterSupplementalVideoDecoderIfAvailable, macOS 11+)
-      - prores (Pro/Max/Ultra)
-      encode_hw:
-      - h264
-      - hevc
-      - prores
-      av1: software decode only; no hardware encode
-    apple-silicon-m3-and-later:
-      decode_hw:
-      - h264
-      - hevc
-      - vp9 (same registration call; VTIsHardwareDecodeSupported('vp09') stayed 0 on the author's M3 even after it)
-      - av1 (verified 2026-10-09 on the author's M3, milestone:darwin-av1-decode)
-      - prores
-      encode_hw:
-      - h264
-      - hevc
-      - prores
-      av1_encode: none in hardware
-    intel-mac:
-      decode_hw:
-      - h264
-      - hevc (2017+ Macs, Kaby Lake or newer)
-      encode_hw:
-      - h264
-      - hevc (2017+)
-      av1_vp9: no hardware
-      note: VideoToolbox abstracts the Intel iGPU/AMD dGPU; same API. macOS 26 is reported as the last
-        release supporting Intel Macs.
-  ios:
-    build: GOOS=ios with CGO_ENABLED=1 and Xcode's clang (purego has no cgo-free mode on iOS); the darwin
-      build constraint covers ios so the same files compile; frameworks dlopen from the same /System/Library/Frameworks
-      paths (verified in the Simulator, iOS 26).
-    optional_symbols:
-      kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder: ios 17.0
-      kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: ios 17.0
-      kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: ios 17.4
-      kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: ios 17.4
-      kVTVideoEncoderSpecification_EnableLowLatencyRateControl: ios 14.5
-      kVTCompressionPropertyKey_ConstantBitRate: ios 16.0
-      VTRegisterSupplementalVideoDecoderIfAvailable: ios 26.2
-      note: bound with optPtrConst; an absent hardware key leaves the specification empty (every iOS codec
-        is hardware). Everything else the backend binds is iOS 11 or older (iOS 27.0 SDK headers, 2026-10-11).
-    background: iOS invalidates the sessions of a background application (kVTInvalidSessionErr -12903 from
-      every call); internal/videotoolbox/invalidation.go reopens the session - the decoder resumes at the
-      next keyframe (or the triggering packet when it is one), the encoder forces a keyframe. Tested on
-      macOS by invalidating by hand.
-    simulator: no hardware decoder (VTIsHardwareDecodeSupported is 0, WithSoftwareFallback needed); the
-      encoders accept RequireHardwareAcceleratedVideoEncoder and are listed as hardware; output valid
-      (ffmpeg, about 49 dB PSNR). CLI decode output bit-identical to the Mac's hardware decode.
-    hardware_status: not yet run on an iPhone (milestone:ios-videotoolbox, iphone-run not_run).
-  support_tier: tier1
-  scope_note: Intel Macs are out of scope; the Intel Mac facts remain as reference only.
-  implementation:
-    package: internal/videotoolbox (backend.go, decoder.go, paramsets.go) and internal/videotoolbox/sys
-      (purego bindings)
-    decode_mode: synchronous (VTDecodeFrameFlags = 0); output callback runs on the calling thread before
-      DecodeFrame returns; frames in decode order
-    output: CVPixelBuffer '420v' (NV12) or 'BGRA' (BGRA, and RGBA after an R/B swap in Go) copied into
-      Go-owned planes with tight rows; buffers pooled and returned via Frame.Release; display order comes
-      from the backend-independent internal/reorder layer (the backend only carries codec.Order through
-      sourceFrameRefCon)
-    callback: one purego.NewCallback shared by all decoders; decoders found via integer refcon; CFRetain
-      inside the callback, CFRelease after copy
-    session_policy: RequireHardwareAcceleratedVideoDecoder unless WithSoftwareFallback; recreate session
-      when any SPS/PPS/VPS changes; skip until keyframe after creation and after Flush
-    performance: ~834 fps for 1080p H.264 (no B-frames) on M3 including the CPU copy
-    encode_mode: VTCompressionSessionEncodeFrame is asynchronous; the output callback runs on a VideoToolbox
-      thread, retains the CMSampleBuffer and Receive converts it to an Annex-B Packet on the caller goroutine
-    encode_input: NV12 ('420v') or BGRA CVPixelBuffers from VTCompressionSessionGetPixelBufferPool (looked
-      up per frame) or, when the pool is exhausted, IOSurface-backed CVPixelBufferCreate; filled by a row
-      copy from the caller's planes, swapping R/B for RGBA input; RGB input sets the 709 colour properties
-    encode_properties: RealTime (true in low-latency mode), AllowFrameReordering (B-frames), ProfileLevel,
-      ExpectedFrameRate, AverageBitRate or ConstantBitRate (macOS 13+), Quality (float), MaxKeyFrameInterval;
-      ForceKeyFrame per frame
-    encode_performance: ~207 fps H.264 and ~186 fps HEVC at 1080p on M3 including the input copy; low-latency
-      rate control ~25-40% slower
-    encode_probe: VTCopySupportedPropertyDictionaryForEncoder with RequireHardwareAcceleratedVideoEncoder
-    av1_decode: internal/videotoolbox/av1.go - sendAV1 parses the temporal unit with internal/av1, builds
-      av1C and the format description on a new sequence header, waits for a shown key frame after creation
-      and Flush, passes the unit unchanged to decodePacket; OutputsDisplayOrder() is true for AV1 so the
-      public API skips the reorder layer; Probe uses VTIsHardwareDecodeSupported('av01'); NewDecoder with
-      WithSoftwareFallback probes a session (av1SessionAvailable) and reports ErrUnsupported when none can
-      be made
-    av1_performance: ~820 fps for 1080p AV1 to NV12, ~310 to BGRA, ~220 to RGBA on an M3 (SVT-AV1 preset
-      10 stream, 300 frames, 2026-10-09)
-relations:
-- relation: candidate_for
-  to: requirement:hwmediacodec
-- relation: ranked_by
-  to: policy:support-tiers
+acceptance:
+  m1-decode-reference:
+    text: Decoding testdata/*.h264 produces the same frame count and per-frame NV12 checksums as ffmpeg
+      -c:v h264 -f rawvideo -pix_fmt nv12 (software decode) within the tolerance of bit-exact output.
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m1-decode-reference-test
+  m1-probe-darwin:
+    text: Probe() on an Apple Silicon Mac reports backend videotoolbox with decode h264 and hevc; on a
+      machine without VideoToolbox the backend is absent and no error is returned.
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m1-probe-test
+  m1-parameter-set-change:
+    text: A stream whose SPS/PPS change mid-way (resolution change) is decoded by recreating the session,
+      with no frames lost before the change.
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m1-sps-change-test
+  m1-cross-build:
+    text: GOOS=linux and GOOS=windows builds of the module succeed with CGO_ENABLED=0 (backends compile
+      to stubs that report absent).
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m1-cross-build-check
+  m2-encode-decodable:
+    text: ffmpeg decodes the encoded stream to the same frame count as the source and every frame has
+      luma PSNR of at least 30 dB against the source.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-encode-reference-test
+  m2-inband-parameter-sets:
+    text: Every keyframe packet carries SPS/PPS (and VPS for HEVC) in band and Packet.Keyframe agrees
+      with ffprobe key_frame.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-encode-reference-test
+  m2-keyframe-control:
+    text: WithKeyframeInterval(n) produces a keyframe at every n-th frame; Frame.ForceKeyframe produces
+      a keyframe at that frame and nowhere else.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-keyframe-interval-test
+    - m2-force-keyframe-test
+  m2-rate-control:
+    text: A higher VBR bitrate yields a proportionally larger stream, CBR holds the target bitrate, and
+      quality mode trades size for PSNR.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-bitrate-test
+    - m2-quality-test
+  m2-bframes-and-low-latency:
+    text: WithBFrames yields B-frames delivered in decode order with monotonic DTS; WithLowLatency yields
+      no B-frames, honours the keyframe interval and decodes correctly.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-bframes-test
+    - m2-low-latency-test
+  m2-profiles:
+    text: WithProfile selects Baseline/Main/High for H.264 and Main for HEVC as reported by ffprobe; undefined
+      combinations report ErrUnsupported.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-profile-test
+  m2-transcode-roundtrip:
+    text: Hardware decode of a hardware-encoded stream reproduces the source frames (luma PSNR of at least
+      30 dB).
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-transcode-test
+  m2-probe-encode:
+    text: Probe() on Apple Silicon reports videotoolbox encode for h264 and hevc with hardware=true.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-probe-test
+  m2-cross-build:
+    text: CGO_ENABLED=0 go build ./... succeeds for darwin, linux and windows on amd64 and arm64.
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - m2-cross-build-check
+  dor-rgba-output:
+    text: WithOutputFormat(RGBA|BGRA) returns one tightly packed plane, alpha 255, RGBA the exact byte
+      mirror of BGRA, within 30 dB (8x8-block PSNR) of ffmpeg's conversion for H.264 and HEVC.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-rgba-decode-test
+  dor-rgb-input:
+    text: WithInputFormat(RGBA|BGRA) encodes packed frames; the stream declares the BT.709 matrix the
+      hardware converted with, and ffmpeg's RGB decode of it is within 35 dB (8x8-block PSNR) of the source.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-rgb-encode-test
+  av1mac-av1-bit-exact:
+    text: Decoding an SVT-AV1 8-bit 4:2:0 IVF stream (320x240, 60 frames, keyframe every 25, hidden alternate
+      reference frames shown later through show_existing_frame) to NV12 yields exactly libdav1d's frames,
+      one frame per temporal unit in order, each carrying its packet's PTS, and the frame count equals
+      ffmpeg's.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-reference-test
+  av1mac-av1-temporal-delimiters-optional:
+    text: The same kind of stream with the temporal delimiter OBUs removed from every unit decodes to
+      identical frames.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-no-td-test
+  av1mac-av1-rgba:
+    text: WithOutputFormat(RGBA|BGRA) on AV1 returns tightly packed frames within 30 dB (8x8-block PSNR)
+      of ffmpeg's BT.601 conversion, alpha 255, RGBA the exact mirror of BGRA.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-rgba-test
+  av1mac-av1-sequence-change:
+    text: Two IVF streams of different sizes (320x240 then 160x120) written into one IVF file decode as
+      60 frames of the right sizes matching ffmpeg's frames; the session is recreated at the new sequence
+      header.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-sequence-change-test
+  av1mac-av1-flush-resume:
+    text: After Flush, Receive returns io.EOF; a non-key temporal unit is then skipped without error and
+      decoding resumes at a key temporal unit; garbage input is ErrInvalidData; WithDecodeOrder returns
+      the same frames in the same order.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-flush-resume-test
+    - av1mac-av1-decode-order-noop-test
+  av1mac-av1-ten-bit:
+    text: A Main profile 10-bit stream decodes with NV12 requested - VideoToolbox converts to 8-bit, every
+      frame within 45 dB PSNR of ffmpeg's conversion, and BGRA output works as well.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-ten-bit-test
+  av1mac-probe-and-unsupported:
+    text: Probe lists videotoolbox av1 decode hardware=true on the M3; NewEncoder(AV1) and NewDecoder
+      of an unknown codec return *UnsupportedError, as does NewDecoder(AV1) where Probe lists no AV1 hardware.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-probe-test
+  av1mac-builds:
+    text: go test ./... and CGO_ENABLED=0 go test ./... pass, scripts/crossbuild.sh builds every target,
+      and the ebitenvideo module still builds.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-build-check
+  ios-ios-builds:
+    text: The module builds for ios/arm64 (device), ios/arm64 and ios/amd64 (Simulator) with CGO_ENABLED=1
+      through scripts/mobilebuild.sh, and go vet passes on the videotoolbox packages for ios/arm64.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-mobilebuild-script
+  ios-android-excludes-linux-backends:
+    text: GOOS=android go list -deps of the root package lists no vaapi, vpl or nvidia package; the only
+      remaining Android build error is purego's own cgo requirement.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-android-deps-check
+  ios-simulator-probe-decode-encode:
+    text: The hwmediacodec CLI built for the Simulator, run with xcrun simctl spawn, lists h264 and hevc
+      encode (hardware) and no decoder; decodes a 30-frame B-frame H.264 stream with -software to NV12
+      and RGBA with per-frame SHA-256 and display order identical to the Mac's hardware decode; encodes
+      10 NV12 frames to H.264 (ffprobe reads 10 frames, luma PSNR about 49.6 dB) and HEVC (10 frames);
+      transcodes the H.264 stream to HEVC (30 frames).
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-simulator-cli-run
+  ios-session-invalidation-recovery:
+    text: With the live session invalidated by hand after 30 of 60 packets, Send keeps returning nil,
+      frames 0-29 and 50-59 match ffmpeg's and frames 30-49 are skipped; invalidated right before a keyframe,
+      all 30 frames come out; an encoder invalidated after 20 of 40 frames emits every frame, the frame
+      that hit the error as a keyframe, and ffmpeg decodes the resulting stream in full.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-invalidation-tests
+  ios-mobile-sample:
+    text: examples/mobile binds with ebitenmobile into Mobile.xcframework (device and Simulator slices),
+      the Xcode project builds for the Simulator with xcodebuild, installs and launches there showing
+      the clip, and go test ./mobile opens the bundled clip on the Mac.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-mobile-sample-build
+  ios-iphone-run:
+    text: On an iPhone the app's top line reads ios/arm64 videotoolbox with h264/hevc decode and encode
+      (av1 decode from the A17 Pro on), the clip plays in hardware, and it keeps playing after the app
+      is sent to the background and brought back.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-iphone-run
+  ios-existing-suites:
+    text: go test ./... (whole workspace), CGO_ENABLED=0 go test . and scripts/crossbuild.sh pass on the
+      Mac after the change.
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    verified_by:
+    - ios-existing-suites
 verification:
   h264-reference:
     state: passed
     method: integration
     authority: observed
-    test: TestDecodeH264MatchesReference
+    test: TestDecodeMatchesReference/h264-bf0
     evidence:
       path: decode_test.go
-      locator: TestDecodeH264MatchesReference
+      locator: TestDecodeMatchesReference/h264-bf0
     basis:
     - *id002
     - *id003
@@ -351,7 +499,7 @@ verification:
     - *id005
     - &id006
       path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - &id007
       path: probe_test.go
       input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
@@ -362,10 +510,10 @@ verification:
     state: passed
     method: integration
     authority: observed
-    test: TestDecodeHEVCMatchesReference
+    test: TestDecodeMatchesReference/hevc-bf0
     evidence:
       path: decode_test.go
-      locator: TestDecodeHEVCMatchesReference
+      locator: TestDecodeMatchesReference/hevc-bf0
     basis:
     - *id002
     - *id003
@@ -438,8 +586,8 @@ verification:
     evidence:
       path: decode_av1_test.go
       locator: TestDecodeAV1MatchesReference
-      note: 2026-10-09, Apple M3, macOS 26; 60 frames bit-exact with libdav1d, 28 hidden frames and 28 show_existing_frame
-        units; 10-bit input converted by VideoToolbox within 53.5 dB of ffmpeg
+      note: 2026-10-09, Apple M3, macOS 26; 60 frames bit-exact with libdav1d, 28 hidden frames and 28
+        show_existing_frame units; 10-bit input converted by VideoToolbox within 53.5 dB of ffmpeg
     basis:
     - path: internal/videotoolbox/av1.go
       input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
@@ -456,9 +604,1502 @@ verification:
     - path: decode_av1_test.go
       input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
     - path: decode_test.go
-      input_hash: 40c3bdb35a2f00d2c0ce7f06308a07080eafbe38226b74b767a693b67f3c7ff7
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
     - path: internal/testutil/av1.go
       input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
+  m1-decode-reference-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeMatchesReference/h264-bf0
+    authority: observed
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeMatchesReference/h264-bf0
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m1-probe-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestProbe
+    authority: observed
+    evidence:
+      path: probe_test.go
+      locator: TestProbe
+    basis:
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m1-sps-change-test:
+    state: passed
+    method: integration
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeParameterSetChange
+    authority: observed
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeParameterSetChange
+      note: 320x240 then 160x120 concatenated; 60 frames, sizes switch at frame 30, checksums equal to
+        reference
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m1-cross-build-check:
+    state: passed
+    method: static
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: CGO_ENABLED=0 GOOS=linux go build ./... && CGO_ENABLED=0 GOOS=windows go build ./...
+    authority: observed
+    evidence:
+      path: scripts/crossbuild.sh
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+  m1-hevc-reference-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeMatchesReference/hevc-bf0
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeMatchesReference/hevc-bf0
+      note: bonus beyond the M1 scope; libx265 source, bit-exact
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m1-flush-seek-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestFlushResumesAtKeyframe
+    evidence:
+      path: decode_test.go
+      locator: TestFlushResumesAtKeyframe
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m1-race-check:
+    state: passed
+    method: unit
+    authority: observed
+    test: go test -race . ./annexb/ ./internal/bitstream/
+    evidence:
+      path: internal/videotoolbox/decoder.go
+      note: callback/decoder mutex split (mu vs outMu) is race-free under the detector
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  m1-bframe-set-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m1
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeMatchesReference
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeMatchesReference
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: encoding/annexb/annexb.go
+      input_hash: f1dbac844585d09db6eecd608a42e189a55131cef3365b5c291a0505fa10178a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-encode-reference-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeMatchesSource
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeMatchesSource
+      note: 60 frames 320x240 at 1 Mbit/s; worst luma PSNR 50.1 dB (H.264) and 50.1 dB (HEVC); keyframe
+        flags equal ffprobe; no B-frames
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-keyframe-interval-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeKeyframeInterval
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeKeyframeInterval
+      note: 'interval 10 over 45 frames: keyframes at 0,10,20,30,40 and no others'
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-force-keyframe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeForceKeyframe
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeForceKeyframe
+      note: forced at frames 7 and 13; neighbours are not keyframes
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-bframes-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeBFrames
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeBFrames
+      note: 'H.264: 39 B-frames, 28 reordered packets; HEVC: 44 B-frames, 30 reordered packets; PSNR >=
+        49.8 dB'
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-bitrate-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeBitrateControl
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeBitrateControl
+      note: '90 frames 320x240: VBR 400k -> 410 kbit/s, VBR 2M -> 1369 kbit/s, CBR 1M -> 951 kbit/s'
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-quality-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeQuality
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeQuality
+      note: quality 0.5 -> 33 KB / 39.8 dB; quality 0.9 -> 132 KB / 60.6 dB
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-low-latency-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeLowLatency
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeLowLatency
+      note: EnableLowLatencyRateControl + RealTime; keyframes every 15 frames enforced from Go; PSNR 52
+        dB
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-profile-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeProfiles
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeProfiles
+      note: ffprobe reports Baseline/Main/High (H.264) and Main (HEVC); HEVC+Baseline -> ErrUnsupported
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-transcode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestTranscodeRoundTrip
+    evidence:
+      path: encode_test.go
+      locator: TestTranscodeRoundTrip
+      note: 'encode 1.5 Mbit/s then VideoToolbox decode: worst luma PSNR 52.8 dB'
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+  m2-flush-reuse-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeFlushAndReuse
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeFlushAndReuse
+      note: Receive returns io.EOF after Flush; the first packet after Flush is a keyframe with parameter
+        sets
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-invalid-input-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeInvalidInput
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeInvalidInput
+      note: wrong size and short planes -> ErrInvalidData; Send/Receive after Close -> ErrClosed
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  m2-probe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestProbe
+    evidence:
+      path: probe_test.go
+      locator: TestProbe
+      note: videotoolbox h264/hevc decode and encode hardware=true on 2026-10-09
+    basis:
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+  m2-option-validation-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncoderOptionValidation
+    evidence:
+      path: probe_test.go
+      locator: TestEncoderOptionValidation
+    basis:
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+  m2-cross-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: scripts/crossbuild.sh (CGO_ENABLED=0 GOOS={darwin,linux,windows} GOARCH={amd64,arm64} go build
+      ./...)
+    evidence:
+      path: scripts/crossbuild.sh
+      note: all six targets ok on 2026-10-09
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+    - path: backends_other.go
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
+    - path: backends_darwin.go
+      input_hash: 8cc57d51959c736bbe915226cef6baa58f9344ccabff75a2cd812145657e692f
+  m2-nocgo-test-run:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: m2
+      platform: darwin
+      gpu: apple-silicon
+    test: CGO_ENABLED=0 go test .
+    evidence:
+      path: internal/videotoolbox/encoder.go
+      note: the VideoToolbox-thread output callback works through purego fakecgo; also passed with CGO_ENABLED=1
+        and under -race
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+  dor-rgba-decode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeRGBA
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeRGBA
+      note: worst 8x8-block PSNR 35.4 dB against ffmpeg (bilinear chroma, BT.601) for H.264 and HEVC;
+        plain PSNR is about 28 dB because of chroma interpolation, BT.709 would score 25 dB and swapped
+        channels 4 dB; alpha 255; RGBA == mirror(BGRA)
+    basis:
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/pixels.go
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/codec/codec.go
+      input_hash: cf19f76dcf3b070b63cc3f9c1a3073bfa17154b03bb76f3bb258d9a3dc6ef3bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  dor-rgb-encode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeRGBAInput
+    evidence:
+      path: encode_test.go
+      locator: TestEncodeRGBAInput
+      note: 30 frames 320x240 at 1.5 Mbit/s; ffprobe color_space bt709; worst 8x8-block PSNR 39.3 dB (27.7
+        dB when decoded with BT.601)
+    basis:
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/pixels.go
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+    - path: encode_test.go
+      input_hash: 7cce17fc8a1cf8ebb768ac8e8e29467dfe2bd07b1f54c6df91bd8821ac6ca460
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  av1mac-av1-reference-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1MatchesReference
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1MatchesReference
+      note: 2026-10-09, Apple M3, macOS 26, ffmpeg 9.0.1 with libsvtav1 (SVT-AV1 4.2.0) and libdav1d;
+        60 frames bit-exact with libdav1d, 28 hidden frames and 28 show_existing_frame units in the stream,
+        frame i has PTS 3000*i
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: internal/testutil/av1.go
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  av1mac-av1-no-td-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1WithoutTemporalDelimiters
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1WithoutTemporalDelimiters
+      note: 2026-10-09; 30 frames 160x120, identical checksums with the temporal delimiters stripped
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+  av1mac-av1-rgba-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeRGBA/av1-rgba, TestDecodeRGBA/av1-bgra
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeRGBA
+      note: 2026-10-09; worst 8x8-block PSNR 35.35 dB against ffmpeg's BT.601 conversion (the same figure
+        as H.264 and HEVC), alpha 255, RGBA == mirror(BGRA)
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: internal/videotoolbox/pixels.go
+      input_hash: 2fb383995cede9f6a88822ed2b9cdd066b29ce18fd1fa2840892eba4f00707d8
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+  av1mac-av1-sequence-change-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeParameterSetChange/av1
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeParameterSetChange
+      note: 2026-10-09; 30 frames 320x240 followed by 30 frames 160x120 in one IVF file written with ivf.Writer
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: mediacontainer/ivf/ivf.go
+      input_hash: d36202342917da0d13a7115bfd60a350fc4401dbd2c62424a41cc72078ec71c7
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+  av1mac-av1-flush-resume-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestFlushResumesAtKeyframe/av1, TestDecodeAV1InvalidData
+    evidence:
+      path: decode_test.go
+      locator: TestFlushResumesAtKeyframe
+      note: 2026-10-09; 20 units 160x120, five decoded then Flush, unit 7 skipped, unit 0 resumes with
+        one frame; garbage and empty packets are ErrInvalidData
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+  av1mac-av1-decode-order-noop-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1DecodeOrderOption
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1DecodeOrderOption
+      note: 2026-10-09; WithDecodeOrder yields ffmpeg's display-order frames unchanged
+    basis:
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+  av1mac-av1-ten-bit-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAV1TenBit
+    evidence:
+      path: decode_av1_test.go
+      locator: TestDecodeAV1TenBit
+      note: 2026-10-09; yuv420p10le SVT-AV1 stream, 30 frames; VideoToolbox converted to NV12 (no frame
+        bit-exact, worst PSNR 53.50 dB against ffmpeg's 10-to-8-bit conversion) and to BGRA
+    basis:
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+    - path: decode_av1_test.go
+      input_hash: c78ac29f04be5582f53c27718e16ef3690e91902fc91d98ee3c56c0e23444374
+    - path: internal/testutil/av1.go
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
+  av1mac-probe-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestProbe, TestUnsupportedCodec
+    evidence:
+      path: probe_test.go
+      locator: TestUnsupportedCodec
+      note: 2026-10-09; Probe lists videotoolbox av1 decode hardware=true on the M3
+    basis:
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: probe_test.go
+      input_hash: 6f795183002ab33d83d60d097962d8fd5c17d5d2c559cb28b03de6ec99daaf3d
+  av1mac-build-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: go test ./... -count=1; CGO_ENABLED=0 go test ./... -count=1; scripts/crossbuild.sh; go build
+      and go vet in ebitenvideo (CGO_ENABLED=1 and 0)
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-09; every package ok with cgo on and off, six targets ok
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+    - path: go.mod
+      input_hash: 153196c513f12075f106d2d0aa17dd4283b15893bcaec5a3cedddca12ac43b62
+  ios-mobilebuild-script:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    test: scripts/mobilebuild.sh; CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go vet . ./internal/videotoolbox/...
+    evidence:
+      path: scripts/mobilebuild.sh
+      note: 2026-10-12, Xcode 27.0 SDKs (iPhoneOS27.0, iPhoneSimulator27.0), go1.27.0 darwin/arm64, purego
+        v0.11.1; ios/arm64 device, ios/arm64 and ios/amd64 Simulator all ok; android skipped (no NDK on
+        the Mac)
+    basis:
+    - path: scripts/mobilebuild.sh
+      input_hash: 77ca7345236bbe4b67e91e0e11f5c7d71a3a120f7e93b6f605c0851535e3a6ee
+    - path: internal/videotoolbox/sys/sys.go
+      input_hash: 32f83899926cb0feddef7e27143520b66ed9ea3ff2a055675b4d8bdc22e9b9d7
+    - path: internal/videotoolbox/sys/sys_encode.go
+      input_hash: 270d42e62cef389d09631c2d0e792eaef4a4b74d9dae648a2b404f44756cec21
+  ios-android-deps-check:
+    state: passed
+    method: static
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    test: GOOS=android GOARCH=arm64 go list -deps .
+    evidence:
+      path: backends_other.go
+      note: 2026-10-12; deps are codec, bitstream, annexb, av1, h264, hevc, pixconv, reorder and the root
+        package only
+    basis:
+    - path: backends_other.go
+      input_hash: a9f3d6017bf162492a1af1b1bd15a41d5f05a7a79f72cbd03ef045efa0187a65
+    - path: backends_linux.go
+      input_hash: 8ee51933dfbc3b3444a766e906229d5dd1798d43f1b811328bfe48d4f79e0730
+    - path: internal/nvidia/backend.go
+      input_hash: c63f7fa014fd5da1cf0bc1e6455579c25a0defb9e79842c615b8ad3bb6acf193
+    - path: internal/vaapi/backend.go
+      input_hash: 03aec6a09cb4ba6d7ddf5501a18820bb8718980a3bc5642e87e19f035e8ae0e7
+    - path: internal/vpl/backend.go
+      input_hash: de67b544e321023c8f06ac636e16bafaec20dd08cf531e019d21261d641bc7ed
+  ios-simulator-cli-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform: ios
+      gpu: apple-silicon
+    test: cmd/hwmediacodec built with GOOS=ios GOARCH=arm64 CGO_ENABLED=1 against the iPhoneSimulator
+      SDK, run with xcrun simctl spawn booted on an iPhone 17 Pro (iOS 26.0) Simulator
+    evidence:
+      path: cmd/hwmediacodec/main.go
+      note: '2026-10-12 on an Apple M3: probe = videotoolbox h264 encode hardware, hevc encode hardware;
+        decode -software of a libx264 320x240 30-frame bf=2 stream = 30 frames, SHA-256 per frame and
+        order identical to the host''s hardware decode (NV12), RGBA 30 frames; encode h264 10 frames 34040
+        bytes 2 keyframes, ffprobe 10 frames, PSNR y 49.59 dB; encode hevc 10 frames; transcode h264->hevc
+        30 frames'
+    basis:
+    - path: cmd/hwmediacodec/main.go
+      input_hash: df01221689b4aeb619c33b39a8e131b6a68b058c8a8f071bb79ad5bd28081eef
+    - path: internal/videotoolbox/backend.go
+      input_hash: d36843553a66cd4b6b0b601062d896acce7927748693069657c59a67c462ca2a
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+  ios-invalidation-tests:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecoderRecoversFromInvalidatedSession, TestDecoderRecoversAtKeyframe, TestEncoderRecoversFromInvalidatedSession
+    evidence:
+      path: internal/videotoolbox/invalidation_test.go
+      note: 2026-10-12 on an Apple M3; 40 of 60 frames across the decoder invalidation, 30 of 30 at the
+        keyframe, 40 of 40 encoded and decoded by ffmpeg
+    basis:
+    - path: internal/videotoolbox/invalidation_test.go
+      input_hash: 98f95adb52ec398e148afa66cd9961a8ef050c8b65bb5e228a4b1de7dfdb6616
+    - path: internal/videotoolbox/invalidation.go
+      input_hash: 7608aaaf1d3f91ed8db209674ae375c903758196b235c83fed3c9855951d4e7c
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: internal/videotoolbox/encoder.go
+      input_hash: 73121eac7ac674b83611ec6cb369eab91cdc260c643a58b0856868ba24730153
+    - path: internal/videotoolbox/av1.go
+      input_hash: f3b2ca6cf3d8138f989b86356e4ae2c1c2aef5ce24850a34817c3c1773075303
+  ios-mobile-sample-build:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    test: go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile bind -target ios -iosversion 15.0 -o
+      mobile/ios/Mobile.xcframework github.com/shibukawa/hwmediacodec/examples/mobile; xcodebuild -scheme
+      HWMediaCodecPlayer -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build; xcrun simctl
+      install/launch; go test ./mobile
+    evidence:
+      path: examples/mobile/ios/HWMediaCodecPlayer.xcodeproj/project.pbxproj
+      note: 2026-10-12; bind takes about 30 s on an M3 and writes an 89 MB xcframework (ios-arm64 and
+        ios-arm64_x86_64-simulator, static archives); the app shows the clip through the software decoder
+        in the Simulator
+    basis:
+    - path: examples/mobile/mobile.go
+      input_hash: b25996e323bc6cfe7e55b935853dce285d66440ff810bab2696b8669d862a607
+    - path: examples/mobile/init_mobile.go
+      input_hash: e9daa7358f78a9f2e735fd33572dcf91041c2e0bc8b7f696650ac6923ee7ee23
+    - path: examples/mobile/mobile_test.go
+      input_hash: d4207ce7b338e8125e74764c53e30530d5931ae86f51536631eec028698b6474
+    - path: examples/mobile/ios/HWMediaCodecPlayer/AppDelegate.swift
+      input_hash: 5a3eaef81f83770031d1db2d122728ca343fc44cc7df1d8f1cf9ea461d34e81c
+    - path: examples/mobile/ios/HWMediaCodecPlayer/Info.plist
+      input_hash: 3e351822d0303f9e8215b579f1afd24f569bbcad28ce090e6378a9eb8f9034f7
+    - path: examples/mobile/ios/HWMediaCodecPlayer.xcodeproj/project.pbxproj
+      input_hash: 7109f4a6de1e4c398946128e43bdf86677f05e9496bb6466096e2b93cb8bb413
+  ios-iphone-run:
+    state: not_run
+    method: manual
+    authority: authored
+    scope:
+      milestone: ios-videotoolbox
+      platform: ios
+      gpu: apple-silicon
+    test: Build examples/mobile/ios in Xcode with a signing team and run on the author's iPhone; check
+      the top line, playback, and background/foreground
+    evidence:
+      path: examples/mobile/README.md
+      note: the author has the device; not run from the development session
+  ios-existing-suites:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: ios-videotoolbox
+      platform:
+      - ios
+      - darwin
+      gpu: apple-silicon
+    test: go test ./... ; CGO_ENABLED=0 go test . ; scripts/crossbuild.sh
+    evidence:
+      path: scripts/crossbuild.sh
+      note: 2026-10-12 on an Apple M3, macOS 27, go1.27.0; all workspace modules
+    basis:
+    - path: scripts/crossbuild.sh
+      input_hash: 17e3eb8367799e71b70486751fde77b39e9f8358f3a3bec6a321cffd4d36c14e
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+open_questions:
+  m2-pixel-buffer-copy-cost:
+    text: Input frames are copied into a pool CVPixelBuffer (about 3 MB per 1080p frame). Is the copy
+      or the hardware the limit at ~200 fps 1080p, and is a zero-copy path (CVPixelBufferCreateWithPlanarBytes
+      or IOSurface) worth it?
+    state: deferred
+    resolution: 'Deferred: 200 fps exceeds the batch-transcode need today. Revisit when a profile shows
+      the copy dominating or when the Ebitengine path needs RGBA input.'
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  m2-avcc-output:
+    text: Should the encoder offer AVCC/HVCC output and expose the parameter sets separately for MP4/fMP4
+      muxing?
+    state: deferred
+    resolution: Deferred to the HLS/packaging prototype; the Annex-B output plus annexb.Split is enough
+      until a muxer consumer exists.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  dor-untagged-hd-colour-matrix:
+    text: VideoToolbox converted untagged 320x240 streams to RGB with BT.601. Which matrix it assumes
+      for untagged HD streams (and whether ffmpeg agrees) is not measured.
+    state: answered
+    resolution: 'Measured on 2026-10-10 (milestone:decoder-rgb-conversion): VideoToolbox converts untagged
+      pictures wider than 704 or taller than 576 with BT.709 and smaller ones with BT.601, and follows
+      a named matrix at any size; internal/pixconv applies the same rule on the other backends.'
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  av1mac-software-av1-on-m1-m2:
+    text: On an M1 or M2, NewDecoder(AV1, WithSoftwareFallback()) runs av1SessionAvailable, which on the
+      M3 with hardware decoding disabled fails with kVTCouldNotFindVideoDecoderErr. The M1/M2 behaviour
+      itself is inferred from that measurement, not observed.
+    state: open
+    resolution: Run TestUnsupportedCodec and NewDecoder(AV1, WithSoftwareFallback()) on an M1 or M2 Mac;
+      if VideoToolbox does hand out its software AV1 decoder there, the decoder works unchanged and only
+      the README sentence needs a correction.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  av1mac-av1-colour-tags:
+    text: Only untagged streams were measured for RGB conversion (VideoToolbox assumed BT.601, as for
+      H.264 at 320x240). Whether it reads color_config from av1C for tagged streams (BT.709, BT.2020)
+      is not measured.
+    state: open
+    resolution: Encode a tagged stream (-color_primaries bt709 -color_trc bt709 -colorspace bt709) and
+      compare RGB output with ffmpeg's BT.709 conversion; if VideoToolbox ignores the tags, add the kCMFormatDescriptionExtension_ColorPrimaries/TransferFunction/YCbCrMatrix
+      extensions from the parsed sequence header.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  av1mac-film-grain:
+    text: What VideoToolbox does with film_grain_params_present streams (grain synthesis in hardware,
+      and whether output is then deterministic) is not measured; the tests encode with film-grain=0.
+    state: deferred
+    resolution: Deferred until a consumer needs film grain; libdav1d applies grain by default, so a comparison
+      would need -filmgrain 0 on the ffmpeg side or a PSNR check.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  exheif-encoder-odd-sizes:
+    text: Should the VideoToolbox encoder (and the Encoder contract) handle odd picture sizes itself,
+      by padding and writing the conformance window / clean aperture, instead of silently rounding down?
+    state: open
+    resolution: Observed on the M3 with the HEVC encoder (321x203 -> SPS 320x202). Left to the consumer
+      for now and documented in the README; a library fix would pad the pixel buffer and set kVTCompressionPropertyKey_CleanAperture
+      or write the SPS conformance window.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  libraries:
+  - /System/Library/Frameworks/VideoToolbox.framework/VideoToolbox
+  - /System/Library/Frameworks/CoreMedia.framework/CoreMedia
+  - /System/Library/Frameworks/CoreVideo.framework/CoreVideo
+  - /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+  api_model: full decoder/encoder (no application-side DPB management)
+  key_calls:
+    decode:
+    - CMVideoFormatDescriptionCreateFromH264ParameterSets
+    - CMVideoFormatDescriptionCreateFromHEVCParameterSets
+    - CMVideoFormatDescriptionCreate ('av01' for AV1, with the av1C record under the SampleDescriptionExtensionAtoms
+      extension)
+    - VTDecompressionSessionCreate
+    - VTDecompressionSessionDecodeFrame
+    - VTDecompressionSessionWaitForAsynchronousFrames
+    - VTDecompressionSessionInvalidate
+    encode:
+    - VTCompressionSessionCreate
+    - VTSessionSetProperty
+    - VTCompressionSessionPrepareToEncodeFrames
+    - VTCompressionSessionEncodeFrame
+    - VTCompressionSessionCompleteFrames
+    probe:
+    - VTIsHardwareDecodeSupported
+    - VTCopySupportedPropertyDictionaryForEncoder
+    - VTCopyVideoEncoderList
+  input_format: AVCC/HVCC length-prefixed NAL units in a CMSampleBuffer; Annex-B must be converted; parameter
+    sets go in the format description.
+  output_format: CVPixelBuffer, typically NV12 ('420v'/'420f') or BGRA on request ('RGBA' is accepted
+    at session creation but fails at decode time with -6680); encoder returns CMSampleBuffer with AVCC
+    data and parameter sets in the format description.
+  ffi_notes:
+  - Plain C functions plus CoreFoundation types; purego.Dlopen + RegisterLibFunc work; callbacks via purego.NewCallback.
+  - CFRelease discipline for every returned CF object; use CFRetain when a buffer outlives the callback.
+  - Output callback runs on a VideoToolbox thread; copy or retain inside the callback and hand off to
+    a Go channel.
+  - purego v0.11.1 passes CMTime by value (24-byte struct) to VTCompressionSessionEncodeFrame and CompleteFrames
+    on darwin/arm64 and amd64.
+  - The compression callback is invoked on a VideoToolbox thread; purego.NewCallback + fakecgo handle
+    it with CGO_ENABLED=0 (verified 2026-10-09).
+  quirks:
+  - Encoder buffers frames; a forced-keyframe property must be set until output appears.
+  - Session must be recreated when SPS/PPS change.
+  - Global registry state makes concurrent session creation racy; serialize creation.
+  - Hardware availability differs between Apple Silicon and Intel Macs; software fallback exists inside
+    VideoToolbox unless kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder is set.
+  - Temporal processing flag did not produce display-order output for H.264/HEVC with correct PTS (sync
+    and async tried, 2026-10-09, M3); reorder in Go.
+  - Encoder output samples never contain parameter sets; fetch them from the format description with CMVideoFormatDescriptionGet{H264,HEVC}ParameterSetAtIndex
+    (verified 2026-10-09).
+  - EnableLowLatencyRateControl implies an infinite GOP, no reordering and High profile; enforce a GOP
+    from the application with ForceKeyFrame.
+  - RealTime=true did not reduce throughput on an M3 (2026-10-09); it is a scheduling hint, not a pacing
+    control.
+  - A forced keyframe after VTCompressionSessionCompleteFrames keeps a reused session decodable from the
+    first new packet.
+  - Pixel buffers of type 'RGBA' are rejected at use (kCVReturnInvalidPixelFormat -6680) both as decompression
+    destination and as CVPixelBufferCreate format; use BGRA and swap in Go (verified 2026-10-09).
+  - VTCompressionSessionGetPixelBufferPool must be called per frame - with BGRA source attributes the
+    pool is replaced after the first frame and a cached pool crashes. Buffers created with CVPixelBufferCreate
+    need kCVPixelBufferIOSurfacePropertiesKey, otherwise the encoder's pixel transfer fails with -12905.
+  - The encoder converts BGRA input with BT.709 and writes no colour description unless kVTCompressionPropertyKey_ColorPrimaries/TransferFunction/YCbCrMatrix
+    are set; the decoder converts untagged 320x240 output with BT.601 (verified 2026-10-09).
+  - The hardware H.264 encoder writes no VUI bitstream_restriction (pic_order_cnt_type 0), so a spec-exact
+    reorder buffer holds its streams back by the DPB size; the HEVC encoder writes sps_max_num_reorder_pics.
+  - The hardware decoder rejects 64x48 pictures with kVTVideoDecoderMalfunctionErr (-12911); 96x64 works.
+  - AV1 needs a format description built with CMVideoFormatDescriptionCreate('av01', w, h, extensions),
+    where extensions maps kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms to a dictionary
+    whose "av1C" entry is the ISOBMFF AV1CodecConfigurationRecord (CFData) with the sequence header OBU
+    as configOBUs. A whole temporal unit is one sample; temporal delimiter OBUs may stay in or be stripped
+    (same output, M3, 2026-10-09).
+  - VTIsHardwareDecodeSupported('av01') is 1 on the M3 without VTRegisterSupplementalVideoDecoderIfAvailable,
+    and that call changes nothing for AV1 (VP9 stays 0 even after registering it).
+  - macOS 26 lists "SW AV1 Decoder" (com.apple.videotoolbox.videodecoder.av1.sw) in VTCopyVideoDecoderList
+    but a session with EnableHardwareAcceleratedVideoDecoder=false fails with -12906, as does naming the
+    DecoderID, so WithSoftwareFallback cannot deliver AV1 on M1/M2.
+  - The AV1 decoder converts Main profile 10-bit pictures to '420v' (8-bit) itself, within 53.5 dB of
+    ffmpeg's conversion; 8-bit AV1 output is bit-exact with libdav1d, and one temporal unit yields exactly
+    one frame in presentation order (show_existing_frame units output the hidden frame).
+  evidence:
+  - url: https://pkg.go.dev/github.com/go-macos/videotoolbox
+    claim: Pure Go purego-based H.264/HEVC hardware decoding on macOS.
+  - url: https://pkg.go.dev/github.com/tmc/apple/videotoolbox
+    claim: Go bindings exposing VTCompressionSession and VTDecompressionSession.
+  - url: https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/apple
+    claim: Hardware AV1 decoding on Apple Silicon starts with the M3 generation.
+  - url: https://searchfox.org/mozilla-central/source/dom/media/platforms/apple/AppleDecoderModule.cpp
+    claim: Firefox calls VTRegisterSupplementalVideoDecoderIfAvailable (macOS 11+) before probing VP9/AV1
+      hardware decode.
+  codec_support_by_hardware:
+    note: Inferred from public sources; confirm with VTIsHardwareDecodeSupported / VTCopyVideoEncoderList
+      on the target machine.
+    apple-silicon-m1-m2:
+      decode_hw:
+      - h264
+      - hevc
+      - vp9 (after VTRegisterSupplementalVideoDecoderIfAvailable, macOS 11+)
+      - prores (Pro/Max/Ultra)
+      encode_hw:
+      - h264
+      - hevc
+      - prores
+      av1: software decode only; no hardware encode
+    apple-silicon-m3-and-later:
+      decode_hw:
+      - h264
+      - hevc
+      - vp9 (same registration call; VTIsHardwareDecodeSupported('vp09') stayed 0 on the author's M3 even
+        after it)
+      - av1 (verified 2026-10-09 on the author's M3, milestone:darwin-av1-decode)
+      - prores
+      encode_hw:
+      - h264
+      - hevc
+      - prores
+      av1_encode: none in hardware
+    intel-mac:
+      decode_hw:
+      - h264
+      - hevc (2017+ Macs, Kaby Lake or newer)
+      encode_hw:
+      - h264
+      - hevc (2017+)
+      av1_vp9: no hardware
+      note: VideoToolbox abstracts the Intel iGPU/AMD dGPU; same API. macOS 26 is reported as the last
+        release supporting Intel Macs.
+  ios:
+    build: GOOS=ios with CGO_ENABLED=1 and Xcode's clang (purego has no cgo-free mode on iOS); the darwin
+      build constraint covers ios so the same files compile; frameworks dlopen from the same /System/Library/Frameworks
+      paths (verified in the Simulator, iOS 26).
+    optional_symbols:
+      kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder: ios 17.0
+      kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: ios 17.0
+      kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: ios 17.4
+      kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: ios 17.4
+      kVTVideoEncoderSpecification_EnableLowLatencyRateControl: ios 14.5
+      kVTCompressionPropertyKey_ConstantBitRate: ios 16.0
+      VTRegisterSupplementalVideoDecoderIfAvailable: ios 26.2
+      note: bound with optPtrConst; an absent hardware key leaves the specification empty (every iOS codec
+        is hardware). Everything else the backend binds is iOS 11 or older (iOS 27.0 SDK headers, 2026-10-11).
+    background: iOS invalidates the sessions of a background application (kVTInvalidSessionErr -12903
+      from every call); internal/videotoolbox/invalidation.go reopens the session - the decoder resumes
+      at the next keyframe (or the triggering packet when it is one), the encoder forces a keyframe. Tested
+      on macOS by invalidating by hand.
+    simulator: no hardware decoder (VTIsHardwareDecodeSupported is 0, WithSoftwareFallback needed); the
+      encoders accept RequireHardwareAcceleratedVideoEncoder and are listed as hardware; output valid
+      (ffmpeg, about 49 dB PSNR). CLI decode output bit-identical to the Mac's hardware decode.
+    hardware_status: not yet run on an iPhone (milestone:ios-videotoolbox, iphone-run not_run).
+  support_tier: tier1
+  scope_note: Intel Macs are out of scope; the Intel Mac facts remain as reference only.
+  implementation:
+    package: internal/videotoolbox (backend.go, decoder.go, paramsets.go) and internal/videotoolbox/sys
+      (purego bindings)
+    decode_mode: synchronous (VTDecodeFrameFlags = 0); output callback runs on the calling thread before
+      DecodeFrame returns; frames in decode order
+    output: CVPixelBuffer '420v' (NV12) or 'BGRA' (BGRA, and RGBA after an R/B swap in Go) copied into
+      Go-owned planes with tight rows; buffers pooled and returned via Frame.Release; display order comes
+      from the backend-independent internal/reorder layer (the backend only carries codec.Order through
+      sourceFrameRefCon)
+    callback: one purego.NewCallback shared by all decoders; decoders found via integer refcon; CFRetain
+      inside the callback, CFRelease after copy
+    session_policy: RequireHardwareAcceleratedVideoDecoder unless WithSoftwareFallback; recreate session
+      when any SPS/PPS/VPS changes; skip until keyframe after creation and after Flush
+    performance: ~834 fps for 1080p H.264 (no B-frames) on M3 including the CPU copy
+    encode_mode: VTCompressionSessionEncodeFrame is asynchronous; the output callback runs on a VideoToolbox
+      thread, retains the CMSampleBuffer and Receive converts it to an Annex-B Packet on the caller goroutine
+    encode_input: NV12 ('420v') or BGRA CVPixelBuffers from VTCompressionSessionGetPixelBufferPool (looked
+      up per frame) or, when the pool is exhausted, IOSurface-backed CVPixelBufferCreate; filled by a
+      row copy from the caller's planes, swapping R/B for RGBA input; RGB input sets the 709 colour properties
+    encode_properties: RealTime (true in low-latency mode), AllowFrameReordering (B-frames), ProfileLevel,
+      ExpectedFrameRate, AverageBitRate or ConstantBitRate (macOS 13+), Quality (float), MaxKeyFrameInterval;
+      ForceKeyFrame per frame
+    encode_performance: ~207 fps H.264 and ~186 fps HEVC at 1080p on M3 including the input copy; low-latency
+      rate control ~25-40% slower
+    encode_probe: VTCopySupportedPropertyDictionaryForEncoder with RequireHardwareAcceleratedVideoEncoder
+    av1_decode: internal/videotoolbox/av1.go - sendAV1 parses the temporal unit with internal/av1, builds
+      av1C and the format description on a new sequence header, waits for a shown key frame after creation
+      and Flush, passes the unit unchanged to decodePacket; OutputsDisplayOrder() is true for AV1 so the
+      public API skips the reorder layer; Probe uses VTIsHardwareDecodeSupported('av01'); NewDecoder with
+      WithSoftwareFallback probes a session (av1SessionAvailable) and reports ErrUnsupported when none
+      can be made
+    av1_performance: ~820 fps for 1080p AV1 to NV12, ~310 to BGRA, ~220 to RGBA on an M3 (SVT-AV1 preset
+      10 stream, 300 frames, 2026-10-09)
+  milestone_notes:
+    m1:
+      steps:
+      - Module layout; public types; ErrUnsupported; stub backends for non-darwin GOOS.
+      - internal/videotoolbox/sys - purego bindings for VideoToolbox, CoreMedia, CoreVideo and CoreFoundation
+        functions used by decode.
+      - Annex-B splitter, SPS/PPS capture, AVCC conversion, CMVideoFormatDescriptionCreateFromH264ParameterSets.
+      - VTDecompressionSession with a Go callback (purego.NewCallback); copy CVPixelBuffer planes into
+        Frame; ordered output by PTS.
+      - Test helper that generates testdata with ffmpeg (testsrc, libx264, h264_mp4toannexb) and computes
+        reference checksums; skip when ffmpeg is absent.
+      - Probe() for darwin via VTIsHardwareDecodeSupported / VTCopySupportedPropertyDictionaryForEncoder.
+    m2:
+      implementation:
+        package: internal/videotoolbox/encoder.go plus bindings in internal/videotoolbox/sys/sys_encode.go
+        session: VTCompressionSessionCreate with Require/EnableHardwareAcceleratedVideoEncoder and optional
+          EnableLowLatencyRateControl; properties RealTime, AllowFrameReordering, ProfileLevel, ExpectedFrameRate,
+          AverageBitRate or ConstantBitRate, Quality, MaxKeyFrameInterval; PrepareToEncodeFrames; pixel
+          buffers from VTCompressionSessionGetPixelBufferPool
+        callback: one purego.NewCallback shared by all encoders; encoders found by integer refcon; sourceFrameRefCon
+          carries the input PTS; samples CFRetained in the callback and converted in Receive
+        conversion: CMBlockBufferCopyDataBytes -> walk NAL length prefixes (size from CMVideoFormatDescriptionGet*ParameterSetAtIndex)
+          -> Annex-B; keyframe detected from NAL types; parameter sets cached per format description (retained)
+        keyframes: kVTEncodeFrameOptionKey_ForceKeyFrame on Frame.ForceKeyframe, on the first frame after
+          Flush and on every KeyframeInterval-th frame counted from start/Flush (so low-latency mode,
+          whose GOP is infinite, still honours the interval)
+        backpressure: Send returns ErrAgain when 64 packets are waiting; Flush = VTCompressionSessionCompleteFrames(kCMTimeInvalid),
+          blocking
+        probe: 'VTCopySupportedPropertyDictionaryForEncoder(1920, 1080, codec, {RequireHardwareAcceleratedVideoEncoder:
+          true}) == noErr'
+    dor:
+      implementation:
+        videotoolbox_decode: destination pixel format from the requested output format; RGBA is decoded
+          as BGRA and swapped in Go (swapRB) because 'RGBA' destinations fail at decode time with -6680;
+          copyFrame is generic over PlaneLayout via bufferPlanes
+        videotoolbox_encode: source pixel buffer attributes from the input format; RGBA input is swapped
+          into BGRA buffers; the session's pixel buffer pool is looked up on every frame (VideoToolbox
+          replaces it after the first RGB frame) and exhausted pools fall back to IOSurface-backed CVPixelBufferCreate;
+          ColorPrimaries/TransferFunction/YCbCrMatrix set to ITU-R 709 for RGB input
+    av1mac:
+      implementation:
+        videotoolbox: internal/videotoolbox/av1.go - sendAV1 parses the unit, rebuilds the session on
+          a new sequence header (CMVideoFormatDescriptionCreate with 'av01', max_frame_width/height and
+          an extensions dictionary whose SampleDescriptionExtensionAtoms entry holds the av1C record as
+          CFData), skips until a shown key frame after creation and Flush, and hands the whole unit (temporal
+          delimiters included) to VTDecompressionSessionDecodeFrame; decoder.go now branches Send by codec
+          (sendAnnexB / sendAV1) and shares decodePacket; OutputsDisplayOrder() returns true for AV1
+        probe: backend.go lists AV1 decode from VTIsHardwareDecodeSupported('av01'), never asks the encoder
+          property dictionary for 'av01'; NewDecoder(AV1) without hardware returns UnsupportedError, with
+          WithSoftwareFallback only after av1SessionAvailable(true) fails
+        sys: CFDataCreate, CMVideoFormatDescriptionCreate and kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms
+          added; CFData helper
+        tests: testutil.GenerateAV1 (ffmpeg -f lavfi testsrc2 -c:v libsvtav1 -preset 10 -g 25 -svtav1-params
+          film-grain=0 -f ivf), HasDecoder, containerFormat/decoderArgs (ivf + libdav1d); decode_test.go
+          splits packets with splitStream (annexb or ivf) and joins streams with concatStreams (ivf.Writer
+          for AV1)
+  known_risks:
+  - VideoToolbox session creation uses global encoder/decoder registry state; serialize session creation.
+  - purego callback ABI on arm64 vs amd64 must be covered by CI on both.
+  - Intel Macs are out of scope, so tests may assume Apple Silicon hardware paths; still compare against
+    the same machine's ffmpeg output rather than fixed golden hashes because hardware decoders are not
+    required to be bit-exact.
+  delivery_results:
+    milestone:m1-darwin-h264-decode:
+      result:
+        status: delivered 2026-10-09
+        environment:
+          host: Apple M3, macOS 27.0.1 (build 26A434)
+          go: go1.27.0 darwin/arm64
+          purego: github.com/ebitengine/purego v0.11.1
+          oracle: ffmpeg 9.0.1 (libx264, libx265 available)
+          date: '2026-10-09'
+        tests:
+        - TestDecodeMatchesReference/h264-bf0
+        - TestDecodeMatchesReference/hevc-bf0
+        - TestDecodeParameterSetChange
+        - TestFlushResumesAtKeyframe
+        - TestInvalidData
+        - TestProbe
+        - TestUnsupportedCodec
+        - TestUnsupportedOutputFormat
+        - annexb and bitstream unit tests
+        performance: 1080p H.264 (no B-frames) 300 frames in 360 ms = ~834 fps; with B-frames ~430 fps;
+          B-frame frame set equals ffmpeg output but in decode order.
+    milestone:m2-darwin-encode:
+      result:
+        status: delivered 2026-10-09
+        environment:
+          host: Apple M3, macOS 27.0.1 (build 26A434)
+          go: go1.27.0 darwin/arm64
+          purego: github.com/ebitengine/purego v0.11.1
+          oracle: ffmpeg/ffprobe 9.0.1 (libx264, libx265 available)
+          date: '2026-10-09'
+        tests:
+        - TestEncodeMatchesSource (h264, hevc)
+        - TestTranscodeRoundTrip
+        - TestEncodeKeyframeInterval
+        - TestEncodeForceKeyframe
+        - TestEncodeBFrames (h264, hevc)
+        - TestEncodeBitrateControl
+        - TestEncodeQuality
+        - TestEncodeLowLatency
+        - TestEncodeProfiles
+        - TestEncodeFlushAndReuse
+        - TestEncodeInvalidInput
+        - TestProbe
+        - TestUnsupportedCodec
+        - TestUnsupportedInputFormat
+        - TestEncoderOptionValidation
+        - TestSharedOptions
+        - M1 decode tests unchanged and passing
+        performance:
+          h264_1080p_encode_fps: 207
+          hevc_1080p_encode_fps: 186
+          transcode_h264_to_hevc_1080p_fps: 177
+          note: cmd/hwmediacodec encode/transcode, 120 (encode) and 300 (transcode) frames of testsrc2,
+            8/6 Mbit/s VBR, M3, including the NV12 copy into the pool buffer and reading the raw input
+            from disk
+          low_latency_720p: 'EnableLowLatencyRateControl: 245 fps (RealTime false) / 306 fps (RealTime
+            true) vs 399 fps default; RealTime alone does not change throughput'
+    milestone:darwin-av1-decode:
+      result:
+        status: delivered 2026-10-09
+        environment:
+          host: Apple M3, macOS 26 (Darwin 27.0.0)
+          go: go1.27.0 darwin/arm64
+          purego: github.com/ebitengine/purego v0.11.1
+          oracle: ffmpeg/ffprobe 9.0.1 with libsvtav1 (SVT-AV1 4.2.0) and libdav1d
+          date: '2026-10-09'
+        tests:
+        - TestDecodeAV1MatchesReference (60 frames bit-exact, 28 hidden frames, 28 show_existing_frame
+          units)
+        - TestDecodeAV1WithoutTemporalDelimiters, TestDecodeAV1DecodeOrderOption, TestDecodeAV1InvalidData,
+          TestDecodeAV1TenBit (53.50 dB)
+        - TestDecodeRGBA/av1-rgba and av1-bgra (35.35 dB), TestDecodeParameterSetChange/av1, TestFlushResumesAtKeyframe/av1
+        - TestProbe, TestUnsupportedCodec
+        - internal/av1 unit and ffmpeg oracle tests; ivf unit and ffmpeg interop tests
+        - go test ./... and CGO_ENABLED=0 go test ./... all ok; scripts/crossbuild.sh six targets ok
+        performance:
+          av1_1080p_decode_fps_nv12: 821
+          av1_1080p_decode_fps_bgra: 308
+          av1_1080p_decode_fps_rgba: 223
+          note: cmd/hwmediacodec decode on an M3 over a 300-frame 1920x1080 SVT-AV1 (preset 10, -g 60)
+            IVF file, including the CPU copy; RGBA pays for the Go R/B swap as with H.264
+  learned:
+  - 'purego handles every call needed: dlopen of system frameworks, CF constants via Dlsym + pointer deref,
+    9-argument CoreMedia calls (stack args), and a NewCallback invoked by VideoToolbox; declaring only
+    the first five callback parameters and ignoring the trailing CMTime values works on arm64.'
+  - Synchronous VTDecompressionSessionDecodeFrame (flags 0) emits the output callback before returning,
+    giving a deterministic Send/Receive contract without goroutines.
+  - Hardware H.264/HEVC output is bit-exact with ffmpeg software decoding for 8-bit 4:2:0 (per-frame SHA-256
+    equality), so checksums are a valid oracle.
+  - go vet rejects uintptr->unsafe.Pointer conversions; returning *byte from purego-bound functions and
+    unsafe.Add(nil, addr) for Dlsym constants keeps vet clean.
+  - Session recreation on SPS/PPS change (drain, invalidate, create) loses no frames.
+  - VideoToolbox requires AVCC (length-prefixed) samples; Annex-B conversion plus in-band parameter-set
+    extraction is cheap and sufficient.
+  - 'VideoToolbox does not reorder H.264/HEVC output into display order on this path: temporal processing
+    (sync or async) with real PTS still yields decode order. A PTS/POC reorder buffer in Go is required
+    for display order; a WithPresentationOrder option was prototyped and removed because it did not work.'
+  - purego v0.11.1 passes a 24-byte CMTime by value on darwin/arm64 (copied to memory, pointer in a register
+    per AAPCS64) and on amd64 (stack); declaring sys.CMTime parameters in the Go signature is enough.
+  - The compression output callback runs on a VideoToolbox thread; purego.NewCallback handles it with
+    CGO_ENABLED=1 and, through fakecgo, with CGO_ENABLED=0, and the mutex split (mu vs outMu) is race-detector
+    clean.
+  - VideoToolbox samples are AVCC/HVCC with 4-byte length prefixes and never contain parameter sets; CMVideoFormatDescriptionGetH264/HEVCParameterSetAtIndex
+    supplies SPS/PPS/VPS for Annex-B keyframes.
+  - kVTCompressionPropertyKey_RealTime=true does not throttle to the frame rate on an M3 (same fps as
+    false), so WithLowLatency keeps it on as Apple advises for live sources.
+  - EnableLowLatencyRateControl makes the GOP infinite and disables reordering; a Go-side ForceKeyFrame
+    every N frames restores a fixed GOP for HLS. It costs roughly 25-40% throughput at 720p.
+  - VTCopySupportedPropertyDictionaryForEncoder with RequireHardwareAcceleratedVideoEncoder is a cheap,
+    session-free hardware probe.
+  - VBR AverageBitRate undershoots on simple content (2 Mbit/s target gave 1.37 Mbit/s); ConstantBitRate
+    (macOS 13+) lands within 5% of the target.
+  - CMSampleBufferGetSampleTimingInfo returns a valid DTS only when frame reordering is on; otherwise
+    DTS is set equal to PTS by the backend.
+  - Hardware H.264/HEVC at 1 Mbit/s 320x240 reaches ~50 dB luma PSNR against the testsrc2 source, so a
+    30 dB threshold is a safe conformance gate.
+  - VideoToolbox accepts 'RGBA' as a decompression destination and as CVPixelBufferCreate format at creation
+    time but fails later with kCVReturnInvalidPixelFormat (-6680); BGRA is the packed format to use.
+  - VTCompressionSessionGetPixelBufferPool must not be cached - with BGRA source attributes the pool is
+    replaced after the first frame and the stale pool crashes (SIGSEGV) or stops delivering; non-IOSurface
+    CVPixelBuffers then fail with kVTPixelTransferNotSupportedErr (-12905), so fallback buffers need kCVPixelBufferIOSurfacePropertiesKey.
+  - The VideoToolbox encoder converts untagged BGRA input with BT.709 but writes no colour description
+    unless the ColorPrimaries/TransferFunction/YCbCrMatrix properties are set; the decoder converts untagged
+    320x240 streams with BT.601 (ffmpeg's default too).
+  - VideoToolbox's hardware H.264 encoder writes no VUI bitstream_restriction and uses pic_order_cnt_type
+    0, so its own streams decode with the DPB-size reorder latency; its HEVC output carries sps_max_num_reorder_pics
+    (0 without B-frames, 2 with).
+  - The hardware decoder rejects 64x48 pictures with kVTVideoDecoderMalfunctionErr (-12911); 96x64 works.
+  - ffmpeg's RGB conversion of the same frames differs from VideoToolbox's by about 28 dB plain PSNR (chroma
+    interpolation at sharp edges); averaging 8x8 blocks lifts the agreement to 35 dB while a wrong matrix
+    stays at 25 dB and swapped channels at 4 dB.
+  - VTIsHardwareDecodeSupported('av01') is 1 on the M3 before any registration call; VTRegisterSupplementalVideoDecoderIfAvailable('av01')
+    changes nothing for AV1 (and VP9 stays 0 after registering it), so it is not called.
+  - VideoToolbox accepts an AV1 temporal unit as one sample buffer with or without the leading temporal
+    delimiter OBU and outputs the same frames; a unit holding hidden frames plus a shown frame yields
+    one frame, and a 5-byte show_existing_frame unit yields the previously decoded hidden frame.
+  - The hardware AV1 decoder runs synchronously under VTDecodeFrameFlags 0 like H.264/HEVC - the output
+    callback fires before DecodeFrame returns - and its 8-bit output is bit-exact with libdav1d.
+  - Main profile 10-bit input is accepted with a '420v' destination; VideoToolbox converts to 8-bit itself
+    (53.5 dB against ffmpeg's conversion, no frame exact).
+  - macOS 26 registers "SW AV1 Decoder" (com.apple.videotoolbox.videodecoder.av1.sw) in VTCopyVideoDecoderList
+    next to the AVD hardware entry, but a session with EnableHardwareAcceleratedVideoDecoder=false fails
+    with -12906, as does naming the DecoderID; applications cannot use it.
+  - VideoToolbox rejects constant bitrate for H.264 on the author's M3 ("ConstantBitRate is not supported
+    by this encoder"), so the HLS sample uses VBR; WithRateControl(CBR) is left to the user.
+relations:
+- relation: candidate_for
+  to: requirement:hwmediacodec
+- relation: ranked_by
+  to: policy:support-tiers
+- relation: supersedes
+  to: milestone:m1-darwin-h264-decode
+- relation: supersedes
+  to: milestone:m2-darwin-encode
+- relation: supersedes
+  to: milestone:display-order-rgba
+- relation: supersedes
+  to: milestone:darwin-av1-decode
+- relation: supersedes
+  to: milestone:ios-videotoolbox
+- relation: supersedes
+  to: milestone:examples-screencast-hls
+- relation: supersedes
+  to: milestone:examples-heif-avif
 history:
   decode-implemented-2026-10-09:
     summary: H.264 and HEVC decoding implemented and verified bit-exact against ffmpeg.
@@ -472,6 +2113,49 @@ history:
       native display order); verified bit-exact against libdav1d (milestone:darwin-av1-decode). No AV1
       encoder exists on Apple Silicon.
   ios-2026-10-12:
-    summary: Runs on iOS through the same code - hardware-only specification keys made optional (iOS 17 /
-      17.4), kVTInvalidSessionErr recovery for background/foreground, cgo-enabled ios builds (milestone:ios-videotoolbox);
+    summary: Runs on iOS through the same code - hardware-only specification keys made optional (iOS 17
+      / 17.4), kVTInvalidSessionErr recovery for background/foreground, cgo-enabled ios builds (milestone:ios-videotoolbox);
       verified in the Simulator, iPhone pending.
+  m1-accepted-2026-10-09:
+    summary: Author confirmed M1 = macOS + decode + H.264 with purego.
+  m1-delivered-2026-10-09:
+    summary: All M1 acceptance checks passed on the author's M3 Mac; HEVC decode and a flush/seek test
+      were added beyond the original scope.
+  m1-reverified-2026-10-09:
+    summary: M1 decode tests re-run and passing after the M2 API changes (option types became interfaces;
+      ErrClosed/ErrInvalidData messages generalised); basis hashes refreshed.
+  m2-accepted-2026-10-09:
+    summary: Author asked for macOS encode as the slice after M1 ("つぎはmacのencode").
+  m2-delivered-2026-10-09:
+    summary: Encoder API, VideoToolbox VTCompressionSession backend, encode/transcode CLI and ffmpeg/ffprobe-based
+      conformance tests delivered; all acceptance checks passed on the author's M3 Mac with CGO_ENABLED=1
+      and 0.
+  av1mac-accepted-2026-10-09:
+    summary: Author asked for AV1 decoding on the VideoToolbox backend (Apple M3), with an IVF package
+      and CLI support; encoding out of scope since no Apple chip has an AV1 encoder.
+  av1mac-delivered-2026-10-09:
+    summary: internal/av1 parser, VideoToolbox AV1 session via av1C, DisplayOrderer bypass of the reorder
+      layer, ivf package, CLI, ffmpeg-oracle tests; all acceptance checks passed on the author's M3 with
+      CGO_ENABLED=1 and 0.
+  ios-planned-2026-10-11:
+    summary: Assessment for the author - iPhone needs the optional keys, background recovery and a cgo-enabled
+      build; Android needs a new NDK MediaCodec backend (AImageReader output, synchronous dequeue, getName
+      for the software check, API 28). The author confirmed an iPhone and an Android tablet are available.
+  ios-ios-implemented-2026-10-12:
+    summary: Optional hardware keys, session invalidation recovery with tests, Android build-tag exclusion,
+      mobilebuild.sh, examples/mobile with the Xcode project; Simulator CLI run and app launch verified;
+      iPhone run pending.
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:m1-darwin-h264-decode, milestone:m2-darwin-encode,
+      milestone:display-order-rgba, milestone:darwin-av1-decode, milestone:ios-videotoolbox, milestone:examples-screencast-hls,
+      milestone:examples-heif-avif was folded into this concept (keys prefixed with the milestone's tag;
+      dated measurements kept as evidence notes); the milestone files remain as superseded stubs with
+      their timelines.
+    supersedes:
+    - milestone:m1-darwin-h264-decode
+    - milestone:m2-darwin-encode
+    - milestone:display-order-rgba
+    - milestone:darwin-av1-decode
+    - milestone:ios-videotoolbox
+    - milestone:examples-screencast-hls
+    - milestone:examples-heif-avif

@@ -1,0 +1,336 @@
+id: component:image
+type: component
+title: 'image/heif and image/avif: HEIC and AVIF still images with the hardware codecs'
+summary: 'image/heif (HEVC pictures) and image/avif (AV1 pictures) read and write HEIF files with the
+  conventions of the standard image packages (Decode, DecodeConfig, Encode, RegisterFormat) over the shared
+  internal/imageitem box code: coded items and grids, clap/irot/imir, hvcC/av1C from in-band parameter
+  sets, one keyframe per picture or tile, odd sizes padded and declared through clap. Hardware codecs
+  only; the imgconv sample shows the cgo-free fallback. Consolidated on 2026-10-16 from milestone:image-heif
+  and milestone:examples-heif-avif.'
+lifecycle: active
+authority: authored
+aliases:
+- heif package
+- HEIC
+- AVIF
+- image.Decode HEIC
+- internal/imageitem
+constraints:
+- Box plumbing is hand-written (meta/hdlr/pitm/iinf/iref/iprp/ipco/ipma/iloc/idat, mdat), since 2026-10-10
+  in internal/imageitem; only the decoder configuration records come from mp4ff (hevc.DecodeHEVCDecConfRec,
+  mp4.CreateHvcC, av1.ParseSequenceHeader, av1.CodecConfRecFromSequenceHeader).
+- Decoding uses one decoder per file with WithOutputFormat(RGBA) and WithDecodeOrder(); every item is
+  a keyframe packet (hvcC parameter sets + length-prefixed NAL units as Annex-B; AV1 temporal unit with
+  the av1C configOBUs prepended when the item has no sequence header OBU). Grid tiles are decoded in row-major
+  order and stitched, then cropped to the grid output size.
+- 'Transformations apply in ipma order: clap (centre-relative clean aperture, integer arithmetic on doubled
+  coordinates), irot (anti-clockwise, matching ffmpeg''s displaymatrix rotation of +90 for irot 1), imir
+  (axis 0 = left-right).'
+- 'Encoding: WithKeyframeInterval(1), ForceKeyframe, WithFrameRate(1), WithQuality; VPS/SPS/PPS taken
+  from the first packet into hvcC (shared property when identical bytes); samples hold the slice NAL units
+  with 4-byte lengths. Items get hvcC (essential), ispe, pixi (8,8,8), colr nclx 1/1/1 video range; the
+  grid item gets ispe/pixi/colr plus clap/irot; tiles are hidden infe entries; iloc version 0 with absolute
+  32-bit offsets, meta built twice to learn the mdat offset.'
+- The VideoToolbox encoder rounds odd picture sizes down (321x203 request -> 320x202 SPS; the decoder
+  then reports 320x202), so odd pictures are padded by one replicated row/column, encoded even and declared
+  through clap. ImageIO opens such files at the right size but resamples instead of cropping (35.7 dB
+  vs 36.9 dB for our crop against the source); ffmpeg rounds the odd clap to even (320x202).
+- ImageIO (sips) does not bake irot into converted pixels (it keeps orientation metadata); ffmpeg maps
+  irot to a display matrix and autorotates, so ffmpeg is the oracle for the rotation direction and ImageIO
+  for the stored picture.
+- 8-bit 4:2:0 only (the library limit); 10-bit HEIC (iPhone HDR) is out of scope.
+- The author made the image/heif path conditional on the package being usable like a standard image format,
+  not only a parser; hence Decode/DecodeConfig/RegisterFormat and the *Options argument of Encode (nil
+  means defaults, as jpeg.Encode).
+- 'Formats are registered by major brand after "????ftyp": image/heif registers heic, heix, hevc, hevx,
+  heim, heis, hevm, hevs as "heic"; image/avif registers avif, avis as "avif". The generic mif1 and msf1
+  do not name the codec: internal/imageitem registers them once as "heif" when either package is linked
+  and dispatches by the primary item''s type, answering with an error that names the missing package when
+  the codec''s package is not linked.'
+- 'Each package reads only its codec: heif.Decode of an AVIF file (and the reverse) fails with an error
+  naming the other package, checked from the boxes before a decoder is opened. Info and Options are declared
+  in both packages (no Codec field any more); the shared code is internal/imageitem.'
+- 'Colours: the hardware decoder converts to RGB from what the bitstream declares. An HEVC item whose
+  SPS has no video_signal_type while the item has a colr nclx property (gen2brain/h265 writes full-range
+  BT.601 that way) is decoded to NV12 and converted in Go with the nclx matrix and range; before this
+  such files came out with stretched contrast (220 read as 234). Found by letting the hardware decoder
+  read the pure-Go encoder''s files in the imgconv tests.'
+- 'Decode has no context or option parameter (the image package signature): it uses context.Background
+  and hardware codecs only. DecodeBytes takes hwmediacodec.DecoderOption values (software fallback).'
+- 'DecodeConfig and DecodeInfo use only the boxes: ispe of the primary item or the grid descriptor, then
+  clap and irot in their stored order, so they need no decoder. The tests require them to predict exactly
+  what DecodeBytes returns for every file decoded.'
+- Decoding needs a hardware HEVC or AV1 decoder, so image.Decode fails on machines without one (the error
+  wraps hwmediacodec.ErrUnsupported). Output is opaque *image.RGBA; alpha (auxiliary items), 10-bit and
+  4:4:4 pictures are not handled.
+acceptance:
+  exheif-heic-write-imageio:
+    text: HEIC files written for a 640x480 picture (single, 256-pixel grid, rotated 90, grid rotated 270)
+      and a 321x203 picture open in macOS ImageIO at the stored size within 35 dB (4x4 block PSNR) of
+      the source; our decoder returns the rotated size, within 40 dB (pixel PSNR) of ImageIO for even
+      pictures and within 35 dB of the source for all; ffmpeg autorotates even single pictures to the
+      rotated source within 35 dB; Info reports HEVC, the tile count and the rotation.
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exheif-heif-encode-test
+  exheif-heic-read:
+    text: An 800x600 HEIC written by ImageIO decodes to 800x600 within 40 dB of ImageIO's own decode and
+      35 dB of the source.
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exheif-heif-decode-test
+  exheif-avif-read:
+    text: A 640x480 AVIF written by ffmpeg (libsvtav1) decodes through the AV1 hardware decoder to 640x480
+      within 40 dB of ffmpeg's decode and 30 dB of the source.
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exheif-avif-decode-test
+  exheif-avif-write:
+    text: Encode with Codec AV1 returns ErrUnsupported where Probe lists no AV1 encoder, and round-trips
+      where one exists.
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - exheif-avif-encode-test
+  heif-image-package:
+    text: For every HEIC and AVIF file the tests decode (written by this package as single, odd-sized,
+      grid, rotated and rotated-grid pictures, written by ImageIO, written by ffmpeg with libsvtav1),
+      image.DecodeConfig reports the format and the size of the decoded picture, image.Decode returns
+      the same pixels as DecodeBytes, and DecodeInfo equals the Info DecodeBytes returns.
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - heif-heif-test
+  heif-encode-defaults:
+    text: Encode with nil options writes a HEIC file that image.Decode reads back within 30 dB of the
+      source.
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - heif-heif-test
+  heif-garbage:
+    text: Empty, text and zero input is rejected by DecodeBytes, Decode, DecodeConfig and image.Decode.
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - heif-heif-test
+  heif-heifconv:
+    text: heifconv writes a tiled, rotated HEIC from a PNG, prints its structure with -info without decoding
+      and converts it back to a PNG of the rotated size.
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - heif-heifconv-run
+verification:
+  exheif-heif-encode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeHEICReadBySips
+    evidence:
+      path: image/heif/heif_test.go
+      locator: TestEncodeHEICReadBySips
+      note: Apple M3, macOS 26 (sips/ImageIO), ffmpeg 9.0.1; run 2026-10-09
+    basis:
+    - path: internal/imageitem/encode.go
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
+    - path: internal/imageitem/decode.go
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
+    - path: internal/imageitem/transform.go
+      input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
+    - path: internal/imageitem/box.go
+      input_hash: ebcf8a122ff1aaff641257d71e3143e3a141e56e1ca067801d7519d942c6a35f
+    - path: image/heif/heif_test.go
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
+    - path: internal/mediatest/image.go
+      input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
+  exheif-heif-decode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeHEICFromSips
+    evidence:
+      path: image/heif/heif_test.go
+      locator: TestDecodeHEICFromSips
+      note: run 2026-10-09
+    basis:
+    - path: internal/imageitem/decode.go
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
+    - path: image/heif/heif_test.go
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
+  exheif-avif-decode-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeAVIFFromFFmpeg
+    evidence:
+      path: image/heif/heif_test.go
+      locator: TestDecodeAVIFFromFFmpeg
+      note: ffmpeg 9.0.1 with libsvtav1 writes the AVIF; the M3 AV1 hardware decoder reads it; run 2026-10-09
+    basis:
+    - path: internal/imageitem/decode.go
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
+    - path: image/heif/heif_test.go
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
+  exheif-avif-encode-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: examples-heif-avif
+      platform: darwin
+      gpu: apple-silicon
+    test: TestEncodeAVIFNeedsAnEncoder, TestDecodeRejectsGarbage
+    evidence:
+      path: image/heif/heif_test.go
+      locator: TestEncodeAVIFNeedsAnEncoder
+      note: ErrUnsupported path exercised on the M3 (no AV1 encoder); the round-trip branch is unverified
+    basis:
+    - path: internal/imageitem/encode.go
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
+    - path: image/heif/heif_test.go
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
+  heif-heif-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    test: image/heif - TestEncodeHEICReadBySips, TestDecodeHEICFromSips, TestDecodeRejectsGarbage, TestEncodeDefaults,
+      TestDecodeConfigNeedsNoDecoder, TestGenericBrand, TestRejectsAVIF; image/avif - TestDecodeAVIFFromFFmpeg,
+      TestEncodeNeedsAnEncoder, TestDecodeRejectsGarbage, TestGenericBrand, TestRejectsHEIC; internal/imageitem
+      - TestNV12Image, TestItemNCLX
+    evidence:
+      path: image/heif/heif_test.go
+      locator: checkImagePackage
+      note: Apple M3, macOS 27, sips and ffmpeg with libsvtav1; run 2026-10-10
+    basis:
+    - path: internal/imageitem/decode.go
+      input_hash: ddd12c0a7d1fa90d20694c25369cc93166e9a36e93946b688b88ff8e91761697
+    - path: internal/imageitem/encode.go
+      input_hash: bb4cd0d8ee0364103a23b165fa32e3150e383ad0be1179c92b5de3c316c21d95
+    - path: internal/imageitem/box.go
+      input_hash: ebcf8a122ff1aaff641257d71e3143e3a141e56e1ca067801d7519d942c6a35f
+    - path: internal/imageitem/transform.go
+      input_hash: d203c2946ecec8ec1b0e61e4a0f1cb906caaaab81027cfcc1d2f828f43ca266b
+    - path: image/heif/heif_test.go
+      input_hash: b6a3e880a7769c66f92d7b0e04ceac1956fe3c1a520914d0f03d6b2964a4cb26
+    - path: image/heif/heif.go
+      input_hash: ffe04df8c4a6be24654d862fb46cd5a15aff83dbee401f50abc3036d166d938b
+    - path: image/avif/avif.go
+      input_hash: 78a4fce2526aec9642306fba75bfe32758b6b995c423bb2950ec5feb8cce828e
+    - path: image/avif/avif_test.go
+      input_hash: d34550f7a29683f0e35ee6bfc03671fa590b780805764e2486f40d52a54ef2ff
+    - path: internal/imageitem/colour_test.go
+      input_hash: f220415be385d7b9c81dec51209fb6ca926316834b330cf1ee7292fdbc96eaa9
+    - path: internal/mediatest/image.go
+      input_hash: 903d6d975d84579e70095fd5a2ac74b9796705175e59ad8e7be797a925f6634a
+  heif-heifconv-run:
+    state: passed
+    method: manual
+    authority: observed
+    scope:
+      milestone: image-heif
+      platform: darwin
+      gpu: apple-silicon
+    test: heifconv -tile 512 -rotate 90 src.png out.heic; heifconv -info out.heic; heifconv out.heic back.png
+    evidence:
+      path: examples/imgconv/main.go
+      locator: run
+      note: 2026-10-10 - 1000x700 gradient; -info printed hevc, 700x1000, 4 tile(s), rotation 90; back.png
+        is 700x1000
+    basis:
+    - path: examples/imgconv/main.go
+      input_hash: 13932424e4abcbb90a8ab62a8df0688ab4f4e20d1693e4ef6be69bbfe59237f8
+open_questions:
+  exheif-iphone-photos:
+    text: Real iPhone photos (grid of 512x512 hvc1 tiles, irot, EXIF, HDR gain maps, 10-bit for HDR captures)
+      were not available in the session; the grid and irot paths were exercised only with files this package
+      wrote and ImageIO read.
+    state: open
+    resolution: Try the author's photos; 10-bit captures are expected to fail with ErrUnsupported from
+      the decoder.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  heif-real-phone-photos:
+    text: iPhone photos are 10-bit HDR by default on recent models and carry auxiliary items; how far
+      should the decoder go (tone-mapped 8-bit output, alpha)?
+    state: open
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  delivery_results:
+    milestone:examples-heif-avif:
+      result:
+        status: delivered 2026-10-09
+    milestone:image-heif:
+      result:
+        status: delivered 2026-10-10
+  api:
+    heif: 'import github.com/shibukawa/hwmediacodec/image/heif (registers heic) or .../image/avif (registers
+      avif); either also registers the generic heif. Same functions in both: Decode(io.Reader) (image.Image,
+      error); DecodeConfig(io.Reader) (image.Config, error); DecodeBytes(data, ...hwmediacodec.DecoderOption)
+      (*image.RGBA, *Info, error); DecodeInfo(data) (*Info, error); Encode(w, img, *Options{Quality, TileSize,
+      Rotation, Software}) error; Info{Width, Height, Tiles, Rotation, Mirror}'
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:examples-heif-avif
+- relation: supersedes
+  to: milestone:image-heif
+- relation: depends_on
+  to: component:core-api
+history:
+  exheif-delivered-2026-10-09:
+    summary: Fifth and last of the requested sample slices; the AV1 decode branch was merged first so
+      that AVIF input works on the M3.
+  heif-delivered-2026-10-10:
+    summary: The author proposed image/heif provided the package offers image-compatible use rather than
+      a parser only, then asked for the image compatibility.
+  heif-split-2026-10-10:
+    summary: The author asked for image/avif and image/heif to be separate packages; the code moved to
+      internal/imageitem with a codec filter, and the colr-only colour signalling fix followed from the
+      imgconv fallback tests (milestone:imgconv-fallback).
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:examples-heif-avif, milestone:image-heif
+      was folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as
+      evidence notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:examples-heif-avif
+    - milestone:image-heif

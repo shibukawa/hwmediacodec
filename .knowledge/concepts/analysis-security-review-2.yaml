@@ -1,9 +1,10 @@
 id: analysis:security-review-2
 type: analysis
 title: Second security and performance review (2026-10-16) - bounds the first review missed, server hardening, image and container limits
-summary: 'A second whole-tree audit after the feature set was complete (REVIEW.md, section dated 2026-10-16). Four
+summary: 'A second whole-tree audit after the feature set was complete (2026-10-16; PR description of
+  branch claude/performance-security-review-949eb1). Four
   read-only audits (core and parsers, containers and images, native backends, capture/net/examples) found
-  what the 2026-10-14 pass (REVIEW.md, section dated 2026-10-14) missed: unbounded H.264
+  what the 2026-10-14 pass (PR #22) missed: unbounded H.264
   long-term references pinning the VA-API surface pool, a 13-byte HEVC slice allocating 64 MiB through
   num_entry_point_offsets, decoder output queues without a bound in VPL and NVDEC, an indefinitely blocking
   event wait in the Media Foundation encoder, a VA-API display leak, unlimited keyframe requests and peers in
@@ -158,8 +159,8 @@ verification:
       milestone: security-review-2
     test: govulncheck ./... (per module), staticcheck ./..., gosec -exclude=G103,G115 ./...
     evidence:
-      path: REVIEW.md
-      locator: 'section dated 2026-10-16'
+      path: go.mod
+      locator: toolchain
       note: govulncheck reported only Go standard library issues fixed in go1.27.2 (toolchain line added);
         staticcheck's two bug reports were intentional code; gosec's path and command findings are in the
         test-only browserexec server and the test helpers.
@@ -170,6 +171,28 @@ facts:
   api:
     webrtc: 'Broadcaster.MaxViewers (32), AcceptContext(ctx, offer), ErrTooManyViewers, ErrBadOffer'
     heif-avif: 'MaxPixels, MaxTiles, MaxInputBytes, ErrTooLarge, Limits, DecodeWithLimits, DecodeBytesWithLimits'
+  compatibility:
+    webrtc: 'Beyond MaxViewers or after Close ServeHTTP answers 503, a bad offer 400; a viewer about a second
+      behind is dropped; keyframe requests reach the encoder at most every 500 ms.'
+    hls: 'Methods other than GET and HEAD get 405; segments carry max-age of the window length, not 3600.'
+    images: 'Files beyond MaxPixels, MaxTiles or MaxInputBytes fail with ErrTooLarge; a reader that cannot
+      seek is read up to MaxInputBytes only.'
+    mp4: 'Tracks beyond MaxSamples do not open; the Segmenter errors when keyframes stop for four segment
+      lengths or MaxSegmentBytes; Track.Info returns zero values out of range; passthrough edit lists change
+      to the correct durations.'
+    parsers: 'Values outside the H.264/HEVC specification ranges listed under constraints are syntax errors.'
+    backends: 'VPL and NVDEC decoders answer ErrAgain at 8 held frames; the Media Foundation encoder fails
+      after 5 s without an event.'
+    examples: 'hls and webrtc listen on 127.0.0.1:8080 by default.'
+    toolchain: 'go.mod and go.work name toolchain go1.27.2 for the net/http HTTP/2 fixes.'
+  measured:
+    mp4-access-unit: '2 allocations and 1,671 B per sample before, 1 and 809 B after'
+    mp4-index: '40 B per sample before, 24 B after (1,048,576 samples: 41.9 MB -> 25.1 MB)'
+    heif-iloc-flood: 'DecodeConfig of 20,000 items x 65,535 extents: 21.5 s before, 107 us after'
+    heif-grid: '255 x 256 grid in 131 KB (16 GiB canvas): refused in 8 ms'
+    hevc-entry-points: '13-byte slice header with 16.7M entry points: 64 MiB before, under 1 MiB after'
+    pixconv: 'NV12 to RGBA at 1080p 0.78 ms (8 bands), 3.52 ms on one core; left unchanged, already LUT-driven
+      and row-parallel'
   result:
     status: delivered 2026-10-16
 history:

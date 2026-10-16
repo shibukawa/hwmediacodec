@@ -329,8 +329,7 @@ go test ./...
 The hls and webrtc tests only check the player pages. 
 The convert and thumbnails tests also need a hardware codec and skip
 otherwise; they check codec, frame count, PSNR against the source, copied
-audio and identical presentation times. (The MP4, HLS and HEIF tests moved
-to the core module with their packages.) The imgconv tests run the fallback
+audio and identical presentation times. The imgconv tests run the fallback
 codecs everywhere and compare them with the hardware ones where the machine
 has them. The
 texture sample's mesh (projection, culling, texture coordinates) has a unit

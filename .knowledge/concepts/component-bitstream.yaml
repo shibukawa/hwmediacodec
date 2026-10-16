@@ -1,0 +1,510 @@
+id: component:bitstream
+type: component
+title: 'Bitstream code in Go: H.264/HEVC/AV1 parsers, DPB and reference lists, header writers, Annex-B'
+summary: 'internal/bitstream, internal/h264, internal/hevc, internal/av1 and encoding/annexb: the parsers
+  of parameter sets, slice and frame headers, the H.264 decoded picture buffer (POC, marking, lists),
+  the HEVC reference picture sets and lists, the AV1 frame header parser with its reference state, the
+  VPS/SPS/PPS and slice header writers, and the Annex-B access unit splitter. Shared by the VA-API backend
+  (slice-level), the display-order layer (POC), the NV12-only backends (parameter-set caches, picture
+  size) and the browser backend (codec strings). Checked against ffmpeg''s trace_headers and debug logs,
+  x265''s reference lists and libdav1d. Consolidated on 2026-10-16 from the parser parts of the VA-API
+  and AV1 milestones.'
+lifecycle: active
+authority: authored
+aliases:
+- internal/h264
+- internal/hevc
+- internal/av1
+- encoding/annexb
+- parser oracle
+- ビットストリームパーサ
+acceptance:
+  av1mac-av1-parser-oracle:
+    text: Split, ParseSequenceHeader, ParseFrameHeader and CodecConfigurationRecord agree with ffmpeg's
+      trace_headers (OBU types and sizes, every sequence header field, show_existing_frame/frame_type/show_frame)
+      and with the av1C ffmpeg writes into an MP4 of the same stream, on 8-bit and 10-bit SVT-AV1 streams;
+      the synthetic unit tests cover the branches SVT-AV1 never takes.
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - av1mac-av1-parser-oracle-test
+    - av1mac-av1-parser-unit-test
+  vah264-parser-matches-ffmpeg:
+    text: Every SPS, PPS and slice-header syntax element the parser exposes equals ffmpeg's trace_headers
+      output, and the computed slice_data() bit offset equals the end of ffmpeg's header trace, on streams
+      covering CAVLC/CABAC, POC types 0 and 2, B-pyramids, 16 references, weighted prediction, explicit
+      scaling matrices, multiple slices, reference list modification and MMCO.
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: &id001
+      - amd
+      - intel
+    verified_by:
+    - vah264-parser-oracle-test
+  vah264-dpb-matches-ffmpeg:
+    text: After every reference picture the set of short- and long-term references (frame_num, LongTermFrameIdx)
+      equals ffmpeg's -debug mmco log, and every picture's POC equals ffmpeg's -debug pict value up to
+      ffmpeg's constant offset.
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: *id001
+    verified_by:
+    - vah264-dpb-oracle-test
+  vah264-header-writer-matches-parser:
+    text: SPS, PPS and slice headers written by the encoder's writer parse back identically with the package's
+      own parser and element by element with ffmpeg's trace_headers, and the writer's bit count equals
+      the parser's header length (needed for packed slice headers).
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: *id001
+    verified_by:
+    - vah264-writer-roundtrip-test
+  vahevc-hevc-parser-matches-ffmpeg:
+    text: Every SPS, PPS and slice segment header syntax element the parser exposes equals ffmpeg's trace_headers
+      output, and the computed start of slice_segment_data() equals the end of ffmpeg's header trace,
+      on x265 streams covering B-pyramids, several references, weighted prediction with real weights,
+      default scaling lists, several slices, wavefront entry points, open GOPs, HRD parameters, temporal
+      sub-layers, a conformance window, 10-bit and field coding, and on two-pass streams whose reference
+      picture sets live in the SPS.
+    scope:
+      milestone: linux-vaapi-hevc
+      platform: linux
+      gpu: &id002
+      - amd
+      - intel
+    verified_by:
+    - vahevc-hevc-parser-oracle
+  vahevc-hevc-reference-lists-match-x265:
+    text: The picture order count and both reference picture lists of every picture equal what the x265
+      encoder reports it used, no picture misses a reference, the DPB never holds more than sps_max_dec_pic_buffering_minus1
+      references, and decoding from a CRA picture skips exactly its RASL pictures.
+    scope:
+      milestone: linux-vaapi-hevc
+      platform: linux
+      gpu: *id002
+    verified_by:
+    - vahevc-hevc-dpb-oracle
+  av1lw-frame-header-oracle:
+    text: Every syntax element of every frame header that ffmpeg's trace_headers prints equals the parser's
+      value, and every header has the length ffmpeg read, for 32 stream configurations written by SVT-AV1,
+      libaom (through ffmpeg and through aomenc) and rav1e, with headers parsed against the reference
+      state the parser maintains itself.
+    scope:
+      milestone: av1-decode-linux-windows
+      platform: &id003
+      - linux
+      - windows
+    verified_by:
+    - av1lw-frame-header-trace-test
+verification:
+  dor-parser-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: h264 and hevc package tests (ParseSPS, ParsePPS, slice headers, POC sequences, reorder bound
+      table, lsb wrap, CRA handling)
+    evidence:
+      path: internal/h264/poc_test.go
+      locator: TestSliceHeadersAndPOC
+      note: parameter sets and slice headers embedded from libx264/libx265 output
+    basis:
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
+    - path: internal/h264/poc_test.go
+      input_hash: 6dd185cfb69762d9c4e1b8c489c3a42525168ad0f6e21128c84514c1d204e954
+    - path: internal/hevc/hevc.go
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
+    - path: internal/hevc/hevc_test.go
+      input_hash: a75cf1af1767efb03232e3d8626a59464b770f2107aa87b0eb32338d42f31633
+  av1mac-av1-parser-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestHeadersMatchFFmpegTrace (8bit, 10bit), TestCodecConfigurationRecordMatchesFFmpeg (8bit,
+      10bit)
+    evidence:
+      path: internal/av1/oracle_test.go
+      locator: TestHeadersMatchFFmpegTrace
+      note: 2026-10-09, ffmpeg 9.0.1 trace_headers; per stream 76 OBUs, 2 sequence headers and 44 frame
+        headers (14 hidden, 14 show_existing_frame) agree; av1C equals ffmpeg's MP4 extradata byte for
+        byte. Runs on any platform with ffmpeg + libsvtav1.
+    basis:
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: internal/av1/oracle_test.go
+      input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
+    - path: internal/testutil/av1.go
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
+    - path: internal/testutil/h264.go
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
+  av1mac-av1-parser-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: darwin-av1-decode
+      platform: darwin
+      gpu: apple-silicon
+    test: TestParseSequenceHeaderSVT, TestParseSequenceHeaderSynthetic, TestLEB128, TestSplit, TestParseFrameHeader,
+      TestParseTemporalUnit, TestCodecConfigurationRecord
+    evidence:
+      path: internal/av1/av1_test.go
+      locator: TestParseSequenceHeaderSynthetic
+      note: headers written bit by bit with internal/bitstream cover timing and decoder model info, two
+        operating points with tier and display delay, frame id numbers, Professional 12-bit 4:2:2 with
+        a colour description, High profile sRGB 4:4:4 as a reduced still picture, and monochrome
+    basis:
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/frame.go
+      input_hash: faaa1d5f15122eb07bf60b40b921dbbf8f08a67b6f7a9a4769a96e4752c0968e
+    - path: internal/av1/av1c.go
+      input_hash: 96215a74c080ea940227e097b9cf631a4928ee5a5e009c309f2ca206d486e940
+    - path: internal/av1/av1_test.go
+      input_hash: 0a533ca225e43b89af7e6be7bb177a89776b397f4b72e2bb9aff65affc5a1e62
+  vah264-parser-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: *id001
+    test: TestHeadersMatchFFmpegTrace, TestScalingListsJVT, TestFlatScalingListsByDefault
+    evidence:
+      path: internal/h264/oracle_test.go
+      note: ffmpeg 9.0.1 / libx264 on the author's M3, 2026-10-09; six streams, every element compared
+    basis:
+    - path: internal/h264/dpb.go
+      input_hash: 824035313eaa9a6ae7af7feb7090d70d898556293763c07ce4c226cc89171e51
+    - path: internal/h264/paramsets.go
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
+    - path: internal/h264/pps.go
+      input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
+    - path: internal/h264/scaling.go
+      input_hash: 47109749b1821b017309c38ac118700aad2128eb27303514209f4604b1592049
+    - path: internal/h264/slice.go
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
+    - path: internal/h264/sps.go
+      input_hash: d26ccdd3456c981a69670049ced1a0707bb9435b1fd57dda69502f69b6634a70
+    - path: internal/h264/oracle_test.go
+      input_hash: ffda8bec5418a8865643f1b67c9e45988d04d5f196db60ae58fc23684ea9ba03
+    - path: internal/testutil/h264.go
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
+    - path: internal/bitstream/reader.go
+      input_hash: 0d1dc581d7ef6bef5ae96474becdc9da5db36c8eaea8ec7d8cdd16e8b7660b92
+  vah264-dpb-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: *id001
+    test: TestDPBMatchesFFmpeg, TestPOCMatchesFFmpeg plus unit tests for long-term references, MMCO 1-6,
+      list modification, frame_num gaps and wrap, POC types 0/1/2
+    evidence:
+      path: internal/h264/dpb_oracle_test.go
+    basis:
+    - path: internal/h264/dpb.go
+      input_hash: 824035313eaa9a6ae7af7feb7090d70d898556293763c07ce4c226cc89171e51
+    - path: internal/h264/paramsets.go
+      input_hash: 5f8e4b4a29d9a71ecd0eaa2ecb9c726638facabcd08887048eb6a0df2e92f833
+    - path: internal/h264/pps.go
+      input_hash: 4c89a922a6d0362b138f99210dcab5649445d3c69e21277bc6d33c223693def7
+    - path: internal/h264/scaling.go
+      input_hash: 47109749b1821b017309c38ac118700aad2128eb27303514209f4604b1592049
+    - path: internal/h264/slice.go
+      input_hash: 777b54db25ed26486cb0c5210aeae684cb99141bce2dcb1891d082488bcba043
+    - path: internal/h264/sps.go
+      input_hash: d26ccdd3456c981a69670049ced1a0707bb9435b1fd57dda69502f69b6634a70
+    - path: internal/h264/dpb_oracle_test.go
+      input_hash: 2ccab55495face2c8e5141ce1f497de8a43e0f8875d482cfdf665c2a44deaa93
+    - path: internal/h264/dpb_test.go
+      input_hash: 2fe46e0ef974c7e9111e4b385fa14bbb87f2ff68fa2d9fa7a81419ada85feec9
+    - path: internal/testutil/h264.go
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
+  vah264-writer-roundtrip-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: linux-vaapi-decode
+      platform: linux
+      gpu: *id001
+    test: TestWriteParameterSetsRoundTrip, TestWriteSliceHeaderRoundTrip, TestWrittenHeadersMatchFFmpeg,
+      bitstream TestWriterRoundTrip/TestEscapeRoundTrip, sys TestEncodeStructLayouts
+    evidence:
+      path: internal/h264/write_test.go
+    basis:
+    - path: internal/bitstream/writer.go
+      input_hash: 8797eb395a5b44233efb6e91fbb82e491a9889829be9f5fc5b3fbad114acad1f
+    - path: internal/bitstream/writer_test.go
+      input_hash: 38116848b88923c5b42b57e6438b97ee44c83d6888662880395c71b2abdd2796
+    - path: internal/h264/write.go
+      input_hash: 23a5282c8f497fd47e493e98794e2c7592d981cf5839bb4b7ca266224ccd71b4
+    - path: internal/h264/write_test.go
+      input_hash: cca1e86c02901250f7ac96b25ac926211b98362bb4f327279858c6150acc9a37
+    - path: internal/vaapi/sys/types_enc.go
+      input_hash: ce900535f2463ba7ea70d7e8c39298e9437bfe1baaf366e10a9a4e968684778f
+    - path: internal/vaapi/sys/layout_enc_test.go
+      input_hash: 3906f214dc0e9d32a6ef4ab130ae5afa400e1aefeabac38b275bcd2ec5e791ac
+  vahevc-hevc-parser-oracle:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-vaapi-hevc
+      platform: linux
+      gpu: *id002
+    test: TestHeadersMatchFFmpegTrace (nine x265 streams), TestSPSReferencePictureSets, TestInterRPSPrediction,
+      TestSliceHeaderEmulationPrevention, TestDefaultScalingLists, TestTileSizes
+    evidence:
+      path: internal/hevc/oracle_test.go
+      note: ffmpeg 9.0.1 / libx265 and the x265 command line encoder on the author's M3, 2026-10-09. Inter-predicted
+        reference picture sets (x265 never writes them) are checked against the eight sets of the HEVC
+        reference encoder's random-access configuration.
+    basis:
+    - path: internal/hevc/hevc.go
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
+    - path: internal/hevc/reader.go
+      input_hash: 0b790732874b06c399f20771d303a331f53a89a0d48e98f84b2006038963b126
+    - path: internal/hevc/ptl.go
+      input_hash: c88323861562f881f87435672b240993510bb7a7625ead06ad73a382c13edb10
+    - path: internal/hevc/scaling.go
+      input_hash: 7abf7dc550be4d8e218c88d3e17960df717ec46fe4c95dfe6e9b9824ecef7f2b
+    - path: internal/hevc/rps.go
+      input_hash: 3ee4ab2fe14bd6349211998461d72b7d18ca9bb58b17270bd89224d21812a46f
+    - path: internal/hevc/sps.go
+      input_hash: 1374983ce37a6610377a25f0c5b14aca43b9af613141f7fb2c7d18127bbdefdf
+    - path: internal/hevc/pps.go
+      input_hash: 1c3e21cc8c7c1ae01f8963fd4324502808cccd15fc2f98869b9bdace18a8a3a5
+    - path: internal/hevc/slice.go
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
+    - path: internal/hevc/paramsets.go
+      input_hash: 960c560c9686df382fdf1b439059cfe96a87aaff1b4c0b2ea9fa743e388c4626
+    - path: internal/hevc/oracle_test.go
+      input_hash: 0fd1c52c14003b90a108ae0d69e3fd400b9495b63186857578aa425daee0f5fc
+    - path: internal/hevc/rps_test.go
+      input_hash: fcf489eb61c72a9b05295d4226eed72b0623e749d299fdea7896d6e9b3e7d35c
+    - path: internal/testutil/hevc.go
+      input_hash: 606b62fb132261f7a7c82df03efaee6bb7f17570d4b8644ecfcd03a6246b14af
+  vahevc-hevc-dpb-oracle:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-vaapi-hevc
+      platform: linux
+      gpu: *id002
+    test: TestRefPicListsMatchX265 (seven configurations), TestRandomAccessSkipsRASL, TestDPBLongTermAndModification,
+      TestDPBMissingReference
+    evidence:
+      path: internal/hevc/dpb_oracle_test.go
+      note: the x265 CSV report (--csv-log-level 1) lists the POCs of both reference lists of every frame;
+        mutating the list construction or the set derivation makes hundreds of comparisons fail
+    basis:
+    - path: internal/hevc/dpb.go
+      input_hash: 71ccc5e889291ebe46d5b832db7a0e03eacc38bddc58338c0bc9a8b1a4334982
+    - path: internal/hevc/rps.go
+      input_hash: 3ee4ab2fe14bd6349211998461d72b7d18ca9bb58b17270bd89224d21812a46f
+    - path: internal/hevc/slice.go
+      input_hash: ef0d58146d5cbc2ccf570df90b8fa6264755182b281542d07b7030357cf5de27
+    - path: internal/hevc/dpb_oracle_test.go
+      input_hash: be2e3cda47e259fb407748d1fa4f787e89723173fdacf30b64e3493367a60437
+    - path: internal/hevc/dpb_test.go
+      input_hash: d527c6acd42e9e9b8477f841916514ffb0f170534cc4caed3e23d06e1dc7f389
+    - path: internal/testutil/hevc.go
+      input_hash: 606b62fb132261f7a7c82df03efaee6bb7f17570d4b8644ecfcd03a6246b14af
+  vahevc-hevc-writer-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: linux-vaapi-hevc
+      platform: linux
+      gpu: *id002
+    test: TestWriteParameterSetsRoundTrip, TestWriteSliceHeaderRoundTrip, TestWrittenHeadersMatchFFmpeg
+    evidence:
+      path: internal/hevc/write_test.go
+    basis:
+    - path: internal/hevc/write.go
+      input_hash: 346027af5b6f5cdacc4e746789f74d9e7b7bb960846483e92dc447a22dabe34d
+    - path: internal/hevc/write_test.go
+      input_hash: 3db3a5863263b5734ed54181c5ecf4f5bf31bff5e56c04a1a2186978d51470a1
+    - path: internal/hevc/ptl.go
+      input_hash: c88323861562f881f87435672b240993510bb7a7625ead06ad73a382c13edb10
+    - path: internal/hevc/rps.go
+      input_hash: 3ee4ab2fe14bd6349211998461d72b7d18ca9bb58b17270bd89224d21812a46f
+  av1lw-frame-header-trace-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: av1-decode-linux-windows
+      platform: *id003
+    test: TestFrameHeadersMatchFFmpegTrace
+    evidence:
+      path: internal/av1/header_oracle_test.go
+      locator: TestFrameHeadersMatchFFmpegTrace
+      note: 2026-10-09, linux/arm64 container hwmediacodec-vafake (Debian 13, ffmpeg 7.1.5 with libaom
+        3.12.1, libsvtav1, librav1e, plus aomenc); 32 of 32 configurations pass. On the Mac (ffmpeg 9.0.1,
+        libsvtav1 only) the three SVT-AV1 configurations pass and the rest skip. Elements never seen in
+        any stream - is_translation, film_grain_params_ref_idx, buffer_removal_time, last_frame_idx.
+    basis:
+    - path: internal/av1/header.go
+      input_hash: 3b2cd38f495d0efa24e2aa9a318ab8d47e48954c948fe6905d76122244a51270
+    - path: internal/av1/seqhdr.go
+      input_hash: f79788913292e63abbbbd75bee4779cf243daaf9fa0a775e78df2a1f6682844d
+    - path: internal/av1/obu.go
+      input_hash: 05da18c78fbaa3245f45381fc708ae0702bf68e7cd1a8addf5251105ffada08c
+    - path: internal/av1/header_oracle_test.go
+      input_hash: 7fcfe54cd02053cae7e2596b0f29d17cd8b4dd02c3e6c397c04ef16ec7874cd6
+    - path: internal/av1/oracle_test.go
+      input_hash: f490e1da8fee600dd7c97670671faffd69629d79855e48ba6c596de13b6a9ea5
+    - path: internal/testutil/av1.go
+      input_hash: 343d864b0d830f8046c40d009ca41fd97cad995f799e8f42e40943c9d84f98bd
+    - path: internal/testutil/h264.go
+      input_hash: 621483401e4b7996ceef3fdefad25a3ae1284ca97c595bfdddd7a1f5599c8cd6
+    - path: internal/vaapi/testdata/fakedriver/Dockerfile
+      input_hash: 00539e91ff2059d088d8617b140cdc82de8d9f4d71a4a75e65b4103026710477
+open_questions:
+  m1-annexb-parser-scope:
+    text: Is a minimal Go Annex-B NAL splitter plus SPS/PPS extraction enough for M1, or should M1 already
+      include a full SPS parser (needed later for VA-API)?
+    state: answered
+    resolution: 'Minimal parser was enough: NAL split, first_mb/first_slice flag, parameter-set ids (incl.
+      HEVC profile_tier_level skip). A full SPS/slice parser is only needed for POC-based reordering and
+      for VA-API; tracked as requirement open question frame-reordering.'
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  milestone_notes:
+    dor:
+      implementation:
+        parsers: internal/h264 (SPS incl. VUI bitstream_restriction and timing, PPS, slice header up to
+          the POC fields, POC types 0/1/2 incl. fields, MaxReorderFrames with the level table) and internal/hevc
+          (SPS up to sps_max_num_reorder_pics, PPS, first slice segment header, POC with NoRaslOutputFlag);
+          both skip scaling lists / profile_tier_level correctly
+    av1mac:
+      implementation:
+        parser: internal/av1 - Split (OBU framing, leb128, extension headers, size-less last OBU), ParseSequenceHeader
+          (whole sequence_header_obu incl. timing/decoder model info, operating points, color_config),
+          ParseFrameHeader (show_existing_frame, frame_type, show_frame), ParseTemporalUnit (classification
+          - HasFrame, Keyframe, ShowExistingFrame), CodecConfigurationRecord (av1C, re-framing the sequence
+          header OBU with obu_has_size_field=1), StripTemporalDelimiters
+    vah264:
+      steps:
+      - internal/bitstream - lazy emulation-prevention removal (slice headers no longer copy the slice)
+        and more_rbsp_data().
+      - internal/h264 - scaling lists (zigzag, defaults, fall-back rules), SPS incl. VUI/HRD, PPS (lazy
+        parse against its SPS), slice header incl. modification/pred-weight/MMCO, DPB (POC 8.2.1, gaps
+        8.2.5.2, marking 8.2.5, lists 8.2.4) with a Surfaces callback for backend storage.
+      oracle_recipes:
+        headers: ffmpeg -i x.h264 -c copy -bsf:v trace_headers -f null - (prints every syntax element
+          with bit position; the Extradata copy before the first Packet line is skipped).
+        dpb: ffmpeg -threads 1 -loglevel debug -debug mmco (short/long term lists after each picture;
+          ffmpeg logs an empty state when an IDR slice starts, emulate it; pick the codec context with
+          most lines because ffmpeg decodes once for probing).
+        poc: ffmpeg -threads 1 -loglevel debug -debug pict (per slice "frame:N poc:T/B"; ffmpeg adds 65536
+          at each IDR for POC type 0).
+        display_order: not available from raw .h264 via ffprobe (pts/pkt_dts are N/A); POC equality with
+          ffmpeg is used instead.
+    vahevc:
+      steps:
+      - internal/hevc - full parsers (profile_tier_level, SPS incl. scaling lists, short- and long-term
+        reference picture sets, VUI, HRD skipped, range extension; PPS incl. tiles and range extension;
+        slice segment header incl. dependent segments, list modification, prediction weights, entry points),
+        ParameterSets, DPB (POC 8.3.1, reference picture set 8.3.2, lists 8.3.4, RASL skipping, stand-ins
+        for missing references), writers for VPS/SPS/PPS/slice segment headers. The earlier lightweight
+        parsers became ParseSPSHead/ParsePPSHead/ParseSliceHead and still serve the reorder tracker.
+      oracle_recipes:
+        headers: ffmpeg -f hevc -i x.hevc -c copy -bsf:v trace_headers -f null - (positions count from
+          the NAL header, after emulation prevention removal; the trace ends with the byte_alignment()
+          bits).
+        reference_lists: x265 --csv f.csv --csv-log-level 1 writes "List 0" / "List 1" columns with the
+          POCs of each frame's lists in encode order; POC restarts at IDR pictures.
+        sps_reference_sets: x265 two-pass with --multi-pass-opt-rps moves the sets into the SPS (short_term_ref_pic_set_idx);
+          it never uses inter RPS prediction.
+        weights: a fade (ffmpeg fade filter on testsrc2) makes x265 code luma and chroma weights.
+    av1lw:
+      implementation:
+        parser: internal/av1/header.go - State (sequence header plus eight RefFrame slots), State.ParseHeader
+          (whole uncompressed_header - frame size with superres and frame_size_with_refs, set_frame_refs,
+          tile info, quantisation, segmentation, delta q/lf, loop filter, CDEF, loop restoration, tx mode,
+          skip mode, global motion with the previous parameters of the primary reference frame and the
+          shear validity check, film grain incl. load from a reference), State.Update (reference frame
+          update, and the reload of a key frame shown by show_existing_frame), Header.ParseTileGroup (tile
+          sizes and offsets). seqhdr.go now keeps the decoder model lengths and every operating point.
+        tests: testutil.GenerateAV1With (any ffmpeg AV1 encoder) and GenerateAV1Aomenc (aomenc via y4m);
+          the fake driver image now installs aom-tools.
+  learned:
+  - The av1C ffmpeg writes into MP4 is 0x81, profile/level, the flags byte and 0x00 followed by the sequence
+    header OBU; a parser built from the specification reproduces it byte for byte.
+  - SVT-AV1 at preset 10 with -g 25 produces temporal units with up to four hidden frames in front of
+    a shown one and show_existing_frame units of 5 bytes, which is enough to exercise the hidden-frame
+    path.
+  - The whole slice-level stack can be validated on a machine without the target GPU by using ffmpeg's
+    debug logs as oracles; only the final pixel comparison needs hardware.
+  - ffmpeg's POC values carry an internal +65536 offset (prev_poc_msb = 1<<16 at IDR); compare differences,
+    not absolute values.
+  - Debian trixie's libx265 4.1 writes corrupt streams (or crashes) with slices > 1; it produced slice
+    segments without slice data, which the decoder now rejects as ErrInvalidData.
+  - ffmpeg's libaom wrapper has no option for super-resolution, reference scaling or S-frames (aom-params
+    rejects them); aomenc has. No available encoder writes frame_refs_short_signaling, so the test rewrites
+    headers bit by bit; a rewritten header is kept only if it parses to exactly its new length, because
+    skip_mode_present exists only when the derived references allow skip mode.
+  - ffmpeg 7.1's trace prints the coded force_integer_mv bit for intra frames, where the specification
+    (and the value sent to VA-API) is 1.
+  - trace_headers prints dotted names (delta_q_y_dc.delta_coded); the trace parser's name pattern needed
+    the dot.
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:m1-darwin-h264-decode
+- relation: supersedes
+  to: milestone:display-order-rgba
+- relation: supersedes
+  to: milestone:darwin-av1-decode
+- relation: supersedes
+  to: milestone:linux-vaapi-h264-decode
+- relation: supersedes
+  to: milestone:linux-vaapi-hevc
+- relation: supersedes
+  to: milestone:av1-decode-linux-windows
+history:
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:m1-darwin-h264-decode, milestone:display-order-rgba,
+      milestone:darwin-av1-decode, milestone:linux-vaapi-h264-decode, milestone:linux-vaapi-hevc, milestone:av1-decode-linux-windows
+      was folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as
+      evidence notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:m1-darwin-h264-decode
+    - milestone:display-order-rgba
+    - milestone:darwin-av1-decode
+    - milestone:linux-vaapi-h264-decode
+    - milestone:linux-vaapi-hevc
+    - milestone:av1-decode-linux-windows

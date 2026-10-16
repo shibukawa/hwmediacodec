@@ -1,86 +1,152 @@
 id: policy:support-tiers
 type: policy
 title: Platform and GPU support tiers
-summary: >-
-  Which OS x GPU combinations hwmediacodec supports, at what level, and which
-  are explicitly out of scope. Decided by the author on 2026-10-09.
+summary: Which OS x GPU combinations hwmediacodec supports, at what level, and which are explicitly out
+  of scope. Decided by the author on 2026-10-09.
 lifecycle: accepted
 authority: authored
-aliases: [サポート階層, Tier 1, Tier 2, 対応範囲]
+aliases:
+- サポート階層
+- Tier 1
+- Tier 2
+- 対応範囲
 scope:
-  platform: [darwin, linux, windows]
+  platform:
+  - darwin
+  - linux
+  - windows
 facts:
   tier1:
-    definition: Must pass the acceptance checks on real hardware before a release; H.264 and HEVC decode/encode are expected; a Tier 1 bug blocks a release.
+    definition: Must pass the acceptance checks on real hardware before a release; H.264 and HEVC decode/encode
+      are expected; a Tier 1 bug blocks a release.
     targets:
-      - {os: darwin, gpu: Apple Silicon (M-series), backend: backend:videotoolbox}
-      - {os: windows, gpu: Intel, backend: backend:media-foundation, alternative: backend:intel-vpl}
-      - {os: windows, gpu: AMD, backend: backend:media-foundation}
-      - {os: windows, gpu: NVIDIA, backend: backend:nvenc-nvdec, alternative: backend:media-foundation}
-      - {os: linux, gpu: Intel, backend: backend:intel-vpl (Gen12+), alternative: backend:vaapi (older generations)}
-      - {os: linux, gpu: AMD, backend: backend:vaapi}
-      - {os: linux, gpu: NVIDIA, backend: backend:nvenc-nvdec}
+    - os: darwin
+      gpu: Apple Silicon (M-series)
+      backend: backend:videotoolbox
+    - os: windows
+      gpu: Intel
+      backend: backend:media-foundation
+      alternative: backend:intel-vpl
+    - os: windows
+      gpu: AMD
+      backend: backend:media-foundation
+    - os: windows
+      gpu: NVIDIA
+      backend: backend:nvenc-nvdec
+      alternative: backend:media-foundation
+    - os: linux
+      gpu: Intel
+      backend: backend:intel-vpl (Gen12+)
+      alternative: backend:vaapi (older generations)
+    - os: linux
+      gpu: AMD
+      backend: backend:vaapi
+    - os: linux
+      gpu: NVIDIA
+      backend: backend:nvenc-nvdec
   mobile_proposed:
-    definition: Proposed on 2026-10-12 with the iOS slice, pending the author's decision on the tier. iOS
-      runs the Tier 1 VideoToolbox backend and the author has an iPhone and an Android tablet for verification,
-      which argues for Tier 1 once the device runs are done; builds need CGO_ENABLED=1 (purego on mobile).
+    definition: Proposed on 2026-10-12 with the iOS slice, pending the author's decision on the tier.
+      iOS runs the Tier 1 VideoToolbox backend and the author has an iPhone and an Android tablet for
+      verification, which argues for Tier 1 once the device runs are done; builds need CGO_ENABLED=1 (purego
+      on mobile).
     targets:
-      - {os: ios, gpu: Apple A-series and M-series, backend: backend:videotoolbox, state: implemented, verified: Simulator only}
-      - {os: android, gpu: any SoC with hardware MediaCodec codecs, backend: backend:mediacodec, state: implemented, verified: not yet (no device run), minimum: Android 14 / API 34 (author decision 2026-10-12)}
+    - os: ios
+      gpu: Apple A-series and M-series
+      backend: backend:videotoolbox
+      state: implemented
+      verified: Simulator only
+    - os: android
+      gpu: any SoC with hardware MediaCodec codecs
+      backend: backend:mediacodec
+      state: implemented
+      verified: not yet (no device run)
+      minimum: Android 14 / API 34 (author decision 2026-10-12)
   browser_proposed:
-    definition: Proposed on 2026-10-12 with the browser slice, pending the author's decision on the tier. The
-      backend is one piece of Go over the WebCodecs API, so the tier is per browser engine rather than per
-      GPU; Chromium on the author's Mac is verified, which argues for Tier 1 for Chromium browsers once
-      Windows is run, and best effort for Firefox and Safari until they are.
+    definition: Proposed on 2026-10-12 with the browser slice, pending the author's decision on the tier.
+      The backend is one piece of Go over the WebCodecs API, so the tier is per browser engine rather
+      than per GPU; Chromium on the author's Mac is verified, which argues for Tier 1 for Chromium browsers
+      once Windows is run, and best effort for Firefox and Safari until they are.
     targets:
-      - {os: js (GOOS=js GOARCH=wasm), browser: Chrome / Edge (Chromium), backend: backend:webcodecs, state: implemented, verified: headless Chrome on an Apple M3}
-      - {os: js (GOOS=js GOARCH=wasm), browser: Firefox, backend: backend:webcodecs, state: 'partial (RGBA/BGRA decode and H.264 encode; no NV12 decode, colour and quality gaps inside Firefox)', verified: Firefox 146 on an Apple M3 (2026-10-13)}
-      - {os: js (GOOS=js GOARCH=wasm), browser: Safari, backend: backend:webcodecs, state: 'partial (decode and H.264/HEVC encode work; NV12 not bit-exact, HEVC output full range, no constant quality)', verified: Safari 27.0.1 on an Apple M3 (2026-10-13)}
+    - os: js (GOOS=js GOARCH=wasm)
+      browser: Chrome / Edge (Chromium)
+      backend: backend:webcodecs
+      state: implemented
+      verified: headless Chrome on an Apple M3
+    - os: js (GOOS=js GOARCH=wasm)
+      browser: Firefox
+      backend: backend:webcodecs
+      state: partial (RGBA/BGRA decode and H.264 encode; no NV12 decode, colour and quality gaps inside
+        Firefox)
+      verified: Firefox 146 on an Apple M3 (2026-10-13)
+    - os: js (GOOS=js GOARCH=wasm)
+      browser: Safari
+      backend: backend:webcodecs
+      state: partial (decode and H.264/HEVC encode work; NV12 not bit-exact, HEVC output full range, no
+        constant quality)
+      verified: Safari 27.0.1 on an Apple M3 (2026-10-13)
   tier2:
-    definition: Best effort; builds and unit tests run in CI with stub backends, hardware verification happens when the author or a contributor has the device; gaps are documented and do not block a release.
+    definition: Best effort; builds and unit tests run in CI with stub backends, hardware verification
+      happens when the author or a contributor has the device; gaps are documented and do not block a
+      release.
     targets:
-      - {os: linux, gpu: Raspberry Pi 4 / 5 and similar ARM SoCs, backend: backend:v4l2-m2m}
-      - {os: windows, gpu: Qualcomm Snapdragon X (Windows on ARM), backend: backend:media-foundation}
+    - os: linux
+      gpu: Raspberry Pi 4 / 5 and similar ARM SoCs
+      backend: backend:v4l2-m2m
+    - os: windows
+      gpu: Qualcomm Snapdragon X (Windows on ARM)
+      backend: backend:media-foundation
   out_of_scope:
     definition: No code, no Probe() entry beyond "absent", no issue tracking.
     targets:
-      - {os: darwin, gpu: Intel Mac, reason: Author decision; Apple is ending Intel Mac OS support.}
-      - {os: windows, gpu: none (VM / hosted CI without GPU), reason: Author decision; software MFTs are not a target.}
-      - {os: linux, gpu: none (VM / hosted CI without GPU), reason: Author decision.}
-      - {api: Vulkan Video, reason: Author decision; slice-level API without macOS coverage.}
+    - os: darwin
+      gpu: Intel Mac
+      reason: Author decision; Apple is ending Intel Mac OS support.
+    - os: windows
+      gpu: none (VM / hosted CI without GPU)
+      reason: Author decision; software MFTs are not a target.
+    - os: linux
+      gpu: none (VM / hosted CI without GPU)
+      reason: Author decision.
+    - api: Vulkan Video
+      reason: Author decision; slice-level API without macOS coverage.
   implications:
-    - Tier 1 includes Linux AMD, whose only path is slice-level VA-API, so the Go-side H.264/HEVC parser and DPB component is in scope for Tier 1 completeness (see requirement open question linux-backend-split for ordering).
-    - Hardware integration tests cannot run on hosted CI; Tier 1 verification needs the author's machines or self-hosted runners (requirement open question ci-hardware).
-    - Probe() still reports absent cleanly on out-of-scope machines; the library must not crash there.
+  - Tier 1 includes Linux AMD, whose only path is slice-level VA-API, so the Go-side H.264/HEVC parser
+    and DPB component is in scope for Tier 1 completeness (see requirement open question linux-backend-split
+    for ordering).
+  - Hardware integration tests cannot run on hosted CI; Tier 1 verification needs the author's machines
+    or self-hosted runners (requirement open question ci-hardware).
+  - Probe() still reports absent cleanly on out-of-scope machines; the library must not crash there.
+relations:
+- relation: governs
+  to: requirement:hwmediacodec
+- relation: ranks
+  to: backend:videotoolbox
+- relation: ranks
+  to: backend:media-foundation
+- relation: ranks
+  to: backend:intel-vpl
+- relation: ranks
+  to: backend:vaapi
+- relation: ranks
+  to: backend:nvenc-nvdec
+- relation: ranks
+  to: backend:mediacodec
+- relation: ranks
+  to: backend:webcodecs
+- relation: ranks
+  to: backend:v4l2-m2m
+- relation: excludes
+  to: backend:vulkan-video
+- relation: informed_by
+  to: analysis:os-gpu-matrix
 history:
   browser-proposed-2026-10-12:
-    summary: Browsers added as proposed targets with the WebCodecs slice (milestone:browser-webcodecs); tier
-      to be set by the author.
+    summary: Browsers added as proposed targets with the WebCodecs slice (milestone:browser-webcodecs);
+      tier to be set by the author.
   mobile-proposed-2026-10-12:
-    summary: iOS and Android added as proposed targets with the iOS slice (milestone:ios-videotoolbox); tier
-      to be set by the author after the device runs.
+    summary: iOS and Android added as proposed targets with the iOS slice (milestone:ios-videotoolbox);
+      tier to be set by the author after the device runs.
   decided-2026-10-09:
-    summary: Author set Tier 1 = Apple Silicon Macs and Intel/AMD/NVIDIA on Windows and Linux; Tier 2 = Raspberry Pi and Snapdragon X; out of scope = Intel Mac, GPU-less CI, Vulkan Video. First milestone stays on macOS.
-relations:
-  - relation: governs
-    to: requirement:hwmediacodec
-  - relation: ranks
-    to: backend:videotoolbox
-  - relation: ranks
-    to: backend:media-foundation
-  - relation: ranks
-    to: backend:intel-vpl
-  - relation: ranks
-    to: backend:vaapi
-  - relation: ranks
-    to: backend:nvenc-nvdec
-  - relation: ranks
-    to: backend:mediacodec
-  - relation: ranks
-    to: backend:webcodecs
-  - relation: ranks
-    to: backend:v4l2-m2m
-  - relation: excludes
-    to: backend:vulkan-video
-  - relation: informed_by
-    to: analysis:os-gpu-matrix
+    summary: Author set Tier 1 = Apple Silicon Macs and Intel/AMD/NVIDIA on Windows and Linux; Tier 2
+      = Raspberry Pi and Snapdragon X; out of scope = Intel Mac, GPU-less CI, Vulkan Video. First milestone
+      stays on macOS.

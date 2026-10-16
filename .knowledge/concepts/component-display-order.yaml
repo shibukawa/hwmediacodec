@@ -1,0 +1,260 @@
+id: component:display-order
+type: component
+title: 'Display-order decoding: the reorder layer driven by picture order counts'
+summary: internal/reorder wraps every backend decoder that emits decode order (VideoToolbox, VA-API, NVDEC,
+  MediaCodec, WebCodecs) and releases frames in display order by picture order count, holding back no
+  more than the stream's reorder bound; WithDecodeOrder opts out; backends that reorder themselves (Media
+  Foundation, Intel VPL) and AV1 (one frame per temporal unit) bypass it. Consolidated on 2026-10-16 from
+  milestone:display-order-rgba.
+lifecycle: active
+authority: authored
+aliases:
+- reorder buffer
+- 表示順デコード
+- リオーダバッファ
+- internal/reorder
+- WithDecodeOrder
+constraints:
+- Display order is derived in Go from the bitstream (H.264/HEVC parameter sets and slice headers to picture
+  order counts), so it works for any backend that emits decode order; VideoToolbox cannot be delegated
+  the job (M1 experiment).
+- Frames are held back no longer than the stream's reorder bound - num_reorder_frames (H.264 VUI) or sps_max_num_reorder_pics
+  (HEVC), or for H.264 SPS without VUI bitstream_restriction the DPB size the level allows (clause A.3.1),
+  which is 0 when the stream cannot reorder (pic_order_cnt_type 2, intra-only, constrained profiles with
+  constraint_set3_flag).
+- Display order is the default; WithDecodeOrder restores the hardware order for latency-sensitive callers.
+- The reorder layer of the other backends keeps using head-only parsers (ParseSPSHead, ParsePPSHead, ParseSliceHead)
+  so that a stream this package does not fully model cannot break reordering there.
+acceptance:
+  dor-display-order-exact:
+    text: Decoding H.264 and HEVC streams with B-frames (b-pyramid, up to 8 consecutive) yields exactly
+      ffmpeg's output sequence, frame for frame, including checksums.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-bframe-display-order-test
+    - dor-reorder-oracle-test
+  dor-reorder-bound:
+    text: A stream that cannot reorder is never held back; otherwise at most num_reorder_frames frames
+      wait, the buffer releases the lowest POC once it holds more than that, an IDR/BLA flushes the previous
+      sequence first, and Flush releases everything in order before io.EOF.
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-reorder-oracle-test
+    - dor-reorder-buffer-unit-test
+  dor-decode-order-option:
+    text: WithDecodeOrder returns the same frame set in the order the hardware produces (not display order
+      for a B-frame stream).
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    verified_by:
+    - dor-decode-order-test
+verification:
+  dor-bframe-display-order-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeMatchesReference
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeMatchesReference
+      note: 60 frames 320x240; H.264 bframes 3 and 8, HEVC bframes 3 and 6; checksums equal ffmpeg's display-order
+        output frame for frame
+    basis:
+    - path: internal/reorder/decoder.go
+      input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/tracker.go
+      input_hash: 96505cdb897ca6b111d8e84cd123ccf7d7796d8c523166feb6a1e277fae095bd
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
+    - path: internal/hevc/hevc.go
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
+    - path: internal/videotoolbox/decoder.go
+      input_hash: feb199472a99d8a5fc6c8964d51acad9e688abcc3245ffaf7593448023a4f399
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  dor-reorder-oracle-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDisplayOrderMatchesTimestamps
+    evidence:
+      path: internal/reorder/reorder_test.go
+      locator: TestDisplayOrderMatchesTimestamps
+      note: no hardware - a fake decode-order backend; the output order equals the order of the presentation
+        timestamps ffmpeg wrote into an MP4 of the same stream (H.264 bframes 0/3/8, HEVC 0/3/6, 60 frames);
+        streams without B-frames hold nothing back
+    basis:
+    - path: internal/reorder/decoder.go
+      input_hash: a5f21bbe75eabbb1269f8bf0e0373d880d6d75999876fc9a9ce67a0f960e94e1
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/tracker.go
+      input_hash: 96505cdb897ca6b111d8e84cd123ccf7d7796d8c523166feb6a1e277fae095bd
+    - path: internal/h264/poc.go
+      input_hash: 70520975ce687d17475f9f2909a56f64e32fc92ad8148067fda8c479982b0a11
+    - path: internal/hevc/hevc.go
+      input_hash: 7c1f005b61842209709be7b3e2894a44e93a8aa9c10e47013d391e072f7cddf6
+    - path: internal/reorder/reorder_test.go
+      input_hash: f86ff5e4f5695326cea62ebb6d635b7ecc1e7958fe85861a5860526cf3a59776
+    - path: internal/testutil/ffmpeg.go
+      input_hash: 8e92f1f999ce429861223f0bd9f26b8531b08eb7305707a5cf818229b12456a3
+  dor-reorder-buffer-unit-test:
+    state: passed
+    method: unit
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestBufferBumping, TestBufferNewSequenceFlushesOld, TestBufferZeroReorderIsImmediate, TestBufferRelease,
+      TestFlushResetsSequence
+    evidence:
+      path: internal/reorder/reorder_test.go
+      locator: TestBufferBumping
+    basis:
+    - path: internal/reorder/buffer.go
+      input_hash: 3405ee1eb69c97897d0bb585b571c1beceeebae0b8df13669704f0050c723ded
+    - path: internal/reorder/reorder_test.go
+      input_hash: f86ff5e4f5695326cea62ebb6d635b7ecc1e7958fe85861a5860526cf3a59776
+  dor-decode-order-test:
+    state: passed
+    method: integration
+    authority: observed
+    scope:
+      milestone: display-order-rgba
+      platform: darwin
+      gpu: apple-silicon
+    test: TestDecodeOrderOption
+    evidence:
+      path: decode_test.go
+      locator: TestDecodeOrderOption
+    basis:
+    - path: hwmediacodec.go
+      input_hash: 120540bedeb3b4feb245453b68389b21bd04a5211af573ac4e0a89f05f5394bd
+    - path: decode_test.go
+      input_hash: ac98b671444f28cafc813e9a029d0af4752c3ad40d69937e2ab9179da3d7da5f
+open_questions:
+  dor-vui-less-h264-latency:
+    text: H.264 streams without VUI bitstream_restriction (VideoToolbox's own encoder writes none) are
+      held back by the level's DPB size (4 frames at 1080p level 4.0, 7 at 320x240) although they may
+      have no B-frames. ffmpeg instead guesses a small bound and grows it when it sees out-of-order POCs,
+      dropping frames at that moment. Should hwmediacodec adopt a heuristic, or stay spec-exact with WithDecodeOrder
+      as the escape hatch?
+    state: deferred
+    resolution: 'Spec-exact for now: the latency only matters for live decoding of such streams, and a
+      heuristic loses frames. Revisit if a live consumer needs display order from an untagged stream;
+      the encoder side could also be asked for VUI (VideoToolbox has no such property).'
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+  dor-frame-rate-from-stream:
+    text: The H.264 SPS parser already reads VUI timing_info; should the decoder expose the frame rate
+      so that ebitenvideo.NewPlayer can default fps from the stream?
+    state: deferred
+    resolution: Deferred until the HEVC VUI parser exists (its timing info sits behind the short-term
+      reference picture sets); an explicit fps parameter is enough for the author's streams.
+    scope:
+      platform: darwin
+      gpu: apple-silicon
+facts:
+  milestone_notes:
+    dor:
+      implementation:
+        tracker: internal/reorder.Tracker classifies each access unit - new sequence at IDR (H.264) or
+          IRAP with NoRaslOutputFlag (HEVC IDR/BLA, CRA after reset or EOS), drops RASL pictures of such
+          a CRA, unparseable pictures get a sequence of their own so they cannot block others
+        buffer: internal/reorder.buffer releases the lowest POC of the oldest sequence when a newer sequence
+          exists, when more than Reorder frames wait, or when draining after Flush
+  delivery_results:
+    milestone:display-order-rgba:
+      result:
+        status: delivered 2026-10-09
+        environment:
+          host: Apple M3, macOS 27.0.1 (build 26A434)
+          go: go1.27.0 darwin/arm64
+          purego: github.com/ebitengine/purego v0.11.1
+          ebiten: github.com/hajimehoshi/ebiten/v2 v2.10.4
+          oracle: ffmpeg/ffprobe 9.0.1 (libx264, libx265 available)
+          date: '2026-10-09'
+        tests:
+        - TestDecodeMatchesReference (h264 bf3/bf8, hevc bf3/bf6, exact order)
+        - TestDecodeOrderOption
+        - TestDecodeRGBA (h264/hevc x rgba/bgra)
+        - TestEncodeRGBAInput (rgba, bgra)
+        - TestTranscodeRoundTrip (now collects the frames the reorder buffer releases at Flush)
+        - TestPixelFormatLayout
+        - internal/reorder TestDisplayOrderMatchesTimestamps (6 streams), buffer unit tests, TestFlushResetsSequence
+        - internal/h264 and internal/hevc parser tests
+        - ebitenvideo timeline unit tests, TestSourceDeliversDisplayOrderRGBA, TestPlayerPlaysAndLoops
+        - M1/M2 suites unchanged; all pass with CGO_ENABLED=1, CGO_ENABLED=0 and -race
+        performance:
+          h264_1080p_decode_fps_nv12_display_order: 782
+          h264_1080p_decode_fps_bgra: 346
+          h264_1080p_decode_fps_rgba: 254
+          h264_1080p_decode_fps_nv12_decode_order: 796
+          h264_1080p_encode_fps_nv12: 199
+          h264_1080p_encode_fps_rgba: 182
+          h264_1080p_encode_fps_bgra: 181
+          note: cmd/hwmediacodec on an M3; decode of a 300-frame libx264 stream with 3 B-frames, encode
+            of 60 raw frames at 8 Mbit/s; the RGBA decode cost over BGRA is the Go R/B swap (about 1 ms
+            per frame)
+  learned:
+  - libx264 uses pic_order_cnt_type 2 without B-frames (no latency) and bitstream_restriction with num_reorder_frames
+    2 for bframes=3 (b-pyramid); libx265 writes sps_max_num_reorder_pics 2 for bframes=3.
+  - ffmpeg cannot be used as a timestamp oracle on raw elementary streams (pts N/A, and a -c copy remux
+    fakes pts == dts); encoding straight to MP4 and extracting the Annex-B stream with h264_mp4toannexb/hevc_mp4toannexb
+    gives real pts per access unit in decode order.
+  next_candidates:
+  - Frame-rate detection from the HEVC VUI, now that it is parsed.
+relations:
+- relation: part_of
+  to: requirement:hwmediacodec
+- relation: supersedes
+  to: milestone:display-order-rgba
+- relation: supersedes
+  to: milestone:linux-vaapi-hevc
+- relation: depends_on
+  to: component:bitstream
+history:
+  dor-accepted-2026-10-09:
+    summary: Author asked for display-order decoding (reorder buffer) and RGBA/BGRA for Ebitengine, proposing
+      that the Ebitengine-specific package live in its own go.mod depending on both; the proposal was
+      adopted.
+  dor-delivered-2026-10-09:
+    summary: Reorder layer, RGBA/BGRA on VideoToolbox decode and encode, ebitenvideo module with player
+      and example, CLI flags, ffmpeg-oracle tests; all acceptance checks passed on the author's M3 with
+      CGO_ENABLED=1 and 0.
+  dor-flush-drain-2026-10-12:
+    summary: The reorder layer released buffered frames one by one as soon as Flush was called, so frames
+      a backend hands over only after Flush (MediaCodec keeps a few in flight) came out unsorted at the
+      end of the stream; Receive now drains the backend to io.EOF before releasing, found on the Android
+      14 emulator (milestone:android-mediacodec).
+  consolidated-2026-10-16:
+    summary: On 2026-10-16 the content of the milestone concepts milestone:display-order-rgba, milestone:linux-vaapi-hevc
+      was folded into this concept (keys prefixed with the milestone's tag; dated measurements kept as
+      evidence notes); the milestone files remain as superseded stubs with their timelines.
+    supersedes:
+    - milestone:display-order-rgba
+    - milestone:linux-vaapi-hevc
