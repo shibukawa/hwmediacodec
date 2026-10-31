@@ -161,7 +161,9 @@ func TestEncodeHEICReadBySips(t *testing.T) {
 		{"odd_size", 321, 203, heif.Options{Quality: 0.8}},
 		{"grid", 640, 480, heif.Options{Quality: 0.8, TileSize: 256}},
 		{"rotated", 640, 480, heif.Options{Quality: 0.8, Rotation: 90}},
-		{"grid_rotated", 500, 300, heif.Options{Quality: 0.8, TileSize: 128, Rotation: 270}},
+		// 192: the smallest tile every HEVC encoder takes (NVENC from
+		// 129x33, the AMD encoder MFT from 192 wide).
+		{"grid_rotated", 500, 300, heif.Options{Quality: 0.8, TileSize: 192, Rotation: 270}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := testImage(tc.w, tc.h)
@@ -300,14 +302,14 @@ func TestEncodeDefaults(t *testing.T) {
 func TestDecodeConfigNeedsNoDecoder(t *testing.T) {
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
 	var buf bytes.Buffer
-	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 128, Rotation: 90}); err != nil {
+	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 192, Rotation: 90}); err != nil {
 		t.Fatal(err)
 	}
 	info, err := heif.DecodeInfo(buf.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := heif.Info{Width: 300, Height: 500, Tiles: 12, Rotation: 90}
+	want := heif.Info{Width: 300, Height: 500, Tiles: 6, Rotation: 90}
 	if *info != want {
 		t.Errorf("DecodeInfo %+v, want %+v", *info, want)
 	}
@@ -394,7 +396,7 @@ func TestLimits(t *testing.T) {
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
 	var buf bytes.Buffer
-	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 128}); err != nil {
+	if err := heif.Encode(&buf, testImage(500, 300), &heif.Options{TileSize: 192}); err != nil {
 		t.Fatal(err)
 	}
 	data := buf.Bytes()
@@ -419,17 +421,17 @@ func TestLimits(t *testing.T) {
 	if cfg, err := heif.DecodeConfig(bytes.NewReader(data)); err != nil || cfg.Width != 500 || cfg.Height != 300 {
 		t.Errorf("DecodeConfig under the limit = %+v, %v; want the declared 500x300", cfg, err)
 	}
-	if info, err := heif.DecodeInfo(data); err != nil || info.Width != 500 || info.Tiles != 12 {
+	if info, err := heif.DecodeInfo(data); err != nil || info.Width != 500 || info.Tiles != 6 {
 		t.Errorf("DecodeInfo under the limit = %+v, %v", info, err)
 	}
 	img, info, err := heif.DecodeBytesWithLimits(data, heif.Limits{MaxPixels: 500 * 300})
-	if err != nil || info.Tiles != 12 || img.Rect.Dx() != 500 {
+	if err != nil || info.Tiles != 6 || img.Rect.Dx() != 500 {
 		t.Fatalf("DecodeBytesWithLimits = %+v, %v", info, err)
 	}
 	heif.MaxPixels = 16384 * 16384
 	heif.MaxTiles = 4
 	refused("MaxTiles 4")
-	if _, info, err := heif.DecodeWithLimits(bytes.NewReader(data), heif.Limits{MaxTiles: 12}); err != nil || info.Tiles != 12 {
+	if _, info, err := heif.DecodeWithLimits(bytes.NewReader(data), heif.Limits{MaxTiles: 6}); err != nil || info.Tiles != 6 {
 		t.Errorf("DecodeWithLimits = %+v, %v", info, err)
 	}
 	heif.MaxTiles = 4096
@@ -447,7 +449,7 @@ func TestDecodeFromFile(t *testing.T) {
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Encode)
 	mediatest.RequireHardware(t, hwmediacodec.HEVC, hwmediacodec.Decode)
 	path := filepath.Join(t.TempDir(), "grid.heic")
-	encodeFile(t, path, testImage(500, 300), heif.Options{TileSize: 128, Rotation: 90})
+	encodeFile(t, path, testImage(500, 300), heif.Options{TileSize: 192, Rotation: 90})
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

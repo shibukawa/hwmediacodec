@@ -149,6 +149,9 @@ type candidate struct {
 	vendor   string // "VEN_1002" for a hardware MFT, empty otherwise
 }
 
+// vendorAMD is the MFT_ENUM_HARDWARE_VENDOR_ID of AMD's transforms.
+const vendorAMD = "VEN_1002"
+
 // deviceName describes the GPU behind a transform for Capability.Device:
 // the adapter whose PCI vendor matches a hardware MFT, the default adapter
 // (the one the Direct3D 11 device is created on) for the Microsoft
@@ -481,7 +484,7 @@ func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.E
 			reasons = append(reasons, fmt.Sprintf("%s: activation failed: %s", cand.name, hr))
 			continue
 		}
-		e := newEncoder(cfg, info, t, cand.name)
+		e := newEncoder(cfg, info, t, cand.name, cand.vendor)
 		err := e.configure()
 		if err == nil {
 			return e, nil

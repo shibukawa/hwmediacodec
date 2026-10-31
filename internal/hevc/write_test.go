@@ -120,6 +120,32 @@ func TestWriteParameterSetsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSetConformanceWindow replaces the window of written SPSs (with and
+// without one) and checks that nothing else changed.
+func TestSetConformanceWindow(t *testing.T) {
+	for i, sps := range writerSPS() {
+		for _, win := range [][4]uint32{{0, 4, 0, 2}, {1, 0, 3, 0}, {0, 0, 0, 0}, {0, 100, 0, 60}} {
+			nal, err := hevc.SetConformanceWindow(hevc.WriteSPS(sps), win[0], win[1], win[2], win[3])
+			if err != nil {
+				t.Fatalf("SPS %d %v: %v", i, win, err)
+			}
+			got, err := hevc.ParseSPS(nal)
+			if err != nil {
+				t.Fatalf("SPS %d %v: parse the result: %v", i, win, err)
+			}
+			want := *sps
+			want.ConformanceWindow = win != [4]uint32{}
+			want.ConfWinLeft, want.ConfWinRight, want.ConfWinTop, want.ConfWinBottom = win[0], win[1], win[2], win[3]
+			if !reflect.DeepEqual(*got, want) {
+				t.Errorf("SPS %d %v:\n got %+v\nwant %+v", i, win, *got, want)
+			}
+		}
+	}
+	if _, err := hevc.SetConformanceWindow([]byte{0x40, 0x01, 0x0c, 0x01}, 0, 1, 0, 0); err == nil {
+		t.Error("a VPS was accepted as an SPS")
+	}
+}
+
 // writerSlices returns slice segment headers valid for the given parameter
 // sets: the IDR and P pictures a hardware encoder writes plus B pictures.
 func writerSlices(sps *hevc.SPS, pps *hevc.PPS) []*hevc.SliceHeader {
