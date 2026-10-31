@@ -21,7 +21,7 @@ func TestPackNV12(t *testing.T) {
 	}
 	f := &codec.Frame{Width: w, Height: h, Format: codec.NV12, Planes: [][]byte{y, c}, Strides: []int{8, 8}}
 	dst := make([]byte, nv12Size(w, h))
-	packNV12(dst, f)
+	packNV12(dst, f, w)
 	want := []byte{0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29,
 		100, 101, 102, 103, 104, 105, 108, 109, 110, 111, 112, 113}
 	if !bytes.Equal(dst, want) {

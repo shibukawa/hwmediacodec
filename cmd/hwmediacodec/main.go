@@ -1,7 +1,9 @@
-// Command hwmediacodec probes the hardware codecs on this machine, decodes
-// elementary streams, encodes raw frames and transcodes between the two.
+// Command hwmediacodec probes the hardware codecs on this machine, checks
+// everything the library does on it, decodes elementary streams, encodes
+// raw frames and transcodes between the two.
 //
 //	hwmediacodec probe
+//	hwmediacodec check [-auto] [-o hwmediacodec-report.md] [-playback=false] [-webrtc=false]
 //	hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
 //	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
 //	hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
@@ -18,6 +20,12 @@
 // decode-audio writes every sample of an .aac file or of the audio track
 // of an MP4 file as raw interleaved samples, and encode-audio turns raw
 // 16-bit samples into an .aac file or an MP4 file.
+//
+// check runs the automatic checks (decode, encode round trips and audio,
+// once per backend), plays the bundled clip and streams the fireworks show
+// to the browser over WebRTC, then saves a Markdown report and prints a
+// link that opens a GitHub issue with it; see check.go. It is the
+// project's official check: please run it and send the report.
 package main
 
 import (
@@ -47,6 +55,8 @@ func main() {
 	switch os.Args[1] {
 	case "probe":
 		err = probe()
+	case "check":
+		os.Exit(check(os.Args[2:]))
 	case "decode":
 		err = decode(os.Args[2:])
 	case "encode":
@@ -70,6 +80,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   hwmediacodec probe
+  hwmediacodec check [-auto] [-o hwmediacodec-report.md] [-playback=false] [-webrtc=false]
   hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
   hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
   hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
@@ -93,7 +104,11 @@ func probe() error {
 		if c.Hardware {
 			hw = "hardware"
 		}
-		fmt.Printf("%-14s %-5s %-7s %s\n", c.Backend, c.Codec, c.Direction, hw)
+		line := fmt.Sprintf("%-15s %-5s %-7s %-8s", c.Backend, c.Codec, c.Direction, hw)
+		if c.Device != "" {
+			line += " " + c.Device
+		}
+		fmt.Println(strings.TrimRight(line, " "))
 	}
 	return nil
 }

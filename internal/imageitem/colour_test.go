@@ -76,3 +76,27 @@ func TestItemNCLX(t *testing.T) {
 		t.Error("an item without colr reports nclx")
 	}
 }
+
+// TestSignalledColours: the colr property repeats what the bitstream says
+// (NVENC: BT.601 matrix, primaries and transfer unspecified) and falls back
+// to BT.709 for the code points it leaves unspecified.
+func TestSignalledColours(t *testing.T) {
+	for _, tc := range []struct {
+		name                        string
+		primaries, transfer, matrix uint16
+		fullRange                   bool
+		want                        nclx
+	}{
+		{"nvenc rgb", 2, 2, 5, false, nclx{primaries: 1, transfer: 1, matrix: 5}},
+		{"unspecified", 2, 2, 2, false, defaultColours},
+		{"full range 601", 6, 6, 6, true, nclx{primaries: 6, transfer: 6, matrix: 6, fullRange: true}},
+		{"identity", 1, 13, 0, true, nclx{primaries: 1, transfer: 13, matrix: 0, fullRange: true}},
+	} {
+		if got := signalledColours(tc.primaries, tc.transfer, tc.matrix, tc.fullRange); got != tc.want {
+			t.Errorf("%s: %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+	if got := hevcColours([]byte{0x42, 0x01}); got != defaultColours {
+		t.Errorf("an SPS that does not parse gives %+v, want the defaults", got)
+	}
+}

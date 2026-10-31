@@ -224,6 +224,63 @@ func TestEncodeMatchesSource(t *testing.T) {
 	}
 }
 
+// TestEncodeOddWidth encodes a width that is not a multiple of 8 or 16,
+// decodes it with any backend and checks the size and the right-hand
+// columns: the AMD HEVC encoder MFT left the last 500 % 8 of them black
+// while declaring the full width.
+func TestEncodeOddWidth(t *testing.T) {
+	const w, h = 500, 300
+	for _, c := range []hwmediacodec.Codec{hwmediacodec.H264, hwmediacodec.HEVC} {
+		t.Run(c.String(), func(t *testing.T) {
+			requireHardwareEncode(t, c)
+			src := gradientNV12(w, h, 10)
+			enc, err := hwmediacodec.NewEncoder(context.Background(), c, w, h, hwmediacodec.WithFrameRate(testFPS), hwmediacodec.WithBitrate(2_000_000))
+			if err != nil {
+				t.Fatalf("NewEncoder: %v", err)
+			}
+			defer enc.Close()
+			pkts := encodeAll(t, enc, src, w, h)
+			var stream []byte
+			for _, p := range pkts {
+				stream = append(stream, p.Data...)
+			}
+			// Any backend decodes: HWMEDIACODEC_BACKENDS may name only the
+			// encoder's, whose decoder need not read its own streams.
+			t.Setenv("HWMEDIACODEC_BACKENDS", "")
+			dec := newDecoderOrSkip(t, c)
+			defer dec.Close()
+			frames := decodeFrames(t, dec, c, stream, hwmediacodec.NV12)
+			if len(frames) != len(src) {
+				t.Fatalf("decoded %d frames, want %d", len(frames), len(src))
+			}
+			got := make([][]byte, len(frames))
+			for i, f := range frames {
+				if f.width != w || f.height != h {
+					t.Fatalf("frame %d decoded at %dx%d, want %dx%d", i, f.width, f.height, w, h)
+				}
+				got[i] = f.pix
+			}
+			// Mean absolute luma difference of the last 8 columns.
+			for i := range src {
+				var sum, n float64
+				for y := 0; y < h; y++ {
+					for x := w - 8; x < w; x++ {
+						d := float64(src[i][y*w+x]) - float64(got[i][y*w+x])
+						sum += max(d, -d)
+						n++
+					}
+				}
+				if mean := sum / n; mean > 12 {
+					t.Fatalf("frame %d: the last 8 columns differ from the source by %.1f on average", i, mean)
+				}
+			}
+			if p := testutil.PSNRY(src[0], got[0], w, h); p < minPSNR {
+				t.Errorf("luma PSNR %.1f dB, want at least %.0f", p, minPSNR)
+			}
+		})
+	}
+}
+
 // TestTranscodeRoundTrip runs the end-to-end batch transcode path: hardware
 // encode, then hardware decode, compared to the source.
 func TestTranscodeRoundTrip(t *testing.T) {
@@ -588,4 +645,27 @@ func TestEncodeInvalidInput(t *testing.T) {
 	if err := enc.Send(ctx, short); !errors.Is(err, hwmediacodec.ErrClosed) {
 		t.Fatalf("Send after Close = %v, want ErrClosed", err)
 	}
+}
+
+// gradientNV12 makes frames without ffmpeg: smooth horizontal and vertical
+// ramps that move a little from frame to frame, up to the right edge.
+func gradientNV12(w, h, n int) [][]byte {
+	frames := make([][]byte, n)
+	for i := range frames {
+		f := make([]byte, w*h+w*((h+1)/2))
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				f[y*w+x] = byte(32 + (x*160)/w + (y*40)/h + i)
+			}
+		}
+		uv := f[w*h:]
+		for y := 0; y < (h+1)/2; y++ {
+			for x := 0; x < w/2; x++ {
+				uv[y*w+2*x] = byte(96 + (x*64)/(w/2))
+				uv[y*w+2*x+1] = byte(160 - (y*64)/((h+1)/2))
+			}
+		}
+		frames[i] = f
+	}
+	return frames
 }

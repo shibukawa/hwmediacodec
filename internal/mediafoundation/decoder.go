@@ -14,6 +14,7 @@ import (
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/av1"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
+	"github.com/shibukawa/hwmediacodec/internal/hevc"
 	"github.com/shibukawa/hwmediacodec/internal/mediafoundation/sys"
 )
 
@@ -124,6 +125,13 @@ func (d *decoder) configure(width, height int) error {
 		return backendErr("IMFTransform::SetInputType", hr)
 	}
 	if err := d.negotiateOutputType(); err != nil {
+		var be *codec.BackendError
+		if d.cfg.Codec == codec.HEVC && width == 0 && errors.As(err, &be) && be.Status == int64(sys.MF_E_ATTRIBUTENOTFOUND) {
+			// The HEVC decoder on an AMD GPU (HEVCVideoExtension) offers an
+			// NV12 type it then refuses until the input type has a frame
+			// size; Send configures again with the first SPS's.
+			return nil
+		}
 		return err
 	}
 	if err := d.notify(sys.MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, "BEGIN_STREAMING"); err != nil {
@@ -252,6 +260,16 @@ func (d *decoder) Send(ctx context.Context, p codec.Packet) error {
 			return nil
 		}
 		d.waitKeyframe = false
+	}
+	if !d.streaming {
+		// configure left the HEVC decoder waiting for the frame size.
+		w, h := d.codedSize()
+		if w == 0 {
+			return fmt.Errorf("%w: the keyframe comes without an SPS", codec.ErrInvalidData)
+		}
+		if err := d.configure(w, h); err != nil {
+			return err
+		}
 	}
 
 	var head []byte
@@ -708,4 +726,17 @@ func (d *decoder) Close() error {
 	// Frames already returned are Go memory and stay valid.
 	d.pending = nil
 	return nil
+}
+
+// codedSize is the coded picture size of the lowest-numbered HEVC SPS
+// received, or 0, 0 without one.
+func (d *decoder) codedSize() (width, height int) {
+	for id := uint32(0); id < 16; id++ {
+		if nal, ok := d.params.sets[annexb.ParamSPS][id]; ok {
+			if s, err := hevc.ParseSPSHead(nal); err == nil {
+				return s.Width, s.Height
+			}
+		}
+	}
+	return 0, 0
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -145,6 +146,32 @@ type candidate struct {
 	activate *sys.IMFActivate
 	name     string
 	flags    uint32
+	vendor   string // "VEN_1002" for a hardware MFT, empty otherwise
+}
+
+// vendorAMD is the MFT_ENUM_HARDWARE_VENDOR_ID of AMD's transforms.
+const vendorAMD = "VEN_1002"
+
+// deviceName describes the GPU behind a transform for Capability.Device:
+// the adapter whose PCI vendor matches a hardware MFT, the default adapter
+// (the one the Direct3D 11 device is created on) for the Microsoft
+// decoders, with the transform's name after it.
+func deviceName(adapters []sys.Adapter, c candidate) string {
+	gpu := ""
+	if v, err := strconv.ParseUint(strings.TrimPrefix(c.vendor, "VEN_"), 16, 32); err == nil && c.vendor != "" {
+		for _, a := range adapters {
+			if a.VendorID == uint32(v) {
+				gpu = a.Name
+				break
+			}
+		}
+	} else if len(adapters) > 0 {
+		gpu = adapters[0].Name
+	}
+	if gpu == "" {
+		return c.name
+	}
+	return gpu + " (" + c.name + ")"
 }
 
 // usable reports whether the MFT uses the synchronous processing model this
@@ -221,6 +248,7 @@ func enumerate(category sys.GUID, flags uint32, in, out *sys.MFT_REGISTER_TYPE_I
 			c.name = "unnamed MFT"
 		}
 		c.flags, _ = a.Attributes().UINT32(&sys.MF_TRANSFORM_FLAGS_Attribute)
+		c.vendor, _ = a.Attributes().String(&sys.MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
 		cands = append(cands, c)
 	}
 	return cands, nil
@@ -253,6 +281,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		return nil, nil
 	}
 	defer dev.release()
+	adapters := sys.Adapters()
 	var caps []codec.Capability
 	for _, c := range []codec.Codec{codec.H264, codec.HEVC, codec.AV1} {
 		if err := ctx.Err(); err != nil {
@@ -266,13 +295,15 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		if err != nil {
 			return caps, err
 		}
-		usable := false
+		device := ""
 		for _, cand := range cands {
-			usable = usable || cand.usable()
+			if device == "" && cand.usable() {
+				device = deviceName(adapters, cand)
+			}
 		}
 		releaseCandidates(cands)
-		if usable {
-			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Decode, Hardware: true})
+		if device != "" {
+			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Decode, Hardware: true, Device: device})
 		}
 	}
 	for _, c := range []codec.Codec{codec.H264, codec.HEVC} {
@@ -284,10 +315,13 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 		if err != nil {
 			return caps, err
 		}
-		releaseCandidates(encoders)
 		if len(encoders) > 0 {
-			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Encode, Hardware: true})
+			// NewEncoder tries them in this order, so the first is the one
+			// that encodes unless it fails to configure.
+			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Encode, Hardware: true,
+				Device: deviceName(adapters, encoders[0])})
 		}
+		releaseCandidates(encoders)
 	}
 	return caps, nil
 }
@@ -450,7 +484,7 @@ func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.E
 			reasons = append(reasons, fmt.Sprintf("%s: activation failed: %s", cand.name, hr))
 			continue
 		}
-		e := newEncoder(cfg, info, t, cand.name)
+		e := newEncoder(cfg, info, t, cand.name, cand.vendor)
 		err := e.configure()
 		if err == nil {
 			return e, nil

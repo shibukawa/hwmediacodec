@@ -40,20 +40,25 @@ web) the engine is the WebCodecs API, reached through `syscall/js`; see
 The core module depends on purego, `golang.org/x/sys` and, for the MP4 and
 image packages, [mp4ff](https://github.com/Eyevinn/mp4ff); all are pure Go.
 Ebitengine and pion are only pulled in by the separate modules
-(`ebitenvideo`, `net/webrtc`, `examples`).
+(`ebitenvideo`, `net/webrtc`, `cmd/hwmediacodec`, `examples`).
 
 ## Status
 
-Run the check on your machine, and please report the result: it decodes the
-bundled clip in H.264, HEVC and AV1, encodes and decodes back in every codec
+Please run the official check on your machine and report the result:
+`hwmediacodec check` decodes the bundled clip in H.264, HEVC and AV1, encodes and decodes back in every codec
 the machine has, plays the clip with sound, streams H.264 and HEVC to the
 browser over WebRTC, and prints a Markdown report to paste into a
 [new issue](https://github.com/shibukawa/hwmediacodec/issues/new). Rows below
 that say "not yet verified" are waiting for exactly that.
 
 ```sh
-go run github.com/shibukawa/hwmediacodec/examples/check@latest
+go run github.com/shibukawa/hwmediacodec/cmd/hwmediacodec@latest check
 ```
+
+`-auto` runs the automatic checks only, without a window (servers, CI,
+and Android or iOS outside the mobile sample, where the command has no
+window). The report names the GPU behind each backend and the browser
+behind each WebRTC result.
 
 | Platform | Backend | Decode | Encode |
 | --- | --- | --- | --- |
@@ -64,8 +69,8 @@ go run github.com/shibukawa/hwmediacodec/examples/check@latest
 | Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
-| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples; H.264 and AV1 decode of the whole clip in display order with `examples/check`, 256 and 355 fps at 720x1280)** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample, and the `examples/check` round trip at 37.0 dB luma PSNR); HEVC encode and AMD not run yet** |
+| Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified with `hwmediacodec check` on a GeForce RTX 2060 Max-Q laptop GPU (H.264 and HEVC decode of the whole clip, 216 and 367 fps at 720x1280; playback confirmed by eye); AV1 not run (the RTX 20 series has no AV1 decoder)** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **verified with the `hwmediacodec check` round trip (36.5 dB H.264, 36.9 dB HEVC) and the WebRTC stream to Chrome in both codecs; Edge on the same machine does not show the HEVC stream (it needs the paid HEVC Video Extensions)** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples; H.264 and AV1 decode of the whole clip in display order with `hwmediacodec check`, 256 and 355 fps at 720x1280); on AMD Radeon integrated graphics (Ryzen 4000) H.264 and HEVC decode pass (647 and 401 fps; HEVC needs the frame size in the input type there, see the [Windows notes](#windows-media-foundation))** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample, and the `hwmediacodec check` round trip at 37.0 dB luma PSNR) and on AMD Radeon integrated graphics through the AMD encoder MFTs (round trips at 37.2 dB H.264 and 34.9 dB HEVC; widths that are not a multiple of 8 are padded for the HEVC MFT, see the Windows notes); Media Foundation on an NVIDIA GPU not run yet (on a laptop with both, it picks the AMD GPU)** |
 
 AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
 decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
@@ -82,7 +87,7 @@ false):
 | Browsers (`GOOS=js GOARCH=wasm`) | WebCodecs (`AudioDecoder`, `AudioEncoder`) | AAC and Opus as the browser has them: AAC-LC to 5.1 and Opus in Chrome, Firefox and Safari on macOS, HE-AAC in Chrome and Safari; **the same tests as on macOS pass in the three browsers on macOS, with the limits in the [browser notes](#browser-notes)** | Opus (48 kHz) in every browser; AAC-LC where the browser has an encoder (Chrome and Safari on macOS, not Firefox); the encoder's delay is measured in the page |
 | Android | MediaCodec (the framework's software codecs, through the NDK) | AAC-LC to 5.1, HE-AAC as the device has it; Opus mono and stereo; **compared with ffmpeg on a Redmi Pad SE (Android 15) and the Android 14 emulator** | AAC-LC (the rates of the AAC table) and Opus (48 kHz), mono and stereo; the encoder's delay is measured on the device; **ffmpeg decodes the streams to the input on the Redmi Pad SE and the emulator** |
 | Linux | the distribution's libraries, loaded when present: `libopus`, `libavcodec` (FFmpeg 4 to 8), `libfdk-aac` | Opus mono and stereo (`libopus`); AAC-LC to 5.1, HE-AAC and HE-AAC v2 (`libavcodec`, or `libfdk-aac` without it); **the tests of macOS pass in containers of Debian 12 and 13, Ubuntu 22.04 and 24.04 and Fedora, on arm64 and amd64** | Opus (48 kHz, `libopus`); AAC-LC (`libfdk-aac`), mono and stereo; **same** |
-| Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **AAC verified on Windows with the player sample** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **verified on Windows with the `examples/check` round trip (2.01 s back at the input level)** |
+| Windows x64 / ARM64 | Media Foundation (the system's software transforms) | AAC (mono to 5.1); Opus where the system has a decoder for it; **AAC verified on Windows with the player sample and the `hwmediacodec check` decode of the clip's track** | AAC-LC at 44.1 or 48 kHz, mono and stereo, at 96, 128, 160 or 192 kbit/s (what the system's encoder offers); no Opus encoder exists; **verified on Windows with the `hwmediacodec check` round trip (2.01 s back at the input level)** |
 
 See [Audio](#audio) for the API and for what using the system's codecs
 means for AAC licensing.
@@ -667,6 +672,15 @@ encoder (software) instead. When no bitrate or quality is given the backend
 asks for 0.1 bit per pixel per frame (at least 200 kbit/s); when no frame rate
 is given it declares 30 fps.
 
+- With two GPUs (a laptop with integrated graphics and a discrete GPU) the
+  backend decodes on the default adapter, the first one DXGI lists, which is
+  usually the integrated GPU the panel is wired to, and encodes through the
+  first hardware encoder MFT `MFTEnumEx` returns, whichever vendor's that is.
+  So on a laptop with an NVIDIA GPU, Media Foundation may run on the other
+  GPU while the NVIDIA backend runs on the NVIDIA one. `Capability.Device`
+  names the adapter and the transform (for example
+  `AMD Radeon(TM) Graphics (AMDh264Encoder)`); `hwmediacodec probe` and
+  `hwmediacodec check` print it.
 - Requires Windows 10 or later, a GPU driver with DXVA support, for
   HEVC the free "HEVC Video Extensions from Device Manufacturer" (or the
   paid "HEVC Video Extensions") Store package, and for AV1 the free "AV1
@@ -682,6 +696,23 @@ is given it declares 30 fps.
   rejects (constant quality, CBR, B-frames, low latency, a profile) makes
   `NewEncoder` return `ErrUnsupported` naming the control and the MFT.
   B-frames request up to two consecutive B-pictures.
+- On AMD Radeon integrated graphics (a Ryzen 4000 laptop, the ROG Zephyrus
+  G14 GA401IV, which also has a GeForce RTX 2060 Max-Q) the HEVC decoder MFT
+  (`HEVCVideoExtension`) offers an NV12 output type and then refuses it with
+  `MF_E_ATTRIBUTENOTFOUND` (`0xC00D36E6`) until the input type carries a
+  frame size. The backend then configures the decoder again at the first
+  keyframe with the coded size of its SPS (measured 2026-10-31).
+- The AMD HEVC encoder MFT (`AMDh265Encoder`) on the same GPU encodes only
+  the columns up to the previous multiple of 8 and leaves the rest black
+  while its SPS declares the full width, and it ignores
+  `MF_MT_MINIMUM_DISPLAY_APERTURE`. The backend gives it frames padded to
+  a multiple of 8 (the last column repeated) and narrows the conformance
+  window of the SPS it writes back to the real width. Its H.264 encoder
+  has no such problem.
+- The Media Foundation AAC encoder adds no priming: it codes from the
+  first sample, so every decoder rebuilt the first 512 or so samples faded
+  in from silence. The backend sends one frame of silence first; it shows
+  in `Format().Delay` (1024), which callers drop.
 - 8-bit 4:2:0 only (NV12). 10-bit HEVC (P010) is rejected. Above 1920x1088
   the Microsoft H.264 decoder may fall back to software internally without
   reporting it.
@@ -694,8 +725,12 @@ is given it declares 30 fps.
   SDK headers (GUIDs, vtable layouts and structure sizes are checked at
   compile time). It has been run on Intel integrated graphics: the player
   and texture samples decode the bundled HEVC clip and play its AAC sound, and the webrtc
-  sample encodes H.264 through the Quick Sync encoder MFT. H.264 and AV1
-  decode, HEVC encode, audio encode and AMD GPUs have not been run yet. Run
+  sample encodes H.264 through the Quick Sync encoder MFT; `hwmediacodec check`
+  has since decoded H.264 and AV1 and round-tripped H.264 and AAC there. On
+  AMD Radeon integrated graphics (Ryzen 4000, 2026-10-31) H.264 and HEVC
+  decode and encode (through `AMDh264Encoder` and `AMDh265Encoder`) and AAC
+  decode and encode pass, with the workarounds described above. HEVC encode on Intel, discrete AMD GPUs and Media
+  Foundation on an NVIDIA GPU have not been run yet. Run
   `go test ./...` on a Windows machine with ffmpeg and ffprobe installed to
   verify further; the conformance tests skip when `Probe` reports no hardware engine,
   and the encoder tests for optional controls skip when the vendor MFT
@@ -727,8 +762,15 @@ AMD GPUs, and takes over when the NVIDIA backend reports `ErrUnsupported`.
   there on Windows; their layout is asserted at compile time against values
   measured with `x86_64-w64-mingw32-gcc` and
   `clang --target=x86_64-pc-windows-msvc`, so `GOOS=windows go build` checks
-  it from any host. Like the Media Foundation backend this code has **not
-  been run on Windows hardware yet**.
+  it from any host.
+- **Status.** Verified on Windows x64 with a GeForce RTX 2060 Max-Q (laptop) with
+  `hwmediacodec check` (2026-10-30): `Probe` lists hardware H.264 (up to
+  4096x4096) and HEVC (up to 8192x8192) decode and encode; the 720x1280 clip
+  decodes in display order at 216 fps (H.264) and 367 fps (HEVC) and plays
+  back as confirmed by eye; the encode round trips at 352x640 reach 36.5 dB
+  (H.264) and 36.9 dB (HEVC) at 629 and 444 fps; and H.264 and HEVC streams
+  sent over WebRTC show in Chrome (Edge on the same machine shows H.264
+  but not HEVC). AV1 was not run: the RTX 20 series has no AV1 decoder.
 
 ## Usage
 
@@ -1225,7 +1267,12 @@ http.Handle("/offer", bc)   // the page POSTs its SDP offer and gets the answer
   RFC 7798 aggregation and fragmentation units for HEVC).
 - `NewCodecBroadcaster(hwmediacodec.HEVC, ...)` streams HEVC. Browsers
   receive it where their platform decodes HEVC (Safari, and Chrome and
-  Edge with a hardware decoder; Chromium 152 on an Apple M3 does); an offer
+  Edge with a hardware decoder; Chromium 152 on an Apple M3 does). On
+  Windows with a GeForce RTX 2060 Max-Q, Chrome 156 shows the HEVC stream
+  and Edge on the same machine does not (2026-10-30); H.264 works in both.
+  Edge decodes HEVC only with the paid "HEVC Video Extensions" Store
+  package installed (according to caniuse), while Chrome reaches the GPU's
+  decoder by itself. An offer
   without H.265 is refused with `ErrBadOffer`, which `ServeHTTP` answers
   with 400.
 - Signalling is a single HTTP POST of the browser's SDP offer as JSON; the
@@ -1406,7 +1453,7 @@ player with sound
 (`examples/texture`), a HEIC/AVIF converter (`examples/imgconv`) and the
 player as an Ebitengine mobile game with an Xcode project for the iPhone
 (`examples/mobile`, built with `ebitenmobile bind`). The players default to a bundled clip
-(`examples/assets`). See [examples/README.md](examples/README.md).
+(`cmd/hwmediacodec/assets`). See [examples/README.md](examples/README.md).
 
 ```sh
 cd examples
@@ -1570,14 +1617,22 @@ staying as they are. What is missing is a way to give Ebitengine an image
 source for a texture.
 
 Inside the repository the modules build against each other's working tree
-through `go.work`. Consumers get the version named in the `require` line of
-`ebitenvideo/go.mod`; tag the core module first, update that line, then tag
-`ebitenvideo`.
+through `go.work`. Consumers get the versions named in the `require` lines,
+so release in dependency order: tag the core module first, update the
+`require` lines of `ebitenvideo/go.mod` and `net/webrtc/go.mod` and tag
+them, then `cmd/hwmediacodec` (tag `cmd/hwmediacodec/vX.Y.Z`), then
+`examples`, which also has to gain a `require` line for
+`cmd/hwmediacodec` (its sample media, the check and the fireworks scene
+live there). The core module shipped the command itself up to v0.3.2, so
+`cmd/hwmediacodec/go.mod` must require a later core release; otherwise
+`go run .../cmd/hwmediacodec@latest` finds the package in two modules.
 
 A command-line tool exercises the same API:
 
 ```sh
 go run ./cmd/hwmediacodec probe
+go run ./cmd/hwmediacodec check                                        # the official check: window, playback, WebRTC, report
+go run ./cmd/hwmediacodec check -auto                                  # the automatic checks only, no window
 go run ./cmd/hwmediacodec decode -hash input.h264                       # display order, NV12
 go run ./cmd/hwmediacodec decode -format rgba -o out.rgba input.hevc -codec hevc
 go run ./cmd/hwmediacodec decode -decode-order -hash input.h264
@@ -1602,7 +1657,8 @@ profiles. Set `HWMEDIACODEC_NVIDIA_DEVICE` to a CUDA device ordinal to pick a
 GPU. The backend is registered before VA-API. It was written on a Mac: struct
 layouts are verified against the SDK headers with clang and every symbol binds
 against driver 535 in a container, but no NVIDIA hardware conformance run has
-happened yet.
+happened on Linux yet; the same code passes `hwmediacodec check` on Windows (see
+[Windows (NVDEC / NVENC)](#windows-nvdec--nvenc)).
 
 The Intel VPL backend (`internal/vpl`) loads the VPL dispatcher
 `libvpl.so.2`, which finds the GPU runtime: `libmfx-gen.so.1.2` for Tiger

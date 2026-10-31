@@ -1,4 +1,4 @@
-// Command webrtc streams the fireworks show (see internal/fireworks; keys
+// Command webrtc streams the fireworks show (see cmd/hwmediacodec/fireworks; keys
 // launch shells) to browsers over WebRTC with about a hundred milliseconds
 // of latency, and opens the player page:
 //
@@ -27,7 +27,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/fireworks"
 	"github.com/shibukawa/hwmediacodec/net/webrtc"
 )
 

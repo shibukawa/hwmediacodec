@@ -142,7 +142,7 @@ func probeEncoder(dev *device, api *sys.API) ([]codec.Capability, error) {
 			}
 			e.codecGUID = guid
 			caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Encode, Hardware: true,
-				MaxWidth: e.capability(sys.CapsWidthMax), MaxHeight: e.capability(sys.CapsHeightMax)})
+				MaxWidth: e.capability(sys.CapsWidthMax), MaxHeight: e.capability(sys.CapsHeightMax), Device: dev.name})
 		}
 		return nil
 	})

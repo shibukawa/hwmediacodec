@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/assets"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
-	"github.com/shibukawa/hwmediacodec/examples/assets"
 	"github.com/shibukawa/hwmediacodec/internal/mediatest"
 )
 

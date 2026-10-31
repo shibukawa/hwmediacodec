@@ -107,19 +107,27 @@ func decodeVideoArea(b []byte) (rect, bool) {
 	}, true
 }
 
-// packNV12 copies the two planes of an NV12 frame into dst tightly packed
-// (stride = width), which is the layout the encoder's input type declares.
-// The frame must already have been validated.
-func packNV12(dst []byte, f *codecFrame) {
+// packNV12 copies the two planes of an NV12 frame into dst as a frame of
+// width codedWidth (at least f.Width, even) with stride = codedWidth, which
+// is the layout the encoder's input type declares. Columns beyond the
+// picture repeat its last luma sample and CbCr pair. The frame must
+// already have been validated.
+func packNV12(dst []byte, f *codecFrame, codedWidth int) {
 	rows := [2]int{f.Height, (f.Height + 1) / 2}
 	rowBytes := [2]int{f.Width, (f.Width + 1) / 2 * 2}
+	pitch := [2]int{codedWidth, (codedWidth + 1) / 2 * 2}
 	off := 0
 	for i := 0; i < 2; i++ {
 		src := f.Planes[i]
 		stride := f.Strides[i]
+		sample := i + 1 // bytes per sample: Y, CbCr
 		for r := 0; r < rows[i]; r++ {
-			copy(dst[off:off+rowBytes[i]], src[r*stride:r*stride+rowBytes[i]])
-			off += rowBytes[i]
+			row := dst[off : off+pitch[i]]
+			copy(row, src[r*stride:r*stride+rowBytes[i]])
+			for x := rowBytes[i]; x < pitch[i]; x++ {
+				row[x] = row[x-sample]
+			}
+			off += pitch[i]
 		}
 	}
 }

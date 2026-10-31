@@ -1,6 +1,9 @@
+//go:build (windows || darwin || linux) && !android && !ios
+
 package main
 
 import (
+	"context"
 	"fmt"
 	"image/color"
 	"math"
@@ -16,8 +19,9 @@ import (
 	"github.com/pkg/browser"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
-	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/checker"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/checker/playback"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/fireworks"
 )
 
 const (
@@ -26,6 +30,36 @@ const (
 	lineH      = 16
 	charW      = 6 // of the debug font
 )
+
+// hasWindow is true where Ebitengine opens a window for the check.
+const hasWindow = true
+
+// checkWindow runs the automatic checks behind the window, then the
+// playback and WebRTC stages in it, and returns the exit status.
+func checkWindow(r *checker.Report, o checkOptions) int {
+	g := newGame(r, o.out, o.addr, o.open, o.play)
+	g.skipPlayback, g.skipWebRTC = !o.playback, !o.webrtc
+	go func() {
+		(&checker.Checker{R: r}).Run(context.Background())
+		g.autoDone.Store(true)
+	}()
+	ebiten.SetWindowSize(winW, winH)
+	ebiten.SetWindowTitle("hwmediacodec check")
+	ebiten.SetTPS(webFPS)
+	err := ebiten.RunGame(g)
+	g.close()
+	code := 0
+	if !g.saved {
+		code = finishCheck(r, o.out)
+	} else if _, fail := r.Counts(); fail > 0 {
+		code = 1
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "check:", err)
+		return 1
+	}
+	return code
+}
 
 type stage int
 
@@ -50,7 +84,7 @@ type game struct {
 	skipPlayback, skipWebRTC bool
 
 	// Playback.
-	pb *checker.Playback
+	pb *playback.Stage
 
 	// WebRTC.
 	web    *web
@@ -108,7 +142,7 @@ func (g *game) startPlayback() {
 		g.startWebRTC()
 		return
 	}
-	g.pb = checker.NewPlayback(g.r, g.playLen, false)
+	g.pb = playback.New(g.r, g.playLen, false)
 	if g.pb.Done() {
 		g.startWebRTC()
 	}
@@ -192,7 +226,7 @@ func (g *game) finish() {
 		return
 	}
 	g.saved = true
-	finish(g.r, g.out)
+	finishCheck(g.r, g.out)
 	if _, err := os.Stat(g.out); err == nil {
 		g.savedAt = displayPath(g.out)
 	}
@@ -296,11 +330,11 @@ func (g *game) drawPanel(screen *ebiten.Image) {
 	case stPlayback:
 		name := checker.CodecName(g.pb.Codec())
 		switch g.pb.Question() {
-		case checker.Watching:
+		case playback.Watching:
 			prompt = []string{fmt.Sprintf("Playing the %s clip with sound (%.0fs).", name, g.pb.Left().Seconds()), "[S] skip  [Esc] stop and save the report"}
-		case checker.AskPicture:
+		case playback.AskPicture:
 			prompt = []string{fmt.Sprintf("Did the %s video play smoothly, with natural colours?", name), "[Y] yes  [N] no  [S] skip"}
-		case checker.AskSound:
+		case playback.AskSound:
 			prompt = []string{"Did you hear the sound of the waterfall?", "[Y] yes  [N] no  [S] skip"}
 		}
 	case stWebRTC:

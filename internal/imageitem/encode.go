@@ -14,6 +14,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
+	hevcps "github.com/shibukawa/hwmediacodec/internal/hevc"
 )
 
 // Options control Encode.
@@ -38,6 +39,43 @@ type codedItem struct {
 	data   []byte // sample: length-prefixed NAL units or an AV1 temporal unit
 	width  int
 	height int
+	colour nclx // what the bitstream signals, for the colr property
+}
+
+// defaultColours describes the pictures when the bitstream leaves a code
+// point unspecified: BT.709 primaries, transfer and matrix in video range,
+// which is what the RGB conversion in Go and VideoToolbox produce.
+var defaultColours = nclx{primaries: 1, transfer: 1, matrix: 1}
+
+// signalledColours fills the code points a bitstream leaves unspecified
+// (2) from defaultColours. The colr property must agree with the stream:
+// readers prefer it (ISO/IEC 23008-12), and NVENC converts RGB input with
+// the BT.601 matrix and says so in the VUI.
+func signalledColours(primaries, transfer, matrix uint16, fullRange bool) nclx {
+	c := nclx{primaries: primaries, transfer: transfer, matrix: matrix, fullRange: fullRange}
+	if c.primaries == 2 {
+		c.primaries = defaultColours.primaries
+	}
+	if c.transfer == 2 {
+		c.transfer = defaultColours.transfer
+	}
+	if c.matrix == 2 {
+		c.matrix = defaultColours.matrix
+	}
+	return c
+}
+
+// hevcColours reads the colour description from the VUI of an SPS.
+func hevcColours(sps []byte) nclx {
+	s, err := hevcps.ParseSPS(sps)
+	if err != nil || !s.VUIPresent || !s.VUI.VideoSignalTypePresent {
+		return defaultColours
+	}
+	v := s.VUI
+	if !v.ColourDescriptionPresent {
+		return signalledColours(2, 2, 2, v.VideoFullRange)
+	}
+	return signalledColours(uint16(v.ColourPrimaries), uint16(v.TransferCharacteristics), uint16(v.MatrixCoeffs), v.VideoFullRange)
 }
 
 // Encode writes img as a HEIC (Codec HEVC, the default) or AVIF (Codec
@@ -213,7 +251,7 @@ func hevcItem(au []byte) (codedItem, error) {
 	if err := hvcC.DecConfRec.Encode(&buf); err != nil {
 		return codedItem{}, err
 	}
-	return codedItem{config: buf.Bytes(), data: data}, nil
+	return codedItem{config: buf.Bytes(), data: data, colour: hevcColours(sps[0])}, nil
 }
 
 // av1Item builds the av1C record from the sequence header of a temporal
@@ -261,7 +299,8 @@ func av1Item(tu []byte) (codedItem, error) {
 			if err := rec.Encode(&buf); err != nil {
 				return codedItem{}, err
 			}
-			return codedItem{config: buf.Bytes(), data: tu}, nil
+			colour := signalledColours(uint16(sh.ColorPrimaries), uint16(sh.TransferCharacteristics), uint16(sh.MatrixCoefficients), sh.ColorRange)
+			return codedItem{config: buf.Bytes(), data: tu, colour: colour}, nil
 		}
 		off += int(size)
 	}
@@ -298,10 +337,21 @@ func writeFile(w io.Writer, coded []codedItem, cols, rows, width, height, codedW
 		return payload(func(x *writer) { x.full("ispe", 0, 0, payload(func(y *writer) { y.u32(uint32(w)); y.u32(uint32(h)) })) })
 	}
 	pixi := add("pixi", payload(func(x *writer) { x.full("pixi", 0, 0, []byte{3, 8, 8, 8}) }))
-	// nclx: BT.709 primaries, transfer and matrix, video range, which is
-	// what VideoToolbox converts RGB input to and tags the stream with.
+	// nclx: the colours the bitstream of the first picture signals (one
+	// encoder codes every tile alike).
+	col := coded[0].colour
+	var rangeFlag byte
+	if col.fullRange {
+		rangeFlag = 0x80
+	}
 	colr := add("colr", payload(func(x *writer) {
-		x.box("colr", payload(func(y *writer) { y.str("nclx"); y.u16(1); y.u16(1); y.u16(1); y.u8(0) }))
+		x.box("colr", payload(func(y *writer) {
+			y.str("nclx")
+			y.u16(col.primaries)
+			y.u16(col.transfer)
+			y.u16(col.matrix)
+			y.u8(rangeFlag)
+		}))
 	}))
 	irot := 0
 	if o.Rotation%360 != 0 {

@@ -1,5 +1,7 @@
 package hevc
 
+import "github.com/shibukawa/hwmediacodec/internal/bitstream"
+
 // SPS is a sequence parameter set (7.3.2.2). ParseSPSHead fills the fields
 // up to and including the sub-layer ordering information; ParseSPS fills
 // everything.
@@ -234,19 +236,14 @@ func ParseSPS(nal []byte) (*SPS, error) {
 	return s, nil
 }
 
-func spsReader(nal []byte) (*reader, error) {
-	if Type(nal) != NALSPS || len(nal) < 4 {
-		return nil, syntaxErr("not an SPS NAL unit")
-	}
-	return newReader(nal[2:]), nil
-}
-
-func (r *reader) spsHead(s *SPS) {
+// spsPicSize reads the SPS up to pic_height_in_luma_samples. It reports
+// false when the rest cannot be read.
+func (r *reader) spsPicSize(s *SPS) bool {
 	s.VPSID = r.u(4)
 	s.MaxSubLayersMinus1 = int(r.u(3))
 	if r.err == nil && s.MaxSubLayersMinus1 > 6 {
 		r.fail("sps_max_sub_layers_minus1 %d out of range", s.MaxSubLayersMinus1)
-		return
+		return false
 	}
 	s.TemporalIDNesting = r.flag()
 	s.PTL = r.profileTierLevel(s.MaxSubLayersMinus1)
@@ -257,6 +254,11 @@ func (r *reader) spsHead(s *SPS) {
 	}
 	s.Width = int(r.ueMax("pic_width_in_luma_samples", 1<<16))
 	s.Height = int(r.ueMax("pic_height_in_luma_samples", 1<<16))
+	return true
+}
+
+// conformanceWindow reads conformance_window_flag and the offsets.
+func (r *reader) conformanceWindow(s *SPS) {
 	s.ConformanceWindow = r.flag()
 	if s.ConformanceWindow {
 		s.ConfWinLeft = r.ue()
@@ -264,6 +266,72 @@ func (r *reader) spsHead(s *SPS) {
 		s.ConfWinTop = r.ue()
 		s.ConfWinBottom = r.ue()
 	}
+}
+
+// SetConformanceWindow returns the SPS NAL unit nal (with its two-byte
+// header, without start code) with the conformance window offsets
+// replaced; they are in chroma sample units, as coded, and all zero clears
+// conformance_window_flag. Every other bit is copied unchanged, so the
+// parts of an SPS that WriteSPS does not write (HRD parameters, scaling
+// lists, extensions) survive. It is for encoders that crop wrongly.
+func SetConformanceWindow(nal []byte, left, right, top, bottom uint32) ([]byte, error) {
+	r, err := spsReader(nal)
+	if err != nil {
+		return nil, err
+	}
+	var s SPS
+	if !r.spsPicSize(&s) || r.err != nil {
+		return nil, r.err
+	}
+	start := r.pos()
+	r.conformanceWindow(&s)
+	end := r.pos()
+	if r.err != nil {
+		return nil, r.err
+	}
+	rbsp := r.r.Bytes()
+	// The payload ends with rbsp_stop_one_bit and zero bits; the bits in
+	// between are copied, the trailing bits written anew.
+	stop := len(rbsp)*8 - 1
+	for stop >= end && rbsp[stop/8]>>(7-stop%8)&1 == 0 {
+		stop--
+	}
+	if stop < end {
+		return nil, syntaxErr("SPS without rbsp_stop_one_bit")
+	}
+	w := bitstream.NewWriter()
+	copyBits := func(from, to int) {
+		for i := from; i < to; i++ {
+			w.WriteBit(rbsp[i/8] >> (7 - i%8) & 1)
+		}
+	}
+	copyBits(0, start)
+	window := left != 0 || right != 0 || top != 0 || bottom != 0
+	w.WriteFlag(window)
+	if window {
+		w.WriteUE(left)
+		w.WriteUE(right)
+		w.WriteUE(top)
+		w.WriteUE(bottom)
+	}
+	copyBits(end, stop)
+	w.Trailing()
+	out := append([]byte(nil), nal[:2]...)
+	return append(out, bitstream.Escape(w.Bytes())...), nil
+}
+
+func spsReader(nal []byte) (*reader, error) {
+	if Type(nal) != NALSPS || len(nal) < 4 {
+		return nil, syntaxErr("not an SPS NAL unit")
+	}
+	return newReader(nal[2:]), nil
+}
+
+func (r *reader) spsHead(s *SPS) {
+	if !r.spsPicSize(s) {
+		return
+	}
+	r.conformanceWindow(s)
 	s.BitDepthLuma = r.ueMax("bit_depth_luma_minus8", 8) + 8
 	s.BitDepthChroma = r.ueMax("bit_depth_chroma_minus8", 8) + 8
 	s.Log2MaxPOCLsb = int(r.ueMax("log2_max_pic_order_cnt_lsb_minus4", 12)) + 4

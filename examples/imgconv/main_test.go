@@ -177,7 +177,7 @@ func TestFallbackReadsHardwareFiles(t *testing.T) {
 		t.Skip("no hardware HEVC encoder")
 	}
 	src := testImage(500, 300)
-	for _, o := range []encodeOptions{{quality: 0.8}, {quality: 0.8, tile: 128, rotation: 90}} {
+	for _, o := range []encodeOptions{{quality: 0.8}, {quality: 0.8, tile: 192, rotation: 90}} {
 		var buf bytes.Buffer
 		if used, err := encodeHEIF(&buf, src, formatHEIC, o, engineHardware); err != nil || used != usedHardware {
 			t.Fatalf("hardware encode: %q %v", used, err)

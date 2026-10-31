@@ -13,6 +13,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec/encoding/annexb"
 	"github.com/shibukawa/hwmediacodec/internal/codec"
+	"github.com/shibukawa/hwmediacodec/internal/hevc"
 	"github.com/shibukawa/hwmediacodec/internal/mediafoundation/sys"
 )
 
@@ -43,6 +44,15 @@ type encoder struct {
 
 	rateNum, rateDen uint32
 	frameDuration    int64 // 100 ns
+	// codedWidth is the width of the frames the transform receives:
+	// cfg.Width, or for the AMD HEVC encoder MFT cfg.Width rounded up to a
+	// multiple of 8 with the last column repeated. That MFT encodes only the
+	// columns up to the previous multiple of 8 and leaves the rest of the
+	// picture black while its SPS declares the full width (measured on a
+	// Radeon in a Ryzen 4000, 2026-10-31; its H.264 encoder is fine). It
+	// ignores MF_MT_MINIMUM_DISPLAY_APERTURE, so cropSPS narrows the
+	// conformance window of its SPS back to cfg.Width instead.
+	codedWidth int
 	// noColorInfo is set when the encoder refused a media type with the
 	// colour description cfg.BT709 asks for.
 	noColorInfo bool
@@ -67,10 +77,15 @@ type encoder struct {
 	pending  []codec.Packet
 }
 
-func newEncoder(cfg codec.EncoderConfig, info codecInfo, t *sys.IMFTransform, name string) *encoder {
+func newEncoder(cfg codec.EncoderConfig, info codecInfo, t *sys.IMFTransform, name, vendor string) *encoder {
 	num, den := frameRateRatio(cfg.FrameRate)
+	codedWidth := cfg.Width
+	if vendor == vendorAMD && cfg.Codec == codec.HEVC && cfg.Width%2 == 0 {
+		codedWidth = (cfg.Width + 7) &^ 7
+	}
 	return &encoder{
 		cfg:           cfg,
+		codedWidth:    codedWidth,
 		info:          info,
 		name:          name,
 		transform:     t,
@@ -262,7 +277,7 @@ func (e *encoder) setOutputType() error {
 	a := mt.Attributes()
 	a.SetGUID(&sys.MF_MT_MAJOR_TYPE, &sys.MFMediaType_Video)
 	a.SetGUID(&sys.MF_MT_SUBTYPE, e.info.subtype)
-	a.SetUINT64(&sys.MF_MT_FRAME_SIZE, packRatio(uint32(e.cfg.Width), uint32(e.cfg.Height)))
+	a.SetUINT64(&sys.MF_MT_FRAME_SIZE, packRatio(uint32(e.codedWidth), uint32(e.cfg.Height)))
 	a.SetUINT64(&sys.MF_MT_FRAME_RATE, packRatio(e.rateNum, e.rateDen))
 	a.SetUINT64(&sys.MF_MT_PIXEL_ASPECT_RATIO, packRatio(1, 1))
 	a.SetUINT32(&sys.MF_MT_INTERLACE_MODE, sys.MFVideoInterlace_Progressive)
@@ -348,11 +363,11 @@ func (e *encoder) setInputType() error {
 	a := mt.Attributes()
 	a.SetGUID(&sys.MF_MT_MAJOR_TYPE, &sys.MFMediaType_Video)
 	a.SetGUID(&sys.MF_MT_SUBTYPE, &sys.MFVideoFormat_NV12)
-	a.SetUINT64(&sys.MF_MT_FRAME_SIZE, packRatio(uint32(e.cfg.Width), uint32(e.cfg.Height)))
+	a.SetUINT64(&sys.MF_MT_FRAME_SIZE, packRatio(uint32(e.codedWidth), uint32(e.cfg.Height)))
 	a.SetUINT64(&sys.MF_MT_FRAME_RATE, packRatio(e.rateNum, e.rateDen))
 	a.SetUINT64(&sys.MF_MT_PIXEL_ASPECT_RATIO, packRatio(1, 1))
 	a.SetUINT32(&sys.MF_MT_INTERLACE_MODE, sys.MFVideoInterlace_Progressive)
-	a.SetUINT32(&sys.MF_MT_DEFAULT_STRIDE, uint32(e.cfg.Width))
+	a.SetUINT32(&sys.MF_MT_DEFAULT_STRIDE, uint32(e.codedWidth))
 	a.SetUINT32(&sys.MF_MT_ALL_SAMPLES_INDEPENDENT, 1)
 	e.setColorInfo(a)
 	hr := e.transform.SetInputType(e.inputID, mt, 0)
@@ -401,6 +416,9 @@ func (e *encoder) readSequenceHeader() {
 	}
 	for _, nal := range annexb.Split(hdr) {
 		if t := annexb.NALUnitType(e.cfg.Codec, nal); t >= 0 && annexb.IsParameterSet(e.cfg.Codec, t) {
+			if t == annexb.HEVCNALSPS {
+				nal = e.cropSPSNAL(nal)
+			}
 			e.params.add(t, nal)
 		}
 	}
@@ -550,7 +568,7 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 
 // newInputSample packs the frame into a system-memory sample.
 func (e *encoder) newInputSample(f *codec.Frame, hns int64) (*sys.IMFSample, error) {
-	size := nv12Size(e.cfg.Width, e.cfg.Height)
+	size := nv12Size(e.codedWidth, e.cfg.Height)
 	var buf *sys.IMFMediaBuffer
 	if hr := sys.MFCreateAlignedMemoryBuffer(uint32(size), e.inputAlign, &buf); hr.Failed() || buf == nil {
 		return nil, backendErr("MFCreateAlignedMemoryBuffer", hr)
@@ -561,7 +579,7 @@ func (e *encoder) newInputSample(f *codec.Frame, hns int64) (*sys.IMFSample, err
 	if hr := buf.Lock(&p, &maxLen, &curLen); hr.Failed() || p == nil {
 		return nil, backendErr("IMFMediaBuffer::Lock", hr)
 	}
-	packNV12(unsafe.Slice(p, size), f)
+	packNV12(unsafe.Slice(p, size), f, e.codedWidth)
 	buf.Unlock()
 	buf.SetCurrentLength(uint32(size))
 
@@ -743,7 +761,7 @@ func (e *encoder) renegotiateOutput() error {
 func (e *encoder) newOutputSample() (*sys.IMFSample, error) {
 	size := e.outputSize
 	if size == 0 {
-		size = uint32(nv12Size(e.cfg.Width, e.cfg.Height))
+		size = uint32(nv12Size(e.codedWidth, e.cfg.Height))
 	}
 	var buf *sys.IMFMediaBuffer
 	if hr := sys.MFCreateAlignedMemoryBuffer(size, e.outputAlign, &buf); hr.Failed() || buf == nil {
@@ -793,6 +811,7 @@ func (e *encoder) packetFromSample(sample *sys.IMFSample) (codec.Packet, error) 
 	if len(data) == 0 {
 		return codec.Packet{}, &codec.BackendError{Backend: Name, Op: "read packet", Message: "encoder returned an empty sample"}
 	}
+	data = e.cropSPS(data)
 	pkt := finishPacket(e.cfg.Codec, e.params, data, pts, dts)
 	if pkt.Keyframe && e.params.empty() {
 		// The encoder did not put parameter sets in the stream; fetch them
@@ -867,4 +886,53 @@ func (e *encoder) Close() error {
 	}
 	e.pending = nil
 	return nil
+}
+
+// cropSPS rewrites the SPS NAL units in an Annex-B access unit with
+// cropSPSNAL. Without padding it returns data as it is.
+func (e *encoder) cropSPS(data []byte) []byte {
+	if e.codedWidth == e.cfg.Width {
+		return data
+	}
+	nals := annexb.Split(data)
+	changed := false
+	for i, nal := range nals {
+		if annexb.NALUnitType(e.cfg.Codec, nal) == annexb.HEVCNALSPS {
+			nals[i] = e.cropSPSNAL(nal)
+			changed = true
+		}
+	}
+	if !changed {
+		return data
+	}
+	var out []byte
+	for _, nal := range nals {
+		out = append(out, 0, 0, 0, 1)
+		out = append(out, nal...)
+	}
+	return out
+}
+
+// cropSPSNAL widens the right conformance offset of an HEVC SPS by the
+// columns padded beyond cfg.Width (4:2:0: in units of two samples). An SPS
+// that does not parse, or that does not describe the padded picture, is
+// returned unchanged.
+func (e *encoder) cropSPSNAL(nal []byte) []byte {
+	if e.codedWidth == e.cfg.Width {
+		return nal
+	}
+	s, err := hevc.ParseSPSHead(nal)
+	if err != nil || s.ChromaFormatIDC != 1 || s.Width < e.codedWidth {
+		return nal
+	}
+	visible := s.Width - 2*int(s.ConfWinLeft+s.ConfWinRight)
+	if visible != e.codedWidth {
+		return nal // already cropped to cfg.Width, or not the picture padded here
+	}
+	right := s.ConfWinRight + uint32(e.codedWidth-e.cfg.Width)/2
+	out, err := hevc.SetConformanceWindow(nal, s.ConfWinLeft, right, s.ConfWinTop, s.ConfWinBottom)
+	if err != nil {
+		return nal
+	}
+	return out
 }

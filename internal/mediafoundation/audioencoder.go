@@ -268,6 +268,13 @@ func (e *audioEncoder) Send(ctx context.Context, f *codec.AudioFrame) error {
 	if !e.started {
 		e.started = true
 		e.times.Start(f.PTS)
+		// Priming: the encoder codes the signal from its first sample
+		// without the frame of silence before it that AAC encoders
+		// usually add, so the first half-window (about 512 samples) came
+		// out of every decoder faded in from nothing. One frame of silence
+		// first lets the overlap rebuild it; the delay measurement counts
+		// it, so Format().Delay tells callers to drop it.
+		e.fifo = append(e.fifo, make([]byte, aacFrameSamples*e.cfg.Channels*2)...)
 	}
 	if len(f.Data) == 0 {
 		return nil

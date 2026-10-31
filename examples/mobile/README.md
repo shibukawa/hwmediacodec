@@ -7,7 +7,8 @@ plays the bundled waterfall clip ([`../assets`](../assets)) in a loop
 through the device's hardware decoder (VideoToolbox on iOS, MediaCodec on
 Android), shows what `hwmediacodec.Probe` found at the top of the screen,
 and pauses and resumes on a tap. The **Run check** button at the bottom
-right runs the machine check of [`../check`](../check) on the device (see
+right runs the machine check of
+[`hwmediacodec check`](../../cmd/hwmediacodec/README.md#check) on the device (see
 [The check on a phone or tablet](#the-check-on-a-phone-or-tablet)).
 `ios/` is the Xcode project, `android/` the Android Studio project; both
 embed the same Go code.
@@ -58,9 +59,10 @@ clip the way the first frame does); the iOS build itself is covered by
 
 ## The check on a phone or tablet
 
-**Run check** does what `go run ./check` does on a desktop, minus the
+**Run check** does what `hwmediacodec check` does on a desktop, minus the
 WebRTC stage (that needs a desktop browser), with the same checks from
-[`../internal/checker`](../internal/checker):
+[`cmd/hwmediacodec/checker`](../../cmd/hwmediacodec/checker) and
+[`checker/playback`](../../cmd/hwmediacodec/checker/playback):
 
 1. **Automatic** (about a minute): `Probe`, then decode of the bundled clip
    in H.264, HEVC and AV1, the encode round trips with their PSNR and order
