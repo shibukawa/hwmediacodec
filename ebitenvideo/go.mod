@@ -6,7 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
-	github.com/shibukawa/hwmediacodec v0.3.2
+	github.com/shibukawa/hwmediacodec v0.5.0
 )
 
 require (
