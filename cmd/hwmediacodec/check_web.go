@@ -1,3 +1,5 @@
+//go:build (windows || darwin || linux) && !android && !ios
+
 package main
 
 import (
@@ -12,7 +14,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/checker"
 	"github.com/shibukawa/hwmediacodec/net/webrtc"
 )
 

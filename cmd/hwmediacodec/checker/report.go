@@ -65,7 +65,7 @@ type Report struct {
 // NewReport returns an empty report with the desktop check's wording.
 func NewReport() *Report {
 	return &Report{
-		Generator: "`go run github.com/shibukawa/hwmediacodec/examples/check@latest`",
+		Generator: "`go run github.com/shibukawa/hwmediacodec/cmd/hwmediacodec@latest check`",
 		PasteHint: "_The report was too long for the link: please paste hwmediacodec-report.md here._",
 		started:   time.Now(),
 	}

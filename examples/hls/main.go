@@ -1,4 +1,4 @@
-// Command hls streams the fireworks show (see internal/fireworks; keys
+// Command hls streams the fireworks show (see cmd/hwmediacodec/fireworks; keys
 // launch shells) to browsers as live HLS and opens the player page:
 //
 //	go run ./hls
@@ -27,7 +27,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/fireworks"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 	"github.com/shibukawa/hwmediacodec/net/hls"
 )

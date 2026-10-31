@@ -2,12 +2,13 @@ go 1.27.0
 
 toolchain go1.27.2
 
-// Local development: the four modules build against each other's working
+// Local development: the five modules build against each other's working
 // tree. Consumers never see this file; the published go.mod files require
 // the released versions.
 use (
 	.
 	./ebitenvideo
+	./cmd/hwmediacodec
 	./examples
 	./net/webrtc
 )

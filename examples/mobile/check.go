@@ -15,7 +15,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/internal/checker"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/checker"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/checker/playback"
 )
 
 // Host is what the native application does for the check: the share
@@ -70,7 +71,7 @@ const (
 	ckDone
 )
 
-// check is the machine check of examples/check on a touch screen: the
+// check is the machine check of hwmediacodec check on a touch screen: the
 // automatic checks, the playback stage with Yes / No buttons, then the
 // report with buttons that share it and open a new GitHub issue. The
 // WebRTC stage is left out: it needs a desktop browser.
@@ -78,7 +79,7 @@ type check struct {
 	r        *checker.Report
 	stage    checkStage
 	autoDone atomic.Bool
-	pb       *checker.Playback
+	pb       *playback.Stage
 	message  string
 	closed   bool // Back was tapped
 
@@ -172,7 +173,7 @@ func (c *check) startPlayback() {
 			software = false
 		}
 	}
-	c.pb = checker.NewPlayback(c.r, playLen, software)
+	c.pb = playback.New(c.r, playLen, software)
 	if c.pb.Done() {
 		c.finish()
 	}
@@ -301,13 +302,13 @@ func (c *check) drawUI(screen *ebiten.Image, g *game) *ebiten.DrawImageOptions {
 		row = []button{stop}
 	case ckPlayback:
 		name := checker.CodecName(c.pb.Codec())
-		asking := c.pb.Question() != checker.Watching
+		asking := c.pb.Question() != playback.Watching
 		switch c.pb.Question() {
-		case checker.Watching:
+		case playback.Watching:
 			prompt = []string{fmt.Sprintf("Playing the %s clip with sound (%.0fs).", name, c.pb.Left().Seconds())}
-		case checker.AskPicture:
+		case playback.AskPicture:
 			prompt = []string{fmt.Sprintf("Did the %s video play smoothly, with natural colours?", name)}
-		case checker.AskSound:
+		case playback.AskSound:
 			prompt = []string{"Did you hear the sound of the waterfall?"}
 		}
 		row = []button{

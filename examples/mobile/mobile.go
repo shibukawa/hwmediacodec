@@ -4,7 +4,7 @@
 // project in android/ embeds the same code as an aar. The game plays the
 // bundled waterfall clip in a loop through the device's hardware decoder
 // and shows which backend serves it; a tap pauses and resumes. The Run
-// check button starts the machine check of examples/check (check.go).
+// check button starts the machine check of hwmediacodec check (check.go).
 package mobile
 
 import (
@@ -22,8 +22,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/shibukawa/hwmediacodec"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/assets"
 	"github.com/shibukawa/hwmediacodec/ebitenvideo"
-	"github.com/shibukawa/hwmediacodec/examples/assets"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 

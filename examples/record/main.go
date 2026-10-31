@@ -1,4 +1,4 @@
-// Command record runs the fireworks show (see internal/fireworks; keys
+// Command record runs the fireworks show (see cmd/hwmediacodec/fireworks; keys
 // launch shells) and records its screen into an MP4 file with the hardware
 // encoder:
 //
@@ -23,7 +23,7 @@ import (
 
 	"github.com/shibukawa/hwmediacodec"
 	"github.com/shibukawa/hwmediacodec/capture"
-	"github.com/shibukawa/hwmediacodec/examples/internal/fireworks"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/fireworks"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 

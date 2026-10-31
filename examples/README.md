@@ -1,4 +1,4 @@
-# hwmediacodec examples
+| [`../cmd/hwmediacodec/fireworks/`](../cmd/hwmediacodec/fireworks/) | The scene the three programs below capture (in the command module): # hwmediacodec examples
 
 Small, complete programs that show how to use `hwmediacodec` for everyday
 jobs. They live in their own Go module (`github.com/shibukawa/hwmediacodec/examples`)
@@ -17,7 +17,6 @@ Each program runs straight from its module path, with nothing to clone or
 install (Go 1.27 or later is needed):
 
 ```sh
-go run github.com/shibukawa/hwmediacodec/examples/check@latest                                                  # try everything on this machine, write a report
 go run github.com/shibukawa/hwmediacodec/examples/convert@latest -codec hevc -bitrate 6M input.mp4 output.mp4   # H.264 / HEVC converter
 go run github.com/shibukawa/hwmediacodec/examples/thumbnails@latest -every 10s -o thumbs movie.mp4              # keyframe thumbnails
 go run github.com/shibukawa/hwmediacodec/examples/record@latest -o capture.mp4 -seconds 10                      # fireworks show to MP4
@@ -42,83 +41,27 @@ first one the browser decodes: HEVC in Chrome, Edge and Safari, H.264 in
 Firefox, which does not decode HEVC through WebCodecs. When nothing
 decodes, the page says why instead of staying blank.
 
-Without arguments, `player` and `texture` play the bundled clip in
-`assets/`. The library-only directories (`assets`, `internal/fireworks`)
-have no program of their own.
+Without arguments, `player` and `texture` play the bundled clip of
+[`cmd/hwmediacodec/assets`](../cmd/hwmediacodec/assets). The sample media,
+the fireworks scene of `record`, `hls` and `webrtc`
+([`cmd/hwmediacodec/fireworks`](../cmd/hwmediacodec/fireworks)) and the
+machine check live in the command module: the check is
+`go run github.com/shibukawa/hwmediacodec/cmd/hwmediacodec@latest check`
+(see [its README](../cmd/hwmediacodec/README.md#check)), and please send
+its report.
 
 | Directory | What it shows |
 | --- | --- |
-| [`assets/`](assets/) | The bundled sample clip (a ten-second portrait waterfall shot by the author, 720x1280 with AAC), embedded so the players run from anywhere: as HEVC (1.4 MB) and, for decoders without HEVC, as H.264 (2.5 MB); `assets.Clips()` lists them in the order to try. `assets.AV1()` is the same clip in AV1 (1.2 MB) for the check |
-| [`check/`](check/) | Tries every codec of the machine (automatic decode and encode round trips per backend, playback with sound, WebRTC to the browser) and writes a Markdown report for a GitHub issue |
 | [`convert/`](convert/) | Video file converter (H.264 ↔ HEVC) that keeps timestamps and copies audio |
 | [`thumbnails/`](thumbnails/) | Keyframe thumbnails from an MP4, decoding only the sync samples |
-| [`internal/fireworks/`](internal/fireworks/) | The scene the three programs below capture: a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
+| [`../cmd/hwmediacodec/fireworks/`](../cmd/hwmediacodec/fireworks/) | The scene the three programs below capture (it lives in the command module, which streams it in its check): a fireworks show over water with a Kage post-process, shells launched from the keyboard, now and then a gopher-shaped one |
 | [`record/`](record/) | The fireworks show recorded to an MP4 file |
 | [`hls/`](hls/) | The fireworks show streamed live to browsers as fMP4 HLS (`mp4.Segmenter` + `hls.Playlist` from the core module); opens the player page |
 | [`player/`](player/) | The video player: plays the bundled clip or any MP4, WebM (AV1 + Opus) or raw stream with its sound in a window of the video's aspect ratio, with pause, seeking, volume and a progress bar |
 | [`texture/`](texture/) | Video as a texture in Ebitengine: flat, on a spinning box with `DrawTriangles`, and through a gentle Kage shader; plays the bundled clip by default |
 | [`webrtc/`](webrtc/) | The fireworks show streamed to browsers over WebRTC with pion, about 100 ms of latency; opens the player page |
 | [`imgconv/`](imgconv/) | HEIC and AVIF still images converted to and from PNG/JPEG with the core module's `image/heif` and `image/avif` packages, falling back to cgo-free codecs where the machine has no hardware one |
-| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec), and the check of `check/` on the device; see its README |
-
-## check
-
-```sh
-go run github.com/shibukawa/hwmediacodec/examples/check@latest
-cd examples
-go run ./check                      # the whole run in a window
-go run ./check -auto                # the automatic checks only, no window (servers, CI)
-go run ./check -playback=false      # leave a stage out; -webrtc=false likewise
-```
-
-One command for people who want to report how the library does on their
-machine. It runs three stages in one window and ends with a report:
-
-1. **Automatic**: `Probe`, then every check once per backend that reports
-   the codec (with `HWMEDIACODEC_BACKENDS` / `HWMEDIACODEC_AUDIO_BACKENDS`
-   set to it, so a Windows machine with an NVIDIA card checks NVDEC/NVENC
-   and Media Foundation separately). Decode: the bundled clip in H.264,
-   HEVC and AV1, all 293 frames, which must come out in display order, at
-   the track's size and not flat. Encode: 60 pictures of the clip (halved
-   to 352x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
-   compared by luma PSNR with the source (a working encoder reaches
-   30 dB and more on this hard-to-code footage; the check also compares
-   each picture with the next one, which a stream in the wrong order
-   would match as well). Audio: the clip's AAC track, and two seconds of
-   a soft chord through the AAC and Opus encoders and back.
-2. **Playback**: the clip plays with sound in every codec the machine
-   decodes, and the window asks whether picture and sound were right
-   (Y or N, S skips).
-3. **WebRTC**: the fireworks show is encoded in H.264 and HEVC
-   (`webrtc.NewCodecBroadcaster`) and streamed to a page that opens in the
-   default browser. The page reports the frames it decoded (from
-   `getStats`) and asks whether the picture is right; a browser that
-   cannot receive HEVC over WebRTC gets a refusal, recorded as such. The
-   results are named after the browser ("HEVC picture in Edge 156 /
-   nvidia"); opening the page URL in a second browser adds rows of its
-   own, since Chrome and Edge on one machine can receive differently.
-   Playback and WebRTC results also name the backend the library picks
-   for them, the first one `Probe` lists for the codec.
-
-The report is printed, saved as `hwmediacodec-report.md` and comes with a
-link (`O` in the window) that opens a new GitHub issue with the title
-(platform, backends, counts) and the report filled in; nothing is sent
-until it is submitted there. A report longer than a link can carry (about
-8 KB) is left out of it and pasted from the file. The report holds the library and Go versions, the
-platform, the `Probe` table with the GPU (and on Windows the Media
-Foundation transform) behind each entry, every result and the user agent
-of each browser; the GPUs `Probe` named head the report, and only the
-driver version is left for the reporter to fill in. The exit status is 1
-when a check failed. On an Apple M3 every check passes (AV1 encode is
-reported as unsupported: Apple Silicon has no AV1 encoder).
-
-The checks, the playback stage and the report live in
-[`internal/checker`](internal/checker), shared with the check mode of the
-mobile sample: on an iPhone, iPad or Android device the **Run check**
-button of [`mobile/`](mobile/) runs the automatic checks and the playback
-stage with Yes / No buttons, then shares the Markdown report through the
-platform's share sheet or opens the GitHub issue with it filled in (no
-WebRTC stage there). See [mobile/README.md](mobile/README.md#the-check-on-a-phone-or-tablet).
+| [`mobile/`](mobile/) | The player as an Ebitengine mobile game for `ebitenmobile bind`, with the Xcode project that runs it on an iPhone or iPad (VideoToolbox) and the Android Studio project for an Android device (MediaCodec), and the check of `hwmediacodec check` on the device; see its README |
 
 ## convert
 
@@ -191,7 +134,8 @@ rec.Close()                  // flushes the encoder, finishes the file
 
 ## The fireworks scene
 
-`internal/fireworks` is what `record`, `hls` and `webrtc` show. It is
+[`cmd/hwmediacodec/fireworks`](../cmd/hwmediacodec/fireworks) is what `record`, `hls` and `webrtc` show (and what
+`hwmediacodec check` streams over WebRTC). It is
 written to look good on a stream and to give the encoder real work:
 
 - It opens on a title screen ("HANABI", a blinking "PRESS A FOR THE AUTO

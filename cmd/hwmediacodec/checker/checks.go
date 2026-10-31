@@ -1,8 +1,9 @@
-// Package checker is the platform-independent part of the check sample:
+// Package checker is the platform-independent part of hwmediacodec check:
 // the automatic checks (decode, encode round trips, audio, once per
-// backend), the playback stage without its input, and the report with its
-// Markdown and GitHub issue link. examples/check runs it in a desktop
-// window and examples/mobile on a phone or tablet.
+// backend) and the report with its Markdown and GitHub issue link. The
+// playback stage is in package playback below it, which needs
+// Ebitengine. The check command runs them in a desktop window and
+// examples/mobile on a phone or tablet.
 package checker
 
 import (
@@ -15,7 +16,7 @@ import (
 	"time"
 
 	"github.com/shibukawa/hwmediacodec"
-	"github.com/shibukawa/hwmediacodec/examples/assets"
+	"github.com/shibukawa/hwmediacodec/cmd/hwmediacodec/assets"
 	"github.com/shibukawa/hwmediacodec/mediacontainer/mp4"
 )
 
