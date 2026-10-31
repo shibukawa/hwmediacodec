@@ -93,7 +93,11 @@ func probe() error {
 		if c.Hardware {
 			hw = "hardware"
 		}
-		fmt.Printf("%-14s %-5s %-7s %s\n", c.Backend, c.Codec, c.Direction, hw)
+		line := fmt.Sprintf("%-15s %-5s %-7s %-8s", c.Backend, c.Codec, c.Direction, hw)
+		if c.Device != "" {
+			line += " " + c.Device
+		}
+		fmt.Println(strings.TrimRight(line, " "))
 	}
 	return nil
 }

@@ -221,6 +221,12 @@ type Capability struct {
 	// MaxWidth and MaxHeight are 0 when the backend does not report limits.
 	MaxWidth  int
 	MaxHeight int
+	// Device names the GPU (and, for Media Foundation, the transform) that
+	// serves the capability as the system reports it, for example
+	// "AMD Radeon(TM) Graphics (AMDh264Encoder)". It is for logs and
+	// reports: on a machine with two GPUs it tells which one a backend
+	// uses. Empty when the backend does not say.
+	Device string
 }
 
 // Packet is one compressed access unit (one picture, or one frame of audio

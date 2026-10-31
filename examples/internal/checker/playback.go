@@ -86,9 +86,12 @@ func (p *Playback) next() {
 		cl := p.queue[0]
 		p.queue = p.queue[1:]
 		p.label = CodecName(cl.Codec) + " picture"
+		if b := p.r.Backend(cl.Codec, hwmediacodec.Decode); b != "" {
+			p.label += " / " + b
+		}
 		pl, err := openClip(cl, false)
 		if errors.Is(err, hwmediacodec.ErrUnsupported) && p.software {
-			p.label += " (software decoder)"
+			p.label = CodecName(cl.Codec) + " picture (software decoder)"
 			pl, err = openClip(cl, true)
 		}
 		if err != nil {

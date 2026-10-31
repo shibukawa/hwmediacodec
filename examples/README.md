@@ -93,15 +93,22 @@ machine. It runs three stages in one window and ends with a report:
    (`webrtc.NewCodecBroadcaster`) and streamed to a page that opens in the
    default browser. The page reports the frames it decoded (from
    `getStats`) and asks whether the picture is right; a browser that
-   cannot receive HEVC over WebRTC gets a refusal, recorded as such.
+   cannot receive HEVC over WebRTC gets a refusal, recorded as such. The
+   results are named after the browser ("HEVC picture in Edge 156 /
+   nvidia"); opening the page URL in a second browser adds rows of its
+   own, since Chrome and Edge on one machine can receive differently.
+   Playback and WebRTC results also name the backend the library picks
+   for them, the first one `Probe` lists for the codec.
 
 The report is printed, saved as `hwmediacodec-report.md` and comes with a
 link (`O` in the window) that opens a new GitHub issue with the title
 (platform, backends, counts) and the report filled in; nothing is sent
 until it is submitted there. A report longer than a link can carry (about
 8 KB) is left out of it and pasted from the file. The report holds the library and Go versions, the
-platform, the `Probe` table, every result and the browser's user agent;
-the GPU model is left for the reporter to fill in. The exit status is 1
+platform, the `Probe` table with the GPU (and on Windows the Media
+Foundation transform) behind each entry, every result and the user agent
+of each browser; the GPUs `Probe` named head the report, and only the
+driver version is left for the reporter to fill in. The exit status is 1
 when a check failed. On an Apple M3 every check passes (AV1 encode is
 reported as unsupported: Apple Silicon has no AV1 encoder).
 

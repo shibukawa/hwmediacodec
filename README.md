@@ -65,7 +65,7 @@ go run github.com/shibukawa/hwmediacodec/examples/check@latest
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified with `examples/check` on a GeForce RTX 2060 Max-Q laptop GPU (H.264 and HEVC decode of the whole clip, 216 and 367 fps at 720x1280; playback confirmed by eye); AV1 not run (the RTX 20 series has no AV1 decoder)** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **verified with the `examples/check` round trip (36.5 dB H.264, 36.9 dB HEVC) and the WebRTC stream to Chrome in both codecs; Edge on the same machine does not show the HEVC stream (it needs the paid HEVC Video Extensions)** |
-| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples; H.264 and AV1 decode of the whole clip in display order with `examples/check`, 256 and 355 fps at 720x1280); on a GeForce RTX 2060 Max-Q H.264 decode passes (321 fps) and HEVC decode fails at `SetOutputType` (`0xC00D36E6`, see the [Windows notes](#windows-media-foundation))** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample, and the `examples/check` round trip at 37.0 dB luma PSNR) and on the RTX 2060 Max-Q (H.264 round trip at 37.2 dB; HEVC encodes, but decoding it back hits the HEVC decode failure); AMD not run yet** |
+| Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples; H.264 and AV1 decode of the whole clip in display order with `examples/check`, 256 and 355 fps at 720x1280); on AMD Radeon integrated graphics (Ryzen 4000) H.264 decode passes (321 fps) and HEVC decode fails at `SetOutputType` (`0xC00D36E6`, see the [Windows notes](#windows-media-foundation))** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample, and the `examples/check` round trip at 37.0 dB luma PSNR) and on AMD Radeon integrated graphics through the AMD encoder MFTs (H.264 round trip at 37.2 dB; HEVC encodes, but decoding it back hits the HEVC decode failure); Media Foundation on an NVIDIA GPU not run yet (on a laptop with both, it picks the AMD GPU)** |
 
 AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
 decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
@@ -667,6 +667,15 @@ encoder (software) instead. When no bitrate or quality is given the backend
 asks for 0.1 bit per pixel per frame (at least 200 kbit/s); when no frame rate
 is given it declares 30 fps.
 
+- With two GPUs (a laptop with integrated graphics and a discrete GPU) the
+  backend decodes on the default adapter, the first one DXGI lists, which is
+  usually the integrated GPU the panel is wired to, and encodes through the
+  first hardware encoder MFT `MFTEnumEx` returns, whichever vendor's that is.
+  So on a laptop with an NVIDIA GPU, Media Foundation may run on the other
+  GPU while the NVIDIA backend runs on the NVIDIA one. `Capability.Device`
+  names the adapter and the transform (for example
+  `AMD Radeon(TM) Graphics (AMDh264Encoder)`); `hwmediacodec probe` and
+  `examples/check` print it.
 - Requires Windows 10 or later, a GPU driver with DXVA support, for
   HEVC the free "HEVC Video Extensions from Device Manufacturer" (or the
   paid "HEVC Video Extensions") Store package, and for AV1 the free "AV1
@@ -682,12 +691,14 @@ is given it declares 30 fps.
   rejects (constant quality, CBR, B-frames, low latency, a profile) makes
   `NewEncoder` return `ErrUnsupported` naming the control and the MFT.
   B-frames request up to two consecutive B-pictures.
-- On a GeForce RTX 2060 Max-Q the Microsoft HEVC decoder fails at
-  `IMFTransform::SetOutputType` with `MF_E_ATTRIBUTENOTFOUND`
-  (`0xC00D36E6`), measured with `examples/check` on 2026-10-30; H.264 on the
-  same machine decodes. Such machines decode HEVC through the NVIDIA backend,
-  which is registered first, so only a run that forces Media Foundation is
-  affected.
+- On AMD Radeon integrated graphics (a Ryzen 4000 laptop, the ROG Zephyrus
+  G14 GA401IV, which also has a GeForce RTX 2060 Max-Q) the HEVC decoder MFT
+  (`HEVCVideoExtension`) fails at `IMFTransform::SetOutputType` with
+  `MF_E_ATTRIBUTENOTFOUND` (`0xC00D36E6`), measured with `examples/check` on
+  2026-10-30; H.264 on the same GPU decodes. That laptop decodes HEVC through
+  the NVIDIA backend, which is registered first, so there only a run that
+  forces Media Foundation is affected; a machine with only this AMD GPU
+  cannot decode HEVC yet.
 - 8-bit 4:2:0 only (NV12). 10-bit HEVC (P010) is rejected. Above 1920x1088
   the Microsoft H.264 decoder may fall back to software internally without
   reporting it.
@@ -702,9 +713,11 @@ is given it declares 30 fps.
   and texture samples decode the bundled HEVC clip and play its AAC sound, and the webrtc
   sample encodes H.264 through the Quick Sync encoder MFT; `examples/check`
   has since decoded H.264 and AV1 and round-tripped H.264 and AAC there. On
-  a GeForce RTX 2060 Max-Q (2026-10-30) H.264 decode and encode and AAC decode and
-  encode pass, HEVC encode produces a stream, and HEVC decode fails as
-  described above. HEVC encode on Intel and anything on AMD GPUs have not been run yet. Run
+  AMD Radeon integrated graphics (Ryzen 4000, 2026-10-30) H.264 decode and
+  encode (through `AMDh264Encoder`) and AAC decode and encode pass, HEVC
+  encode (`AMDh265Encoder`) produces a stream, and HEVC decode fails as
+  described above. HEVC encode on Intel, discrete AMD GPUs and Media
+  Foundation on an NVIDIA GPU have not been run yet. Run
   `go test ./...` on a Windows machine with ffmpeg and ffprobe installed to
   verify further; the conformance tests skip when `Probe` reports no hardware engine,
   and the encoder tests for optional controls skip when the vendor MFT

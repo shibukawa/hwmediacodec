@@ -119,7 +119,7 @@ func (Backend) Probe(ctx context.Context) ([]codec.Capability, error) {
 				}
 				if dc.IsSupported != 0 {
 					caps = append(caps, codec.Capability{Backend: Name, Codec: c, Direction: codec.Decode, Hardware: true,
-						MaxWidth: int(dc.MaxWidth), MaxHeight: int(dc.MaxHeight)})
+						MaxWidth: int(dc.MaxWidth), MaxHeight: int(dc.MaxHeight), Device: dev.name})
 				}
 			}
 			return nil

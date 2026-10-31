@@ -23,8 +23,28 @@ type stream struct {
 	bc    *webrtc.Broadcaster
 	rec   *capture.Recorder
 
+	backend string // the backend expected to encode it, for the check names
+
+	// rows holds the results of each browser that opened the page, by
+	// BrowserName; the first one takes over the rows added at the start
+	// (named for "the browser" until then).
+	first *rows
+	rows  map[string]*rows
+}
+
+// rows are the results of one stream in one browser.
+type rows struct {
 	received *checker.Result // the page saw frames
 	picture  *checker.Result // the user saw the fireworks
+}
+
+// name is the check name of one row of the stream.
+func (s *stream) name(what, browser string) string {
+	n := checker.CodecName(s.codec) + " " + what + " " + browser
+	if s.backend != "" {
+		n += " / " + s.backend
+	}
+	return n
 }
 
 // web serves the check page and the signalling for every stream.
@@ -47,15 +67,16 @@ const webW, webH, webFPS = 640, 360, 30
 func startWeb(r *checker.Report, addr string, codecs []hwmediacodec.Codec) (*web, error) {
 	w := &web{r: r, answered: map[string]bool{}}
 	for _, c := range codecs {
-		s := &stream{codec: c, key: strings.ToLower(c.String())}
-		s.received = r.Add("WebRTC", checker.CodecName(c)+" stream received by the browser")
+		s := &stream{codec: c, key: strings.ToLower(c.String()), backend: r.Backend(c, hwmediacodec.Encode), rows: map[string]*rows{}}
+		s.first = &rows{received: r.Add("WebRTC", s.name("stream received by", "the browser"))}
+		received := s.first.received
 		bc, err := webrtc.NewCodecBroadcaster(c, webFPS, nil, func() {
 			if s.rec != nil {
 				s.rec.RequestKeyframe()
 			}
 		})
 		if err != nil {
-			r.Set(s.received, checker.Unsupported, "%v", err)
+			r.Set(received, checker.Unsupported, "%v", err)
 			continue
 		}
 		opts := capture.Options{Codec: c, FPS: webFPS, Bitrate: 2_000_000, KeyframeInterval: webFPS * 4, LowLatency: true}
@@ -66,13 +87,13 @@ func startWeb(r *checker.Report, addr string, codecs []hwmediacodec.Codec) (*web
 		rec, err := capture.New(webW, webH, bc, opts)
 		if err != nil {
 			bc.Close()
-			r.Set(s.received, checker.StatusOf(err), "encoder: %v", err)
+			r.Set(received, checker.StatusOf(err), "encoder: %v", err)
 			continue
 		}
 		s.bc, s.rec = bc, rec
-		s.picture = r.Add("WebRTC", checker.CodecName(c)+" picture in the browser")
-		r.Set(s.received, checker.Running, "waiting for the browser")
-		r.Set(s.picture, checker.Pending, "")
+		s.first.picture = r.Add("WebRTC", s.name("picture in", "the browser"))
+		r.Set(received, checker.Running, "waiting for the browser")
+		r.Set(s.first.picture, checker.Pending, "")
 		w.streams = append(w.streams, s)
 	}
 	if len(w.streams) == 0 {
@@ -148,8 +169,14 @@ func (w *web) result(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "unknown codec", http.StatusBadRequest)
 		return
 	}
-	if ua := strings.TrimSpace(pr.UserAgent); ua != "" {
-		w.r.SetBrowser(truncate(ua, 200))
+	ua := truncate(strings.TrimSpace(pr.UserAgent), 200)
+	if ua != "" {
+		w.r.AddBrowser(ua)
+	}
+	browser := checker.BrowserName(ua)
+	rs := s.first // a post without a user agent: the first browser's rows
+	if ua != "" {
+		rs = w.rowsFor(s, browser)
 	}
 	switch {
 	case pr.Answer == "yes" || pr.Answer == "no":
@@ -157,20 +184,44 @@ func (w *web) result(rw http.ResponseWriter, req *http.Request) {
 		if pr.Answer == "no" {
 			st = checker.Failed
 		}
-		w.r.Set(s.picture, st, "answered %s in the browser", pr.Answer)
+		w.r.Set(rs.picture, st, "answered %s in %s", pr.Answer, browser)
 		w.mu.Lock()
 		w.answered[s.key] = true
 		w.mu.Unlock()
 	case pr.Error != "":
-		w.r.Set(s.received, checker.Failed, "%s", truncate(pr.Error, 300))
+		w.r.Set(rs.received, checker.Failed, "%s", truncate(pr.Error, 300))
 	default:
 		dec := truncate(pr.Decoder, 60)
 		if dec == "" {
 			dec = "not reported"
 		}
-		w.r.Set(s.received, checker.Passed, "%d frames %dx%d (%s), browser decoder %s", pr.Frames, pr.Width, pr.Height, truncate(pr.MimeType, 30), dec)
+		w.r.Set(rs.received, checker.Passed, "%d frames %dx%d (%s), browser decoder %s", pr.Frames, pr.Width, pr.Height, truncate(pr.MimeType, 30), dec)
 	}
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// rowsFor returns the results of s in browser: the rows added at the start
+// for the first browser that reports, new ones for each browser after it.
+func (w *web) rowsFor(s *stream, browser string) *rows {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if rs, ok := s.rows[browser]; ok {
+		return rs
+	}
+	rs := s.first
+	if len(s.rows) == 0 {
+		w.r.Rename(rs.received, s.name("stream received by", browser))
+		w.r.Rename(rs.picture, s.name("picture in", browser))
+	} else {
+		rs = &rows{
+			received: w.r.Add("WebRTC", s.name("stream received by", browser)),
+			picture:  w.r.Add("WebRTC", s.name("picture in", browser)),
+		}
+		w.r.Set(rs.received, checker.Running, "waiting for %s", browser)
+		w.r.Set(rs.picture, checker.Pending, "")
+	}
+	s.rows[browser] = rs
+	return rs
 }
 
 func truncate(s string, n int) string {
