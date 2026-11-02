@@ -132,8 +132,8 @@ func unsupportedEncode(c codec.Codec, reason string) error {
 
 // NewEncoder implements codec.Backend.
 func (Backend) NewEncoder(ctx context.Context, cfg codec.EncoderConfig) (codec.Encoder, error) {
-	if cfg.Codec != codec.H264 && cfg.Codec != codec.HEVC {
-		return nil, unsupportedEncode(cfg.Codec, "only h264 and hevc encoding are implemented on the vaapi backend")
+	if cfg.Codec != codec.H264 && cfg.Codec != codec.HEVC && cfg.Codec != codec.AV1 {
+		return nil, unsupportedEncode(cfg.Codec, "only h264, hevc and av1 encoding are implemented on the vaapi backend")
 	}
 	if cfg.InputFormat != codec.NV12 {
 		return nil, unsupportedEncode(cfg.Codec, "input format "+cfg.InputFormat.String()+" is not available on the vaapi backend yet; use NV12")

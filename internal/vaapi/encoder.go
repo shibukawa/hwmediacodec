@@ -35,9 +35,9 @@ const (
 	colourBT709            = 1
 )
 
-// encoder is an H.264 or HEVC encoder on VAEntrypointEncSlice: I and P
-// frames with one reference, frames in presentation order, synchronous per
-// picture.
+// encoder is an H.264, HEVC or AV1 encoder on VAEntrypointEncSlice: I and
+// P frames (key and inter frames) with one reference, frames in
+// presentation order, synchronous per picture.
 type encoder struct {
 	mu  sync.Mutex
 	cfg codec.EncoderConfig
@@ -94,13 +94,23 @@ type encoder struct {
 	sliceHdr   []byte
 
 	// hevc holds the HEVC parameter sets and buffers; it is nil for H.264
-	// encoders.
+	// and AV1 encoders.
 	hevc *hevcEncoder
+	// av1 holds the AV1 headers and buffers; it is nil for H.264 and HEVC
+	// encoders.
+	av1 *av1Encoder
 }
 
 // encodeProfiles maps the requested profile to VA profiles in preference
 // order; it is empty when the codec has no such profile here.
 func encodeProfiles(c codec.Codec, p codec.Profile) []int32 {
+	if c == codec.AV1 {
+		// 8-bit 4:2:0 Main profile.
+		if p == codec.ProfileDefault || p == codec.ProfileMain {
+			return []int32{sys.ProfileAV1Profile0}
+		}
+		return nil
+	}
 	if c == codec.HEVC {
 		// 8-bit 4:2:0 only.
 		if p == codec.ProfileDefault || p == codec.ProfileMain {
@@ -130,7 +140,8 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 		return fail(fmt.Sprintf("picture size %dx%d: 4:2:0 encoding needs even dimensions", cfg.Width, cfg.Height))
 	}
 	// Macroblock alignment; an HEVC encoder replaces the aligned size by its
-	// minimum coding block alignment in initHEVC.
+	// minimum coding block alignment in buildHEVCParameterSets, an AV1
+	// encoder by whole superblocks in initAV1.
 	e.mbW = (cfg.Width + 15) / 16
 	e.mbH = (cfg.Height + 15) / 16
 	e.alignedW, e.alignedH = e.mbW*16, e.mbH*16
@@ -152,8 +163,13 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 		}
 		return fail("the VA-API driver (" + dpy.vendor + ") offers no " + cfg.Codec.String() + " encode entrypoint")
 	}
-	if cfg.Codec == codec.HEVC {
+	switch cfg.Codec {
+	case codec.HEVC:
 		if err := e.initHEVC(); err != nil {
+			return nil, err
+		}
+	case codec.AV1:
+		if err := e.initAV1(); err != nil {
 			return nil, err
 		}
 	}
@@ -225,14 +241,24 @@ func newEncoder(cfg codec.EncoderConfig, dpy *display) (*encoder, error) {
 	}
 
 	// Packed headers: send what the driver accepts (Intel requires them,
-	// Mesa generates its own when they are absent).
+	// Mesa generates its own when they are absent). AV1 has no slice
+	// headers; its frame headers go in the picture packed header.
 	if supported, ok := dpy.configAttrib(e.profile, e.entrypoint, sys.ConfigAttribEncPackedHeaders); ok {
-		e.packed = supported & (sys.EncPackedHeaderSequence | sys.EncPackedHeaderSlice)
+		if e.av1 != nil {
+			e.packed = supported & (sys.EncPackedHeaderSequence | sys.EncPackedHeaderPicture)
+		} else {
+			e.packed = supported & (sys.EncPackedHeaderSequence | sys.EncPackedHeaderSlice)
+		}
 	}
 
-	if e.hevc != nil {
+	switch {
+	case e.hevc != nil:
 		e.buildHEVCParameterSets()
-	} else {
+	case e.av1 != nil:
+		if err := e.buildAV1Stream(); err != nil {
+			return nil, err
+		}
+	default:
 		e.buildParameterSets()
 	}
 
@@ -397,6 +423,9 @@ func (e *encoder) createContext() error {
 	// (the fake driver of the tests refuses an input that is also a
 	// render target).
 	if st := sys.CreateContext(dpy, e.config, int32(e.alignedW), int32(e.alignedH), sys.Progressive, &e.ids[2], 2, &e.context); st != sys.StatusSuccess {
+		if st == sys.StatusErrorResolutionNotSupported {
+			return unsupportedEncode(e.cfg.Codec, fmt.Sprintf("%dx%d: %s", e.cfg.Width, e.cfg.Height, statusMessage(st)))
+		}
 		return vaError("vaCreateContext", st)
 	}
 	// A coded buffer large enough for an intra frame at the lowest
@@ -467,7 +496,13 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	if err := e.upload(surface, f); err != nil {
 		return err
 	}
-	data, err := e.encodePicture(surface, idr)
+	var data []byte
+	var err error
+	if e.av1 != nil {
+		data, err = e.encodeAV1Picture(surface, idr)
+	} else {
+		data, err = e.encodePicture(surface, idr)
+	}
 	if err != nil {
 		return err
 	}
@@ -483,7 +518,14 @@ func (e *encoder) Send(ctx context.Context, f *codec.Frame) error {
 	e.forceNext = false
 	e.flushed = false
 
-	pkt := e.packetFromStream(data, f.PTS)
+	var pkt codec.Packet
+	if e.av1 != nil {
+		if pkt, err = e.av1Packet(data, f.PTS); err != nil {
+			return err
+		}
+	} else {
+		pkt = e.packetFromStream(data, f.PTS)
+	}
 	if e.hevc != nil && pkt.Keyframe {
 		if err := e.checkHEVCOutput(pkt.Data); err != nil {
 			return err
@@ -561,23 +603,67 @@ func (e *encoder) upload(surface uint32, f *codec.Frame) error {
 	return nil
 }
 
-// encodePicture submits one picture and returns its coded data.
-func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
-	dpy, ctx := e.dpy.dpy, e.context
+// newBuffer creates a parameter buffer for the next picture; submit hands
+// every buffer created since the last destroyBuffers to the driver.
+func (e *encoder) newBuffer(typ int32, size int, data unsafe.Pointer) error {
+	var id uint32
+	if st := sys.CreateBuffer(e.dpy.dpy, e.context, typ, uint32(size), 1, data, &id); st != sys.StatusSuccess {
+		return vaError("vaCreateBuffer", st)
+	}
+	e.bufIDs = append(e.bufIDs, id)
+	return nil
+}
+
+func (e *encoder) destroyBuffers() {
+	for _, id := range e.bufIDs {
+		sys.DestroyBuffer(e.dpy.dpy, id)
+	}
 	e.bufIDs = e.bufIDs[:0]
-	defer func() {
-		for _, id := range e.bufIDs {
-			sys.DestroyBuffer(dpy, id)
+}
+
+// addPackedHeader adds a packed header of the given type: its parameter
+// buffer and its data.
+func (e *encoder) addPackedHeader(typ uint32, data []byte, bitLength int, emulationBytes bool) error {
+	i := 0
+	if typ != sys.EncPackedHeaderTypeSequence {
+		i = 1
+	}
+	e.packedHdr[i] = sys.EncPackedHeaderParameterBuffer{Type: typ, BitLength: uint32(bitLength), HasEmulationBytes: uint8(b2u(emulationBytes))}
+	if err := e.newBuffer(sys.EncPackedHeaderParameterBufferType, int(unsafe.Sizeof(e.packedHdr[i])), unsafe.Pointer(&e.packedHdr[i])); err != nil {
+		return err
+	}
+	return e.newBuffer(sys.EncPackedHeaderDataBufferType, len(data), unsafe.Pointer(&data[0]))
+}
+
+// addRateControlBuffers adds the frame rate, rate control and HRD
+// parameters that go with a sequence's first picture.
+func (e *encoder) addRateControlBuffers() error {
+	if num, den := frameRateFraction(e.cfg.FrameRate); num > 0 {
+		e.frParam = sys.EncMiscParameterFrameRate{Type: sys.EncMiscParameterTypeFrameRate, Framerate: num | den<<16}
+		if err := e.newBuffer(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.frParam)), unsafe.Pointer(&e.frParam)); err != nil {
+			return err
 		}
-	}()
-	create := func(typ int32, size int, data unsafe.Pointer) error {
-		var id uint32
-		if st := sys.CreateBuffer(dpy, ctx, typ, uint32(size), 1, data, &id); st != sys.StatusSuccess {
-			return vaError("vaCreateBuffer", st)
-		}
-		e.bufIDs = append(e.bufIDs, id)
+	}
+	if e.rcMode == sys.RCCQP {
 		return nil
 	}
+	e.rcParam = sys.EncMiscParameterRateControl{
+		Type: sys.EncMiscParameterTypeRateControl, BitsPerSecond: e.peakBits, TargetPercentage: e.targetPct,
+		WindowSize: 1000, RcFlags: sys.RcFlagDisableFrameSkip,
+	}
+	if err := e.newBuffer(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.rcParam)), unsafe.Pointer(&e.rcParam)); err != nil {
+		return err
+	}
+	e.hrdParam = sys.EncMiscParameterHRD{Type: sys.EncMiscParameterTypeHRD, BufferSize: e.peakBits, InitialBufferFullness: e.peakBits / 4 * 3}
+	return e.newBuffer(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.hrdParam)), unsafe.Pointer(&e.hrdParam))
+}
+
+// encodePicture submits one H.264 or HEVC picture and returns its coded
+// data.
+func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
+	e.bufIDs = e.bufIDs[:0]
+	defer e.destroyBuffers()
+	create := e.newBuffer
 
 	if idr {
 		e.framesSinceIDR = 0
@@ -600,24 +686,8 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 				return nil, err
 			}
 		}
-		if num, den := frameRateFraction(e.cfg.FrameRate); num > 0 {
-			e.frParam = sys.EncMiscParameterFrameRate{Type: sys.EncMiscParameterTypeFrameRate, Framerate: num | den<<16}
-			if err := create(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.frParam)), unsafe.Pointer(&e.frParam)); err != nil {
-				return nil, err
-			}
-		}
-		if e.rcMode != sys.RCCQP {
-			e.rcParam = sys.EncMiscParameterRateControl{
-				Type: sys.EncMiscParameterTypeRateControl, BitsPerSecond: e.peakBits, TargetPercentage: e.targetPct,
-				WindowSize: 1000, RcFlags: sys.RcFlagDisableFrameSkip,
-			}
-			if err := create(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.rcParam)), unsafe.Pointer(&e.rcParam)); err != nil {
-				return nil, err
-			}
-			e.hrdParam = sys.EncMiscParameterHRD{Type: sys.EncMiscParameterTypeHRD, BufferSize: e.peakBits, InitialBufferFullness: e.peakBits / 4 * 3}
-			if err := create(sys.EncMiscParameterBufferType, int(unsafe.Sizeof(e.hrdParam)), unsafe.Pointer(&e.hrdParam)); err != nil {
-				return nil, err
-			}
+		if err := e.addRateControlBuffers(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -633,11 +703,7 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 		}
 	}
 	if idr && e.packed&sys.EncPackedHeaderSequence != 0 {
-		e.packedHdr[0] = sys.EncPackedHeaderParameterBuffer{Type: sys.EncPackedHeaderTypeSequence, BitLength: uint32(8 * len(e.paramSets)), HasEmulationBytes: 1}
-		if err := create(sys.EncPackedHeaderParameterBufferType, int(unsafe.Sizeof(e.packedHdr[0])), unsafe.Pointer(&e.packedHdr[0])); err != nil {
-			return nil, err
-		}
-		if err := create(sys.EncPackedHeaderDataBufferType, len(e.paramSets), unsafe.Pointer(&e.paramSets[0])); err != nil {
+		if err := e.addPackedHeader(sys.EncPackedHeaderTypeSequence, e.paramSets, 8*len(e.paramSets), true); err != nil {
 			return nil, err
 		}
 	}
@@ -669,15 +735,17 @@ func (e *encoder) encodePicture(surface uint32, idr bool) ([]byte, error) {
 		}
 	}
 	if e.packed&sys.EncPackedHeaderSlice != 0 {
-		e.packedHdr[1] = sys.EncPackedHeaderParameterBuffer{Type: sys.EncPackedHeaderTypeSlice, BitLength: uint32(32 + sliceBits), HasEmulationBytes: 1}
-		if err := create(sys.EncPackedHeaderParameterBufferType, int(unsafe.Sizeof(e.packedHdr[1])), unsafe.Pointer(&e.packedHdr[1])); err != nil {
-			return nil, err
-		}
-		if err := create(sys.EncPackedHeaderDataBufferType, len(e.sliceHdr), unsafe.Pointer(&e.sliceHdr[0])); err != nil {
+		if err := e.addPackedHeader(sys.EncPackedHeaderTypeSlice, e.sliceHdr, 32+sliceBits, true); err != nil {
 			return nil, err
 		}
 	}
+	return e.submit(surface)
+}
 
+// submit renders the buffers created for the picture into the input
+// surface, waits for the driver and returns the coded data.
+func (e *encoder) submit(surface uint32) ([]byte, error) {
+	dpy, ctx := e.dpy.dpy, e.context
 	if st := sys.BeginPicture(dpy, ctx, surface); st != sys.StatusSuccess {
 		return nil, vaError("vaBeginPicture", st)
 	}

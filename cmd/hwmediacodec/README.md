@@ -26,7 +26,7 @@ machine. It runs three stages in one window and ends with a report:
    and Media Foundation separately). Decode: the bundled clip in H.264,
    HEVC and AV1, all 293 frames, which must come out in display order, at
    the track's size and not flat. Encode: 60 pictures of the clip (halved
-   to 352x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
+   to 320x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
    compared by luma PSNR with the source (a working encoder reaches
    30 dB and more on this hard-to-code footage; the check also compares
    each picture with the next one, which a stream in the wrong order

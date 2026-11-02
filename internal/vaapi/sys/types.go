@@ -80,6 +80,9 @@ const (
 	SurfaceAttribMaxWidth    int32 = 3
 	SurfaceAttribMinHeight   int32 = 4
 	SurfaceAttribMaxHeight   int32 = 5
+	// SurfaceAttribAlignmentSize holds log2 of the width alignment in bits
+	// 0-3 and log2 of the height alignment in bits 4-7.
+	SurfaceAttribAlignmentSize int32 = 10
 )
 
 // VAGenericValueType values and surface attribute flags.

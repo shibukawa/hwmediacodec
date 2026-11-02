@@ -32,10 +32,11 @@ const (
 const checkTimeout = 60 * time.Second
 
 // The encode round trips code srcFrames pictures of srcW x srcH: the
-// bundled clip scaled down by two and cropped to multiples of 32, which
-// every encoder takes.
+// bundled clip scaled down by two and cropped to multiples of 64, which
+// every encoder takes (AMD's VCN 4 codes HEVC and AV1 in 64-wide columns
+// and refuses other widths).
 const (
-	srcW, srcH = 352, 640
+	srcW, srcH = 320, 640
 	srcFrames  = 60
 	srcFPS     = 30
 	srcTick    = 90000 / srcFPS // PTS step in the default 90 kHz time scale
