@@ -1186,7 +1186,7 @@ history:
   av1-encode-implemented-2026-11-02:
     summary: Author asked for AV1 encoding ("should be available on this machine", an AMD Radeon 890M).
       VA-API AV1 encode added and verified on that GPU; the check now encodes at 320x640 (multiples of
-      64) so AMD VCN 4 codes HEVC and AV1 at the requested size.
+      64) so AMD VCN 4 codes AV1 at the requested size (HEVC crops its padding with the conformance window).
   consolidated-2026-10-16:
     summary: On 2026-10-16 the content of the milestone concepts milestone:linux-vaapi-h264-decode, milestone:linux-vaapi-hevc,
       milestone:av1-decode-linux-windows was folded into this concept (keys prefixed with the milestone's

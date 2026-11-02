@@ -33,8 +33,8 @@ const checkTimeout = 60 * time.Second
 
 // The encode round trips code srcFrames pictures of srcW x srcH: the
 // bundled clip scaled down by two and cropped to multiples of 64, which
-// every encoder takes (AMD's VCN 4 codes HEVC and AV1 in 64-wide columns
-// and refuses other widths).
+// every encoder takes (AMD's VCN 4 codes AV1 in 64-wide columns, and AV1
+// has no cropping to hide that padding, so other widths are refused).
 const (
 	srcW, srcH = 320, 640
 	srcFrames  = 60
