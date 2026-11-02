@@ -87,9 +87,9 @@ func TestHalve(t *testing.T) {
 	if s.Width != srcW || s.Height != srcH || len(s.Planes[0]) != srcW*srcH || len(s.Planes[1]) != srcW*srcH/2 || s.PTS != 2*srcTick {
 		t.Fatalf("halved to %dx%d with %d/%d bytes, PTS %d", s.Width, s.Height, len(s.Planes[0]), len(s.Planes[1]), s.PTS)
 	}
-	// The crop drops 4 columns on each side of the halved picture, so
-	// column c averages source columns 2c+8 and 2c+9 of rows 0 and 1.
-	if got, want := s.Planes[0][10], byte((2*int(y[28])+2*int(y[29])+2)/4); got != want {
+	// The crop drops 20 columns on each side of the halved picture, so
+	// column c averages source columns 2c+40 and 2c+41 of rows 0 and 1.
+	if got, want := s.Planes[0][10], byte((2*int(y[60])+2*int(y[61])+2)/4); got != want {
 		t.Errorf("luma %d, want %d", got, want)
 	}
 	if s.Planes[1][0] != 0 || s.Planes[1][1] != 255 {

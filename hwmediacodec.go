@@ -47,7 +47,9 @@
 // decoder, and in a browser that reports a hardware AV1 decoder. A Packet
 // is then one temporal unit (an IVF
 // frame or ISOBMFF sample; see package mediacontainer/ivf), each yielding one frame in
-// presentation order. No backend encodes AV1 yet.
+// presentation order. AV1 encoding is available through VA-API on Linux
+// (8-bit Main profile, GPUs with an AV1 encoder such as the AMD RX 7000 series
+// and Radeon 700M/800M); the other backends do not encode AV1 yet.
 // The separate module github.com/shibukawa/hwmediacodec/ebitenvideo plays
 // streams in Ebitengine.
 //

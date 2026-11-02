@@ -26,7 +26,7 @@ machine. It runs three stages in one window and ends with a report:
    and Media Foundation separately). Decode: the bundled clip in H.264,
    HEVC and AV1, all 293 frames, which must come out in display order, at
    the track's size and not flat. Encode: 60 pictures of the clip (halved
-   to 352x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
+   to 320x640) at 4 Mbit/s in H.264, HEVC and AV1, decoded back and
    compared by luma PSNR with the source (a working encoder reaches
    30 dB and more on this hard-to-code footage; the check also compares
    each picture with the next one, which a stream in the wrong order
@@ -45,6 +45,11 @@ machine. It runs three stages in one window and ends with a report:
    own, since Chrome and Edge on one machine can receive differently.
    Playback and WebRTC results also name the backend the library picks
    for them, the first one `Probe` lists for the codec.
+
+On Linux the window is an X11 one (XWayland on a Wayland desktop); the
+command sets `EGL_PLATFORM=x11` for itself, because Mesa's EGL otherwise
+follows the `EGL_PLATFORM=wayland` many Wayland sessions set, takes the X11
+display for a Wayland one and crashes as the window opens.
 
 The report is printed, saved as `hwmediacodec-report.md` and comes with a
 link (`O` in the window) that opens a new GitHub issue with the title

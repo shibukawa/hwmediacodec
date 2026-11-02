@@ -66,16 +66,18 @@ behind each WebRTC result.
 | Android 14 and later (arm64, x86_64) | MediaCodec (NDK `libmediandk.so`; cgo-enabled build) | H.264, HEVC, AV1 through the vendor's hardware codec (the framework's software codecs only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on a Redmi Pad SE (Snapdragon 680, Android 15; H.264 and HEVC bit-exact with ffmpeg, no AV1 decoder on that SoC) and on the Android 14 emulator** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on the Redmi Pad SE (Qualcomm hardware encoders, about 47 dB PSNR) and on the Android 14 emulator (software encoders)** |
 | Browsers (`GOOS=js GOARCH=wasm`; Chrome, Edge and other browsers with WebCodecs) | WebCodecs (`syscall/js`) | H.264, HEVC, AV1 through the codec the browser reports as a hardware one (its software decoders only with `WithSoftwareFallback`); display order; NV12 in CPU memory, RGBA or BGRA converted by the browser; **verified in Chrome on an Apple M3; Firefox on macOS decodes to RGBA / BGRA only and Safari's NV12 is not bit-exact (see the notes); other operating systems not run yet** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified in Chrome on an Apple M3; H.264 in Firefox and H.264 / HEVC in Safari on macOS with the limits in the notes; other operating systems not run yet** |
 | iOS 15 and later (iPhone, iPad) | VideoToolbox (the macOS backend; cgo-enabled build) | H.264, HEVC as on macOS; AV1 from the A17 Pro and the M-series iPads on; sessions lost in the background are reopened at the next keyframe; **verified on an iPhone SE (3rd generation, A15, iOS 26.6) with the check of `examples/mobile`** ([#31](https://github.com/shibukawa/hwmediacodec/issues/31)) and in the iOS Simulator (software decoder) | H.264, HEVC as on macOS; **verified on the iPhone SE (decoded back at 35.5 dB H.264, 36.6 dB HEVC) and in the iOS Simulator** |
-| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
+| Linux, AMD (Mesa) and Intel (iHD / i965) | VA-API | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC, AV1 (8-bit Main profile, on GPUs with an AV1 encoder); NV12 in, RGBA or BGRA converted in Go, Annex-B (H.264, HEVC) or temporal units (AV1) out; **AV1 verified on an AMD Radeon 890M (Mesa 26.0.8) with the `hwmediacodec check` round trip (36.0 dB H.264, 36.7 dB HEVC, 36.5 dB AV1) and libdav1d; Intel not yet verified** |
 | Linux, NVIDIA (proprietary driver 470+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **not yet verified on hardware** |
 | Linux, Intel (Tiger Lake and newer with `libmfx-gen`; older GPUs with the Media SDK runtime) | Intel VPL (Quick Sync Video) | H.264, HEVC, AV1 (8-bit Main profile, Tiger Lake and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **not yet verified on hardware** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **not yet verified on hardware** |
 | Windows x64, NVIDIA (driver 471.41+) | NVDEC / NVENC | H.264, HEVC, AV1 (8-bit Main profile, RTX 30 series and newer); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified with `hwmediacodec check` on a GeForce RTX 2060 Max-Q laptop GPU (H.264 and HEVC decode of the whole clip, 216 and 367 fps at 720x1280; playback confirmed by eye); AV1 not run (the RTX 20 series has no AV1 decoder)** | H.264, HEVC; NV12, RGBA or BGRA in, Annex-B out; **verified with the `hwmediacodec check` round trip (36.5 dB H.264, 36.9 dB HEVC) and the WebRTC stream to Chrome in both codecs; Edge on the same machine does not show the HEVC stream (it needs the paid HEVC Video Extensions)** |
 | Windows x64 / ARM64, Intel, AMD (and NVIDIA as the fallback) | Media Foundation (decode: Microsoft MFTs + Direct3D 11 DXVA; encode: vendor hardware MFTs) | H.264, HEVC, AV1 (8-bit Main profile, with the "AV1 Video Extension" on GPUs with an AV1 decoder); display order; NV12 in CPU memory, RGBA or BGRA converted in Go; **verified on Intel integrated graphics (HEVC, the player and texture samples; H.264 and AV1 decode of the whole clip in display order with `hwmediacodec check`, 256 and 355 fps at 720x1280); on AMD Radeon integrated graphics (Ryzen 4000) H.264 and HEVC decode pass (647 and 401 fps; HEVC needs the frame size in the input type there, see the [Windows notes](#windows-media-foundation))** | H.264, HEVC; NV12 in, RGBA or BGRA converted in Go, Annex-B out; **verified on Intel integrated graphics (H.264 through Quick Sync, the webrtc sample, and the `hwmediacodec check` round trip at 37.0 dB luma PSNR) and on AMD Radeon integrated graphics through the AMD encoder MFTs (round trips at 37.2 dB H.264 and 34.9 dB HEVC; widths that are not a multiple of 8 are padded for the HEVC MFT, see the Windows notes); Media Foundation on an NVIDIA GPU not run yet (on a laptop with both, it picks the AMD GPU)** |
 
 AV1 is decoded wherever the GPU has an AV1 decoder; `Probe` lists `av1
-decode` on those machines only. No backend encodes AV1 yet (Apple Silicon
-has no AV1 encoder; on the other platforms the encoders exist in newer GPUs
-and are not wired up).
+decode` on those machines only. AV1 is encoded through VA-API on Linux
+(`av1 encode` in `Probe` where the GPU has an AV1 encoder); the other
+backends do not encode it yet (Apple Silicon has no AV1 encoder; NVENC,
+Intel VPL, the Media Foundation MFTs and MediaCodec have AV1 encoders on
+newer GPUs that are not wired up).
 
 Audio goes through the codecs the operating system or the browser ships,
 which run in software everywhere (`Probe` lists them with `Hardware`
@@ -128,7 +130,8 @@ Known limitations:
   before the backend sees it (`internal/pixconv`: BT.709 in video range,
   chroma averaged over 2x2 pixels, rows split across cores; about 0.8 ms per
   1080p frame on an Apple M3) and asks the backend to tag the stream as
-  BT.709. The VA-API backend writes that into its own SPS, Intel VPL gets
+  BT.709. The VA-API backend writes that into its own SPS (the sequence
+  header for AV1), Intel VPL gets
   an `mfxExtVideoSignalInfo`, and Media Foundation gets the colour attributes
   on its media types; an encoder MFT that ignores them leaves the stream
   untagged, and players then guess the matrix from the picture size.
@@ -197,7 +200,8 @@ Known limitations:
   against the requested one on the first keyframe and a mismatch is an
   error, not a wrongly sized stream. Intel encoders that have no P-frames
   (they need "generalised B" frames) report `ErrUnsupported`; the Intel VPL
-  backend serves those GPUs.
+  backend serves those GPUs. AV1 encoding is described in
+  [AV1 on Linux and Windows](#av1-on-linux-and-windows).
 - The VA-API backend was written on a Mac. Everything up to the driver is
   verified without hardware (see Testing), including complete decode and
   encode runs through libva against a checking test driver, but no run on
@@ -577,7 +581,7 @@ Foundation, VA-API or MediaCodec behind it.
   - Sample rates and channel counts the browser accepts for encoding
     beyond the library's own rules (Opus at 48 kHz, mono or stereo) are
     the browser's business; an odd rate may be resampled without notice.
-- **Not done.** No AV1 encoding, as on every backend.
+- **Not done.** No AV1 encoding (only the VA-API backend encodes AV1).
 
 **Verification.** `scripts/browser_test.sh` runs the root package's
 conformance tests, video and audio, in a real browser against the host's
@@ -636,7 +640,30 @@ streams, the High and Professional profiles and monochrome streams report
   configured when the first sequence header arrives; each temporal unit is
   one sample, without its temporal delimiters.
 
-None of this has run on a GPU yet. The VA-API path is verified up to the
+**Encoding (VA-API only).** `NewEncoder` with `AV1` produces 8-bit Main
+profile temporal units without temporal delimiters, each key frame
+preceded by the sequence header (the form IVF, MP4 and WebM files store).
+Every frame is shown: key frames, and inter frames that predict from the
+frame before (one reference, no B-frames; `WithBFrames` is accepted and
+ignored). `WithQuality` maps to a constant quantiser index (CQP),
+`WithBitrate` to the driver's VBR or CBR, and without either a quantiser
+index of 100 is used. The sequence header and the frame headers are
+written in Go and handed over as packed headers, together with the bit
+positions of the fields the rate control rewrites, which is the form both
+Mesa and Intel's driver take; the stream uses 64x64 superblocks, uniform
+tiles (a single one up to 4096 samples wide and 4096x2304 in area) and
+CDEF, and RGBA or BGRA input is tagged BT.709 in the sequence header's
+colour config. AMD's VCN 4 (RX 7000 series, Radeon 700M and 800M) codes
+the picture at its surface alignment, 64x16, and nothing smaller than
+128x128: other sizes report `ErrUnsupported`, naming the sizes that work,
+rather than giving a stream of the wrong size. Verified on an AMD Radeon
+890M (Mesa 26.0.8): the `hwmediacodec check` round trip at 36.5 dB, and
+the CLI's IVF output decoded by libdav1d in CQP, VBR and CBR. Intel GPUs
+(Arc, Meteor Lake and newer) have not been run.
+
+Apart from VA-API on that Radeon 890M, where `hwmediacodec check` decodes
+the bundled clip in display order, none of the decoding has run on a GPU
+yet. The VA-API path is verified up to the
 driver (see Testing): for 24 stream configurations every buffer it submits
 equals, byte for byte, the one ffmpeg's VA-API decoder submits for the same
 frame. The NVDEC, VPL and Media Foundation paths leave the stream to the
@@ -1640,6 +1667,7 @@ go run ./cmd/hwmediacodec decode -codec av1 -hash input.ivf                  # A
 go run ./cmd/hwmediacodec encode -size 1920x1080 -bitrate 8M -gop 60 -o out.h264 input.nv12
 go run ./cmd/hwmediacodec encode -size 1920x1080 -format rgba -o out.h264 input.rgba
 go run ./cmd/hwmediacodec transcode -in h264 -codec hevc -bitrate 6M -o out.hevc input.h264
+go run ./cmd/hwmediacodec transcode -in h264 -codec av1 -bitrate 4M -o out.ivf input.h264   # AV1: IVF output (VA-API)
 go run ./cmd/hwmediacodec encode-audio -codec opus -o out.webm input.pcm         # Opus into WebM (decode-audio reads .webm too)
 ```
 

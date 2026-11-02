@@ -5,13 +5,14 @@
 //	hwmediacodec probe
 //	hwmediacodec check [-auto] [-o hwmediacodec-report.md] [-playback=false] [-webrtc=false]
 //	hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
-//	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
-//	hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+//	hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc|av1] [encode flags] -o out.h264 in.raw
+//	hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc|av1] [encode flags] -o out.hevc in.h264
 //	hwmediacodec decode-audio [-format s16|f32] [-o out.pcm] in.aac|in.webm|in.mp4
 //	hwmediacodec encode-audio [-codec aac|opus] [-rate 48000] [-channels 2] [-bitrate 128k] [-cbr] -o out.aac|out.webm|out.mp4 in.pcm
 //
-// H.264 and HEVC input is a raw Annex-B stream; AV1 input is an IVF file
-// (one temporal unit per frame, as ffmpeg -f ivf writes it).
+// H.264 and HEVC input and output is a raw Annex-B stream; AV1 input and
+// output is an IVF file (one temporal unit per frame, as ffmpeg -f ivf
+// writes it).
 //
 // Encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes
 // -lowlatency -profile baseline|main|high -software.
@@ -82,11 +83,11 @@ func usage() {
   hwmediacodec probe
   hwmediacodec check [-auto] [-o hwmediacodec-report.md] [-playback=false] [-webrtc=false]
   hwmediacodec decode [-codec h264|hevc|av1] [-format nv12|rgba|bgra] [-decode-order] [-o out.raw] [-hash] file
-  hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc] [encode flags] -o out.h264 in.raw
-  hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc] [encode flags] -o out.hevc in.h264
+  hwmediacodec encode -size WxH [-format nv12|rgba|bgra] [-codec h264|hevc|av1] [encode flags] -o out.h264 in.raw
+  hwmediacodec transcode [-in h264|hevc|av1] [-codec h264|hevc|av1] [encode flags] -o out.hevc in.h264
   hwmediacodec decode-audio [-format s16|f32] [-o out.pcm] in.aac|in.webm|in.mp4
   hwmediacodec encode-audio [-codec aac|opus] [-rate 48000] [-channels 2] [-bitrate 128k] [-cbr] -o out.aac|out.webm|out.mp4 in.pcm
-h264/hevc input is a raw Annex-B stream, av1 input an IVF file
+h264/hevc input and output is a raw Annex-B stream, av1 an IVF file
 encode flags: -rate 30 -bitrate 4M -cbr -quality 0.7 -gop 60 -bframes -lowlatency -profile baseline|main|high -software`)
 }
 
@@ -252,7 +253,7 @@ type encodeFlags struct {
 
 func addEncodeFlags(fs *flag.FlagSet) *encodeFlags {
 	f := &encodeFlags{}
-	fs.StringVar(&f.codec, "codec", "h264", "output codec: h264 or hevc")
+	fs.StringVar(&f.codec, "codec", "h264", "output codec: h264, hevc or av1 (written as IVF)")
 	fs.Float64Var(&f.rate, "rate", 30, "frame rate used for timestamps and rate control")
 	fs.StringVar(&f.bitrate, "bitrate", "", "target bitrate in bit/s (suffix k or M); default: backend choice")
 	fs.BoolVar(&f.cbr, "cbr", false, "constant bitrate instead of variable")
@@ -325,18 +326,30 @@ func openOutput(path string) (*bufio.Writer, func() error, error) {
 	return bufio.NewWriter(f), f.Close, nil
 }
 
-// packetSink writes encoded packets and keeps statistics.
+// packetSink writes encoded packets and keeps statistics. H.264 and HEVC
+// access units are concatenated into an Annex-B stream; AV1 temporal units
+// go into an IVF file of width x height, stamped in DefaultTimeScale units.
 type packetSink struct {
-	w         io.Writer
-	packets   int
-	keyframes int
-	bytes     int
+	w             io.Writer
+	codec         hwmediacodec.Codec
+	width, height int
+	ivf           *ivf.Writer
+	packets       int
+	keyframes     int
+	bytes         int
 }
 
 // WritePacket makes the sink a hwmediacodec.PacketWriter, which is what an
 // EncodeWriter drains the encoder into.
 func (s *packetSink) WritePacket(p hwmediacodec.Packet) error {
-	if _, err := s.w.Write(p.Data); err != nil {
+	if s.codec == hwmediacodec.AV1 {
+		if s.ivf == nil {
+			s.ivf = ivf.NewWriter(s.w, "AV01", s.width, s.height, 1, uint32(hwmediacodec.DefaultTimeScale))
+		}
+		if err := s.ivf.WriteFrame(p.Data, uint64(p.PTS)); err != nil {
+			return err
+		}
+	} else if _, err := s.w.Write(p.Data); err != nil {
 		return err
 	}
 	s.packets++
@@ -345,6 +358,14 @@ func (s *packetSink) WritePacket(p hwmediacodec.Packet) error {
 		s.keyframes++
 	}
 	return nil
+}
+
+// close finishes an IVF file.
+func (s *packetSink) close() error {
+	if s.ivf == nil {
+		return nil
+	}
+	return s.ivf.Close()
 }
 
 func (s *packetSink) report(what string, width, height int, elapsed time.Duration, rate float64) {
@@ -358,7 +379,7 @@ func encode(args []string) (err error) {
 	fs := flag.NewFlagSet("encode", flag.ExitOnError)
 	size := fs.String("size", "", "input picture size as WxH (required)")
 	formatName := fs.String("format", "nv12", "input pixel format: nv12, rgba or bgra")
-	out := fs.String("o", "", "write the Annex-B stream to this file")
+	out := fs.String("o", "", "write the Annex-B stream (IVF file for av1) to this file")
 	ef := addEncodeFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -405,7 +426,7 @@ func encode(args []string) (err error) {
 	}
 	defer enc.Close()
 
-	sink := &packetSink{w: w}
+	sink := &packetSink{w: w, codec: c, width: width, height: height}
 	ew := hwmediacodec.NewEncodeWriter(enc, sink)
 	frameSize := format.FrameSize(width, height)
 	buf := make([]byte, frameSize)
@@ -430,6 +451,9 @@ func encode(args []string) (err error) {
 	if err := ew.Flush(ctx); err != nil {
 		return err
 	}
+	if err := sink.close(); err != nil {
+		return err
+	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
@@ -443,7 +467,7 @@ func encode(args []string) (err error) {
 func transcode(args []string) (err error) {
 	fs := flag.NewFlagSet("transcode", flag.ExitOnError)
 	inCodec := fs.String("in", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
-	out := fs.String("o", "", "write the Annex-B stream to this file")
+	out := fs.String("o", "", "write the Annex-B stream (IVF file for av1) to this file")
 	ef := addEncodeFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -495,7 +519,7 @@ func transcode(args []string) (err error) {
 			enc.Close()
 		}
 	}()
-	sink := &packetSink{w: w}
+	sink := &packetSink{w: w, codec: oc}
 	var ew *hwmediacodec.EncodeWriter
 	step := ptsStep(ef.rate)
 	var width, height, frames int
@@ -517,6 +541,7 @@ func transcode(args []string) (err error) {
 		if enc == nil {
 			// The encoder is opened for the size of the first picture.
 			width, height = f.Width, f.Height
+			sink.width, sink.height = width, height
 			if enc, err = hwmediacodec.NewEncoder(ctx, oc, width, height, opts...); err != nil {
 				f.Release()
 				return err
@@ -539,6 +564,9 @@ func transcode(args []string) (err error) {
 		return errors.New("the input produced no frames")
 	}
 	if err := ew.Flush(ctx); err != nil {
+		return err
+	}
+	if err := sink.close(); err != nil {
 		return err
 	}
 	if err := w.Flush(); err != nil {

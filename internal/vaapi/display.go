@@ -194,6 +194,39 @@ func (d *display) maxPictureSize(profile, entrypoint int32) (w, h int) {
 	return w, h
 }
 
+// encodeSurfaceLimits reports the picture size alignment
+// (VASurfaceAttribAlignmentSize) and the smallest picture the driver
+// takes for an encoder; 1 where it does not say.
+func (d *display) encodeSurfaceLimits(profile, entrypoint int32) (alignW, alignH, minW, minH int) {
+	alignW, alignH, minW, minH = 1, 1, 1, 1
+	attr := sys.ConfigAttrib{Type: sys.ConfigAttribRTFormat, Value: sys.RTFormatYUV420}
+	var config uint32
+	if st := sys.CreateConfig(d.dpy, profile, entrypoint, &attr, 1, &config); st != sys.StatusSuccess {
+		return
+	}
+	defer sys.DestroyConfig(d.dpy, config)
+	var n uint32
+	if st := sys.QuerySurfaceAttributes(d.dpy, config, nil, &n); st != sys.StatusSuccess || n == 0 {
+		return
+	}
+	attrs := make([]sys.SurfaceAttrib, n)
+	if st := sys.QuerySurfaceAttributes(d.dpy, config, &attrs[0], &n); st != sys.StatusSuccess {
+		return
+	}
+	for _, a := range attrs[:n] {
+		v := int(a.Value.Int())
+		switch a.Type {
+		case sys.SurfaceAttribAlignmentSize:
+			alignW, alignH = 1<<(v&0xf), 1<<(v>>4&0xf)
+		case sys.SurfaceAttribMinWidth:
+			minW = max(v, 1)
+		case sys.SurfaceAttribMinHeight:
+			minH = max(v, 1)
+		}
+	}
+	return
+}
+
 func (d *display) close() {
 	if d.dpy != 0 {
 		sys.Terminate(d.dpy)

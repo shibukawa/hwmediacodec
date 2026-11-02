@@ -125,8 +125,29 @@ capabilities:
     - fake-driver
     - hevc-encode-linux
   encode/av1:
-    state: unknown
+    state: implemented
     about: capability:hwmediacodec/encode-av1
+    authority: inferred
+    scope:
+      platform: linux
+      gpu:
+      - amd
+      - intel
+    implements:
+    - requirement:hwmediacodec
+    evidence:
+      path: internal/vaapi/av1enc.go
+      note: Added 2026-11-02, 8-bit Main profile, shown key and inter frames with one reference (two
+        alternating slots), 64x64 superblocks, uniform tiles. The sequence header and frame header OBUs
+        are written in Go (av1params.go) and sent as packed headers with the bit offsets of qindex, loop
+        filter and CDEF; Mesa parses them and writes its own frame header, Intel patches them. Verified
+        on an AMD Radeon 890M (Strix, VCN 4, Mesa 26.0.8) - hwmediacodec check round trip 36.5 dB at
+        320x640, and libdav1d 1.5.3 decodes every rate control mode. VCN 4 codes the picture at its surface
+        alignment (64x16, VASurfaceAttribAlignmentSize) and 128x128 at least, so other sizes report ErrUnsupported.
+        Intel not run.
+    verified_by:
+    - av1-encoder-headers
+    - av1-encode-linux
 acceptance:
   vah264-va-struct-layout:
     text: Go mirrors of VAPictureParameterBufferH264, VASliceParameterBufferH264, VAIQMatrixBufferH264,
@@ -868,6 +889,27 @@ verification:
       input_hash: 554ecb18443e2911b3c6d5b6989b42986be44bb6f0adab1e94694c0b4f18d411
     - path: internal/vpl/sys/layout_test.go
       input_hash: 5e8f33e72b47635706e1e8ebaf9d197490da13d2f6e7144434a5228e0f240106
+  av1-encoder-headers:
+    state: passed
+    method: unit
+    authority: observed
+    test: internal/vaapi TestAV1HeadersParse, TestAV1LevelIdx; internal/vaapi/sys TestAV1EncodeStructLayouts
+    evidence:
+      path: internal/vaapi/av1params_test.go
+      note: The sequence and frame header OBUs (key and inter frames, one to four tiles, CDEF on and off,
+        1- to 4-byte size fields) parse back through internal/av1 with every field, and the qindex offset
+        points at base_q_idx. Struct layouts measured with gcc against va_enc_av1.h of libva 2.23.
+  av1-encode-linux:
+    state: passed
+    method: integration
+    authority: observed
+    test: TestEncodeAV1RoundTrip (default, VBR, CBR, CQP) and hwmediacodec check -auto on an AMD Radeon
+      890M (Mesa 26.0.8)
+    evidence:
+      path: encode_av1_test.go
+      note: 2026-11-02 - round trips at 52-54 dB on the gradient, the check's waterfall at 36.5 dB (320x640,
+        4 Mbit/s, about 1470 fps); IVF output of the CLI decoded by libdav1d 1.5.3 in every rate control
+        mode (46.6-53.2 dB). Intel iHD not run.
 open_questions:
   av1lw-vaapi-on-hardware:
     text: The buffers equal ffmpeg's, so a driver sees what it sees from ffmpeg; what remains unobserved
@@ -1141,6 +1183,10 @@ history:
     summary: HEVC decode and encode code complete; parser, DPB, VA buffers and encoder headers verified
       against ffmpeg and x265 on the host; the backend run end to end through libva against the fake driver;
       hardware conformance pending.
+  av1-encode-implemented-2026-11-02:
+    summary: Author asked for AV1 encoding ("should be available on this machine", an AMD Radeon 890M).
+      VA-API AV1 encode added and verified on that GPU; the check now encodes at 320x640 (multiples of
+      64) so AMD VCN 4 codes AV1 at the requested size (HEVC crops its padding with the conformance window).
   consolidated-2026-10-16:
     summary: On 2026-10-16 the content of the milestone concepts milestone:linux-vaapi-h264-decode, milestone:linux-vaapi-hevc,
       milestone:av1-decode-linux-windows was folded into this concept (keys prefixed with the milestone's

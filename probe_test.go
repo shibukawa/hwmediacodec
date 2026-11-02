@@ -119,6 +119,9 @@ func TestUnsupportedCodec(t *testing.T) {
 		t.Log(err)
 	}
 
+	if hasHardware(t, hwmediacodec.AV1, hwmediacodec.Encode) {
+		return
+	}
 	_, err = hwmediacodec.NewEncoder(ctx, hwmediacodec.AV1, 640, 480)
 	if !errors.As(err, &ue) {
 		t.Fatalf("AV1 encode: error is not *UnsupportedError: %T %v", err, err)
