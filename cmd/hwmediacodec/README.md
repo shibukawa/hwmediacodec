@@ -46,6 +46,11 @@ machine. It runs three stages in one window and ends with a report:
    Playback and WebRTC results also name the backend the library picks
    for them, the first one `Probe` lists for the codec.
 
+On Linux the window is an X11 one (XWayland on a Wayland desktop); the
+command sets `EGL_PLATFORM=x11` for itself, because Mesa's EGL otherwise
+follows the `EGL_PLATFORM=wayland` many Wayland sessions set, takes the X11
+display for a Wayland one and crashes as the window opens.
+
 The report is printed, saved as `hwmediacodec-report.md` and comes with a
 link (`O` in the window) that opens a new GitHub issue with the title
 (platform, backends, counts) and the report filled in; nothing is sent

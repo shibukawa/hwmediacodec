@@ -37,6 +37,7 @@ const hasWindow = true
 // checkWindow runs the automatic checks behind the window, then the
 // playback and WebRTC stages in it, and returns the exit status.
 func checkWindow(r *checker.Report, o checkOptions) int {
+	preferX11EGL()
 	g := newGame(r, o.out, o.addr, o.open, o.play)
 	g.skipPlayback, g.skipWebRTC = !o.playback, !o.webrtc
 	go func() {
