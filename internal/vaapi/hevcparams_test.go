@@ -55,6 +55,25 @@ func TestHEVCToolsFor(t *testing.T) {
 	}
 }
 
+// radeonsiTools is the structure an encoder on Mesa's radeonsi driver
+// is configured with.
+func radeonsiTools() hevcTools {
+	t := hevcToolsFor(amdBlockSizes, true, amdFeatures, true, true)
+	t.alignW, t.alignH = hevcDriverPadding("Mesa Gallium driver 26.0.8-1ubuntu0.3 for AMD Radeon 890M Graphics (radeonsi, strix1, ACO, DRM 3.64, 7.0.0-42-generic)")
+	return t
+}
+
+func TestHEVCDriverPadding(t *testing.T) {
+	if w, h := radeonsiTools().alignW, radeonsiTools().alignH; w != 64 || h != 16 {
+		t.Errorf("radeonsi padding %dx%d, want 64x16", w, h)
+	}
+	for _, vendor := range []string{"Intel iHD driver for Intel(R) Gen Graphics - 24.1.0", "hwmediacodec fake VA driver"} {
+		if w, h := hevcDriverPadding(vendor); w != 0 || h != 0 {
+			t.Errorf("%q: padding %dx%d, want none", vendor, w, h)
+		}
+	}
+}
+
 func TestHEVCLevel(t *testing.T) {
 	for _, tc := range []struct {
 		w, h     int
@@ -117,6 +136,10 @@ func TestHEVCEncoderHeaders(t *testing.T) {
 	}{
 		{"amd-1080p", 1920, 1080, hevcToolsFor(amdBlockSizes, true, amdFeatures, true, true), 1920, 1080},
 		{"amd-odd-size", 322, 242, hevcToolsFor(amdBlockSizes, true, amdFeatures, true, false), 328, 248},
+		{"radeonsi-1080p", 1920, 1080, radeonsiTools(), 1920, 1088},
+		{"radeonsi-portrait", 352, 640, radeonsiTools(), 384, 640},
+		{"radeonsi-720x1280", 720, 1280, radeonsiTools(), 768, 1280},
+		{"radeonsi-odd-size", 322, 242, radeonsiTools(), 384, 256},
 		{"guessed-1080p", 1920, 1080, hevcToolsFor(0, false, 0, false, true), 1920, 1088},
 		{"guessed-qvga", 320, 240, hevcToolsFor(0, false, 0, false, false), 320, 240},
 	} {
