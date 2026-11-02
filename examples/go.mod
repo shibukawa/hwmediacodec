@@ -9,10 +9,10 @@ require (
 	github.com/gen2brain/h265 v0.2.3
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/shibukawa/hwmediacodec v0.3.2
-	github.com/shibukawa/hwmediacodec/ebitenvideo v0.3.1
-	github.com/shibukawa/hwmediacodec/net/webrtc v0.3.1
-	golang.org/x/image v0.45.0
+	github.com/shibukawa/hwmediacodec v0.5.1
+	github.com/shibukawa/hwmediacodec/cmd/hwmediacodec v0.5.1
+	github.com/shibukawa/hwmediacodec/ebitenvideo v0.5.1
+	github.com/shibukawa/hwmediacodec/net/webrtc v0.5.1
 )
 
 require (
@@ -44,6 +44,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
