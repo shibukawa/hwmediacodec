@@ -5,6 +5,7 @@ package vaapi
 
 import (
 	"math"
+	"strings"
 
 	"github.com/shibukawa/hwmediacodec/internal/hevc"
 	"github.com/shibukawa/hwmediacodec/internal/vaapi/sys"
@@ -25,6 +26,26 @@ type hevcTools struct {
 	constrainedIntraPred           bool
 	transquantBypass               bool
 	cuQpDelta                      bool
+
+	// alignW and alignH, when larger than the minimum coding block, are
+	// the multiples the driver pads the coded picture to by itself (see
+	// hevcDriverPadding).
+	alignW, alignH int
+}
+
+// hevcDriverPadding returns the multiples a driver rounds the coded
+// picture size up to whatever the SPS asks for, or 0, 0 when it codes the
+// size it is given. Mesa's radeonsi (AMD VCN) pads HEVC pictures to a
+// multiple of 64 luma samples across and 16 down, and writes the
+// application's conformance window into the SPS it generates without
+// adjusting it to that padding; the coded size has to match its padding,
+// or the stream decodes to the padded size (352x640 comes out 384x640,
+// 1920x1080 comes out 1920x1088).
+func hevcDriverPadding(vendor string) (w, h int) {
+	if strings.Contains(vendor, "radeonsi") {
+		return 64, 16
+	}
+	return 0, 0
 }
 
 // hevcToolsFor derives the coding structure from the driver's
@@ -79,8 +100,9 @@ func hevcToolsFor(blocks uint32, hasBlocks bool, features uint32, hasFeatures bo
 // fpsNum/fpsDen is the frame rate, or 0/0 when it is unknown.
 func hevcParameterSets(width, height int, fpsNum, fpsDen uint32, bitrateKbps, qp int, t hevcTools) (*hevc.VPS, *hevc.SPS, *hevc.PPS) {
 	minCb := 1 << uint(t.minCbLog2)
-	codedW := (width + minCb - 1) / minCb * minCb
-	codedH := (height + minCb - 1) / minCb * minCb
+	alignW, alignH := max(minCb, t.alignW), max(minCb, t.alignH)
+	codedW := (width + alignW - 1) / alignW * alignW
+	codedH := (height + alignH - 1) / alignH * alignH
 
 	ptl := hevc.ProfileTierLevel{
 		ProfileIDC: hevc.ProfileMain,

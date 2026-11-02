@@ -52,6 +52,7 @@ func (e *encoder) buildHEVCParameterSets() {
 	blocks, hasBlocks := e.dpy.configAttrib(e.profile, e.entrypoint, sys.ConfigAttribEncHEVCBlockSizes)
 	features, hasFeatures := e.dpy.configAttrib(e.profile, e.entrypoint, sys.ConfigAttribEncHEVCFeatures)
 	h.tools = hevcToolsFor(blocks, hasBlocks, features, hasFeatures, e.rcMode != sys.RCCQP)
+	h.tools.alignW, h.tools.alignH = hevcDriverPadding(e.dpy.vendor)
 	num, den := frameRateFraction(cfg.FrameRate)
 	h.vps, h.sps, h.pps = hevcParameterSets(cfg.Width, cfg.Height, num, den, int(e.peakBits/1000), e.qp, h.tools)
 	if cfg.BT709 {
@@ -197,8 +198,8 @@ func (e *encoder) checkHEVCOutput(data []byte) error {
 		}
 		if _, _, w, ht := sps.Crop(); w != e.cfg.Width || ht != e.cfg.Height {
 			return &codec.BackendError{Backend: Name, Op: "encode", Message: fmt.Sprintf(
-				"the driver (%s) encoded a %dx%d picture for the requested %dx%d; use dimensions that are multiples of %d",
-				e.dpy.vendor, w, ht, e.cfg.Width, e.cfg.Height, 1<<uint(h.tools.minCbLog2))}
+				"the driver (%s) encoded a %dx%d picture for the requested %dx%d (coded as %dx%d, %dx%d were sent)",
+				e.dpy.vendor, w, ht, e.cfg.Width, e.cfg.Height, sps.Width, sps.Height, h.sps.Width, h.sps.Height)}
 		}
 		return nil
 	}
