@@ -5,7 +5,7 @@ The command-line tool of hwmediacodec, a module of its own
 module stays free of Ebitengine and pion. `probe` lists the hardware codecs
 with the GPU behind each, `decode`, `encode`, `transcode`, `decode-audio`
 and `encode-audio` exercise the API on files (see the
-[main README](../../README.md)), and `check` is the project's official
+[guide](../../GUIDE.md#command-line-tool)), and `check` is the project's official
 check.
 
 ## check

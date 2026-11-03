@@ -83,7 +83,7 @@
 // full range with the chroma moved up a quarter line, both of which are
 // undone to within a step, an H.264 encoder that
 // works in the "realtime" latency mode only, full-range HEVC output); the
-// README's browser notes list them. Which latency mode an encoder works in
+// REPORT_BROWSER.md lists them. Which latency mode an encoder works in
 // is found out with a trial of a few frames the first time a page opens
 // one.
 package webcodecs

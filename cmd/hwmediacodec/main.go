@@ -463,7 +463,7 @@ func encode(args []string) (err error) {
 
 // transcode decodes an elementary stream and re-encodes it. Frames are
 // re-encoded in the order the decoder returns them (decode order), so sources
-// with B-frames come out with their pictures reordered; see the README.
+// with B-frames come out with their pictures reordered; see GUIDE.md.
 func transcode(args []string) (err error) {
 	fs := flag.NewFlagSet("transcode", flag.ExitOnError)
 	inCodec := fs.String("in", "h264", "input codec: h264 or hevc (Annex-B file) or av1 (IVF file)")
