@@ -20,7 +20,9 @@ were taken out with `examples/thumbnails` on an AMD Radeon 890M.</sub>
 
 - 🎮 **Videos in games**: play an MP4 or WebM with sound inside an
   Ebitengine game, decoded by the GPU, with seeking and looping, on the
-  desktop, on phones and in the browser.
+  desktop, on phones and in the browser. The frame is an ordinary
+  `*ebiten.Image`, so a video also works as a texture: on a 3D object, on
+  an in-game screen, or through a shader.
 - 📡 **Streaming a game to the browser**: encode what the game draws and
   send it to browsers over WebRTC (about 100 ms of latency) or HLS, or
   record it to MP4.
@@ -107,6 +109,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 ```
 
+- **Video textures**: `player.Image()` is an ordinary `*ebiten.Image`
+  updated in place, so it can be drawn anywhere an image can: scaled and
+  rotated with `DrawImage`, mapped onto polygons with `DrawTriangles` (a
+  TV in the game world, a spinning cube), or fed to a Kage shader with
+  `DrawRectShader` as one of its source images. `examples/texture` shows
+  all three.
 - Decoding runs on a background goroutine a few frames ahead, in display
   order, as RGBA; frames that come late are skipped. `Seek`, `Pause`,
   `SetVolume`, looping.
@@ -122,8 +130,9 @@ func (g *game) Draw(screen *ebiten.Image) {
   [`playback`](GUIDE.md#playback) package is the same player without
   Ebitengine; it hands out RGBA (or NV12) frames for a clock you drive.
 - Try it: `go run github.com/shibukawa/hwmediacodec/examples/player@latest`
-  (bundled clip, or pass an MP4 / WebM). `examples/texture` maps the video
-  onto a box and through a Kage shader.
+  (bundled clip, or pass an MP4 / WebM), and
+  `go run github.com/shibukawa/hwmediacodec/examples/texture@latest`
+  (keys 1 flat, 2 box, 3 shader).
 
 ### 📡 Streaming a game to the browser
 

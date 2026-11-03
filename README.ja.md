@@ -20,7 +20,9 @@ VA-API、Intel VPL、NVDEC/NVENC、Media Foundation、WebCodecs）を実行時�
 
 - 🎮 **ゲームでの動画再生**: MP4 や WebM を音声付きで Ebitengine のゲーム内で
   再生できます。デコードは GPU が行い、シークやループにも対応しています。
-  デスクトップ、スマートフォン、ブラウザのどれでも動きます。
+  デスクトップ、スマートフォン、ブラウザのどれでも動きます。フレームは普通の
+  `*ebiten.Image` なので、3D オブジェクトやゲーム内のモニターに貼ったり、
+  シェーダーに通したりする動画テクスチャとしても使えます。
 - 📡 **ゲーム画面をブラウザへ配信**: ゲームが描画した画面をエンコードして、
   WebRTC（遅延 100 ms 程度）や HLS でブラウザに配信できます。MP4 への録画も
   できます。
@@ -109,6 +111,12 @@ func (g *game) Draw(screen *ebiten.Image) {
 }
 ```
 
+- **動画テクスチャ**: `player.Image()` はその場で更新される普通の
+  `*ebiten.Image` なので、画像を描けるところならどこにでも使えます。
+  `DrawImage` で拡大・回転して描く、`DrawTriangles` でポリゴンに貼る
+  （ゲーム世界の中のテレビ、回転する立方体など）、`DrawRectShader` で Kage
+  シェーダーの入力画像にする、といった使い方ができます。`examples/texture` に
+  3 つとも入っています。
 - デコードはバックグラウンドの goroutine で数フレーム先まで、表示順に RGBA で
   行います。間に合わなかったフレームはスキップします。`Seek`、`Pause`、
   `SetVolume`、ループ再生に対応しています。
@@ -127,8 +135,9 @@ func (g *game) Draw(screen *ebiten.Image) {
   フレームを返します。
 - 試すには `go run github.com/shibukawa/hwmediacodec/examples/player@latest`
   を実行します（引数なしで同梱の動画、MP4 / WebM を渡すとそのファイルを
-  再生します）。`examples/texture` は動画を箱に貼ったり Kage シェーダーに
-  通したりするサンプルです。
+  再生します）。動画テクスチャは
+  `go run github.com/shibukawa/hwmediacodec/examples/texture@latest`
+  で試せます（キー 1 で平面、2 で箱、3 でシェーダー）。
 
 ### 📡 ゲーム画面をブラウザへ配信
 
