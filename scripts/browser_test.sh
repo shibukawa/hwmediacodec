@@ -10,7 +10,7 @@
 #   HWMEDIACODEC_BROWSER=/Applications/Firefox.app/Contents/MacOS/firefox scripts/browser_test.sh
 #
 # Needs: Chrome, Chromium or Edge (or HWMEDIACODEC_BROWSER; Firefox works,
-# with fewer tests passing, see the README's browser notes), ffmpeg and
+# with fewer tests passing, see REPORT_BROWSER.md), ffmpeg and
 # ffprobe. Whether the codecs behind WebCodecs are hardware ones is the
 # browser's answer; a headless browser on a machine without a GPU has
 # none, and the hardware tests skip.

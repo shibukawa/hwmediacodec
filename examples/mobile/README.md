@@ -3,7 +3,7 @@
 This directory is the video player as an Ebitengine *mobile* game: a Go
 package without a `main`, which `ebitenmobile bind` compiles into a native
 library that a normal Xcode or Android Studio project embeds. The game
-plays the bundled waterfall clip ([`../assets`](../assets)) in a loop
+plays the bundled waterfall clip ([`cmd/hwmediacodec/assets`](../../cmd/hwmediacodec/assets)) in a loop
 through the device's hardware decoder (VideoToolbox on iOS, MediaCodec on
 Android), shows what `hwmediacodec.Probe` found at the top of the screen,
 and pauses and resumes on a tap. The **Run check** button at the bottom
@@ -172,4 +172,4 @@ itself was not built here, there being no Gradle or Android Studio on the
 development machine). The same APK runs on a Redmi Pad SE (Android 15);
 on Xiaomi devices turn on **Install via USB** in the developer options
 first, or `adb install` fails with `INSTALL_FAILED_USER_RESTRICTED`. See the
-Android notes in the repository README.
+[Android report](../../REPORT_ANDROID.md).

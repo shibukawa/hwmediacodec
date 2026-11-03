@@ -18,6 +18,6 @@
 // Whether a codec is hardware is decided from its name
 // (AMediaCodec_getName): "c2.android." and "OMX.google." are the framework's
 // software codecs, as is any name containing ".sw.". The backend refuses
-// those unless WithSoftwareFallback is given. Nothing of this has run on a
-// device yet; see the README's Android notes.
+// those unless WithSoftwareFallback is given. See REPORT_ANDROID.md for the
+// devices it has run on.
 package mediacodec

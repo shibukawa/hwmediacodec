@@ -78,7 +78,7 @@ Flags: `-codec h264|hevc`, `-bitrate 6M|2500k` (VBR, `-cbr` for constant),
 
 The pipeline is `hwmediacodec.CopyFrames` from a `DecodeReader` over the
 track's `PacketSource` into an `EncodeWriter` over the muxer's video track
-(see "Readers, writers and pipelines" in the main README); the sample adds
+(see [Readers, writers and pipelines](../GUIDE.md#readers-writers-and-pipelines) in the guide); the sample adds
 a frame writer that opens the encoder for the size of the first picture
 and a packet writer that interleaves the copied tracks. The presentation
 times are the PTS: `WithTimeScale(track.TimeScale)` on both ends means the
@@ -110,7 +110,7 @@ carry the presentation time (`movie_00-01-30.000.jpg`).
 
 The game samples capture their window with `capture.Recorder`, a
 package of the core module
-(`github.com/shibukawa/hwmediacodec/capture`; see the main README).
+(`github.com/shibukawa/hwmediacodec/capture`; see [Screen recording](../GUIDE.md#screen-recording) in the guide).
 The samples differ in the sink the recorder writes into:
 
 ```go
@@ -277,8 +277,8 @@ segmenter and broadcaster, none of which touch the display.
 
 The low-latency counterpart of `hls`. The recorder encodes with
 `WithLowLatency`, Baseline profile and no B-frames into a
-`webrtc.Broadcaster` from the [`net/webrtc`](../net/webrtc) module (see the
-main README), which hands every access unit to a
+`webrtc.Broadcaster` from the [`net/webrtc`](../net/webrtc) module (see
+[WebRTC](../GUIDE.md#webrtc) in the guide), which hands every access unit to a
 [pion](https://github.com/pion/webrtc) track per viewer. The sample adds
 the player page at `/`; the page POSTs its SDP offer to `/offer`, where
 the broadcaster answers.
@@ -307,7 +307,7 @@ go run ./imgconv -info photo.heic                  # file structure only, no dec
 
 A converter between HEIC/AVIF and PNG/JPEG. The hardware codecs do the
 work through the core module's [`image/heif`](../image/heif) and
-[`image/avif`](../image/avif) packages (see the main README). Those
+[`image/avif`](../image/avif) packages (see [HEIC and AVIF images](../GUIDE.md#heic-and-avif-images) in the guide). Those
 packages return an error that wraps `hwmediacodec.ErrUnsupported` on a
 machine without a hardware codec for the format, and the sample shows what
 to do with it: `-engine auto` (the default) then switches to a codec that
