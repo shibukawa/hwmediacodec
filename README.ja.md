@@ -248,3 +248,9 @@ Ebitengine と pion は別モジュールからのみ読み込まれます。Go 
   [Android](REPORT_ANDROID.md)、[Linux](REPORT_LINUX.md)、
   [Windows](REPORT_WINDOWS.md)、[ブラウザ](REPORT_BROWSER.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md): 結果の報告、テスト、リリース手順
+
+## ライセンス
+
+Copyright 2026 Yoshiki Shibukawa
+
+[Apache License, Version 2.0](LICENSE) で提供しています。
