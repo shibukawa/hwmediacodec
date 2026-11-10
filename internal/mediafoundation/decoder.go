@@ -578,10 +578,10 @@ func (d *decoder) readTexture(dxgi *sys.IMFDXGIBuffer, pts int64) (*codec.Frame,
 
 	pitch := int(mapped.RowPitch)
 	allocH := int(desc.Height)
-	n := int(mapped.DepthPitch)
-	if n == 0 {
-		n = pitch * (allocH + (allocH+1)/2)
-	}
+	// Some drivers (AMD, e.g. RX 7900 XT) report DepthPitch as the size of the
+	// luma plane alone for NV12, while the chroma plane follows it in the same
+	// mapping. Derive the full frame size from the geometry instead.
+	n := pitch * (allocH + (allocH+1)/2)
 	img := nv12Image{data: unsafe.Slice(mapped.Data, n), pitch: pitch, allocHeight: allocH}
 	return d.copyFrame(img, int(desc.Width), allocH, pts)
 }
