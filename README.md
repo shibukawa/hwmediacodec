@@ -240,6 +240,7 @@ later.
   [Android](REPORT_ANDROID.md), [Linux](REPORT_LINUX.md),
   [Windows](REPORT_WINDOWS.md), [browsers](REPORT_BROWSER.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md): reporting results, tests, releases
+- [CONTRIBUTORS.md](CONTRIBUTORS.md): people who have contributed
 
 ## License
 
