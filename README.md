@@ -161,7 +161,8 @@ func (g *game) Draw(screen *ebiten.Image) {
   not verified yet).
 - **HLS** (`mp4.Segmenter` + `net/hls`): a few seconds of latency, plays
   in Safari natively and elsewhere with hls.js.
-- **Recording**: `mp4.CreateVideoFile` as the sink writes an MP4.
+- **Recording**: `mp4.CreateVideoFile` as the sink writes an MP4;
+  `mp4.CreateAVFile` adds an AAC or Opus track for the microphone.
 - `capture` does not import Ebitengine: anything with `ReadPixels` can be
   recorded. The endpoints are unauthenticated; serve them on a trusted
   interface or behind your own authentication.

@@ -174,7 +174,7 @@ four small interfaces that the other packages implement:
 | Interface | Role | Implemented by |
 | --- | --- | --- |
 | `PacketReader`, `PacketSeeker` | coded pictures in decode order, with a time scale; seeking by keyframe | `mp4.PacketSource`, `webm.PacketSource`, your own reader over `annexb.Reader` or `ivf.Reader`; consumed by `DecodeReader` and `playback` |
-| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.VideoFile`, `mp4.Segmenter`, `webm.VideoWriter`, `webm.AudioWriter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
+| `PacketWriter`, `PacketWriteCloser` | where encoded packets go | `mp4.VideoWriter`, `mp4.AudioWriter`, `mp4.VideoFile`, `AVFile.Video()`/`Audio()`, `mp4.Segmenter`, `webm.VideoWriter`, `webm.AudioWriter`, `webrtc.Broadcaster`, `PacketWriterFunc` |
 | `FrameReader` | raw frames out | `DecodeReader` (a `Decoder` fed from a `PacketReader`) |
 | `FrameWriter` | raw frames in | `EncodeWriter` (an `Encoder` drained into a `PacketWriter`) |
 
@@ -379,7 +379,13 @@ What the package takes care of:
   `playback.New` and `ebitenvideo.NewPlayerFromSource` take; `VideoTrack.ElementaryStream()`
   is the same track as a raw Annex-B stream.
 - `CreateVideoFile` is the one-track file for encoder output (a
-  `hwmediacodec.PacketWriteCloser`), and `Segmenter` cuts encoder packets into CMAF/fMP4
+  `hwmediacodec.PacketWriteCloser`). `CreateAVFile` is the same with an
+  audio track next to the video: `Video()` and `Audio()` are a
+  `PacketWriteCloser` each, safe to write from different goroutines (a
+  `capture.Recorder` and a microphone's encoder), and the file is finished
+  when both are closed or on `AVFile.Close`. Both tracks' PTS must count
+  on one clock; the one that starts later waits behind an empty edit.
+  `Segmenter` cuts encoder packets into CMAF/fMP4
   segments for live HLS: an init segment, then one `moof`+`mdat` per
   segment, each starting at a keyframe. It needs PTS == DTS, so encode
   without B-frames. A stream whose keyframes stop coming is an error
@@ -579,7 +585,8 @@ rec.Close()                  // flushes the encoder, closes the sink
   `hwmediacodec.PacketWriterFunc` adapts a closure. The packets are Annex-B access
   units with in-band parameter sets, so writing `Packet.Data` to a file
   gives a playable elementary stream. `mediacontainer/mp4` has an MP4
-  file sink (`CreateVideoFile`) and an fMP4 segmenter for HLS, and
+  file sink (`CreateVideoFile`, or `CreateAVFile` with a sound track)
+  and an fMP4 segmenter for HLS, and
   `net/webrtc` a sink that feeds a pion track.
 - `Options` selects the codec, bitrate or quality, keyframe interval, low
   latency and profile; `Extra` appends any other `EncoderOption`.
