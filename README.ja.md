@@ -167,6 +167,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 - **HLS**（`mp4.Segmenter` + `net/hls`）: 遅延は数秒です。Safari はそのまま
   再生でき、他のブラウザでは hls.js などを使います。
 - **録画**: 出力先に `mp4.CreateVideoFile` を渡すと MP4 ファイルに保存します。
+  `mp4.CreateAVFile` を使うとマイクの音声（AAC または Opus）も同じファイルに入ります。
 - `capture` は Ebitengine をインポートしていないので、`ReadPixels` を持つものなら
   何でも録画できます。配信のエンドポイントには認証がないため、信頼できる
   インターフェースで公開するか、アプリケーション側の認証の後ろに置いてください。
